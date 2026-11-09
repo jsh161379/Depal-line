@@ -8,6 +8,7 @@ public static class ProcessModule
 {
     public static IServiceCollection AddProcessFeature(this IServiceCollection services)
     {
+        services.AddSingleton<EnvMonitorViewModel>();   // 환경 센서 칸 (조시현)
         services.AddSingleton<ProcessViewModel>();
         services.AddSingleton<IPage, ProcessPage>();
         return services;

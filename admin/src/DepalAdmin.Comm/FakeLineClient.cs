@@ -18,6 +18,9 @@ public sealed class FakeLineClient : LineClientBase
     private const double DelayChance = 0.01;      // 1초마다 어떤 장치가 '지연'될 확률
     private const int DelaySeconds = 4;
     private const double PickFailChance = 0.06;   // 집기 실패 확률
+    private const int TempHumEverySeconds = 30;   // 온습도 발행 주기 (아두이노 30초마다)
+    private const int GasAliveEverySeconds = 60;  // 가스: 상태가 그대로여도 이 주기로 "살아 있음" 1건
+    private const double GasStartChance = 0.008;  // 1초마다 가스가 감지될 확률 (경고 화면 시험용)
     // ──────────────────────────────────────────────────────
 
     private static readonly string[] Steps = { "scan", "pick", "inspect", "measure", "home", "sort" };
@@ -37,6 +40,10 @@ public sealed class FakeLineClient : LineClientBase
     private int[] _cell = { 0, 0 };
     private int _agvLoaded;
     private int _agvCycleIndex = AgvCycle.Length - 1;   // home
+    private int _envTick;
+    private double _temp = 24.0, _hum = 42.0;
+    private int _gasLeft;          // 가스 감지가 남은 초 (0 = 없음)
+    private bool _gasSent;         // 마지막으로 보낸 가스 상태
     private string? _message = "가짜 데이터 모드입니다. 라인 현황에서 [시작]을 눌러 보세요.";
 
     public FakeLineClient()
@@ -49,6 +56,8 @@ public sealed class FakeLineClient : LineClientBase
         SetState(ConnectionState.Fake);
         RaiseDevices(MakeDevices());
         RaiseLine(MakeLine());
+        RaiseEnv(MakeTempHum());
+        RaiseEnv(MakeGas(false));
         _timer.Start();
         return Task.CompletedTask;
     }
@@ -114,6 +123,43 @@ public sealed class FakeLineClient : LineClientBase
         AdvanceAgv();
         if (_mode == "running") AdvanceStep();
         RaiseLine(MakeLine());
+        AdvanceEnv();
+    }
+
+    // ── sensor/env 흉내 (아두이노 → 라파 → MQTT) ─────────────
+    //   온습도: 30초마다 / 가스: 상태가 바뀌면 바로 + 60초마다 살아 있음 (value 0/1)
+
+    private void AdvanceEnv()
+    {
+        _envTick++;
+        if (_envTick % TempHumEverySeconds == 0) RaiseEnv(MakeTempHum());
+
+        if (_gasLeft == 0 && _rnd.NextDouble() < GasStartChance) _gasLeft = 6 + _rnd.Next(10);
+        else if (_gasLeft > 0) _gasLeft--;
+        var gas = _gasLeft > 0;
+        if (gas != _gasSent || _envTick % GasAliveEverySeconds == 0) RaiseEnv(MakeGas(gas));
+    }
+
+    private EnvReading MakeTempHum()
+    {
+        _temp = Math.Clamp(_temp + (_rnd.NextDouble() - 0.5) * 0.6, 20, 30);
+        _hum = Math.Clamp(_hum + (_rnd.NextDouble() - 0.5) * 2.0, 30, 60);
+        return Env(
+            new EnvValue { Sensor = "temp_hum_1", Metric = EnvMetrics.Temperature, Value = Math.Round(_temp, 1), Unit = "C" },
+            new EnvValue { Sensor = "temp_hum_1", Metric = EnvMetrics.Humidity, Value = Math.Round(_hum, 1), Unit = "%" });
+    }
+
+    private EnvReading MakeGas(bool detected)
+    {
+        _gasSent = detected;
+        return Env(new EnvValue { Sensor = "gas_1", Metric = EnvMetrics.Gas, Value = detected ? 1 : 0, Unit = "0/1" });
+    }
+
+    private EnvReading Env(params EnvValue[] values)
+    {
+        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "pi" };
+        env.Readings.AddRange(values);
+        return env;
     }
 
     private void AdvanceStep()
