@@ -12,7 +12,7 @@ namespace DepalAdmin.Comm;
 
 /// <summary>
 /// 채팅용 MQTT 연결 (라인 연결과 따로 둔다 → 채팅이 문제가 생겨도 라인 감시는 그대로).
-/// client_id = settings.ClientId + "-chat", 토픽 chat/messages, QoS 1, retained 안 씀.
+/// client_id = settings.EffectiveClientId + "-chat", 토픽 chat/messages, QoS 1, retained 안 씀.
 /// ⚠ 통신 규약에 아직 없음. 채팅 상대가 정해지면 규약에 추가하고 이 파일을 맞춘다.
 /// </summary>
 public sealed class MqttChatClient : IChatClient
@@ -92,7 +92,7 @@ public sealed class MqttChatClient : IChatClient
                 {
                     await _client.ConnectAsync(new MqttClientOptionsBuilder()
                         .WithTcpServer(_settings.BrokerHost, _settings.BrokerPort)
-                        .WithClientId(_settings.ClientId + "-chat")
+                        .WithClientId(_settings.EffectiveClientId + "-chat")
                         .WithCleanSession(true)
                         .Build(), ct);
                     await _client.SubscribeAsync(_factory.CreateSubscribeOptionsBuilder()

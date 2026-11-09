@@ -71,6 +71,7 @@ public static class Labels
         "db_saver" => "DB 저장",
         "ui" => "관리자 화면",
         null => "-",
+        string s when s.StartsWith("ui-") => $"관리자 화면 ({s[3..]})",   // 서버 PC 외 다른 PC의 관리자 화면
         _ => name,
     };
 

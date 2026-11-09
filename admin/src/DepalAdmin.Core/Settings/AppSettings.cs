@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DepalAdmin.Core.Settings;
 
@@ -25,7 +26,16 @@ public sealed class AppSettings
 
     public string BrokerHost { get; set; } = "localhost";
     public int BrokerPort { get; set; } = 1883;
-    public string ClientId { get; set; } = "ui";
+    /// <summary>
+    /// MQTT 접속 이름. 비워 두면 "ui-" + PC 이름으로 자동 (여러 PC가 동시에 접속해도 겹치지 않게).
+    /// 같은 이름으로 두 대가 접속하면 브로커가 먼저 붙은 쪽을 끊으므로 PC마다 달라야 한다.
+    /// </summary>
+    public string ClientId { get; set; } = "";
+
+    /// <summary>실제로 쓰는 접속 이름 (하트비트 hb/·status/ 토픽에도 이 이름을 씀)</summary>
+    [JsonIgnore]
+    public string EffectiveClientId =>
+        string.IsNullOrWhiteSpace(ClientId) ? "ui-" + Environment.MachineName.ToLowerInvariant() : ClientId.Trim();
 
     /// <summary>읽기 전용 계정으로 접속 (DB 담당과 합의)</summary>
     public string MySqlConnection { get; set; } =

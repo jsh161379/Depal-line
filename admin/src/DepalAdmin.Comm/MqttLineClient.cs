@@ -13,7 +13,7 @@ namespace DepalAdmin.Comm;
 /// <summary>
 /// 실제 Mosquitto 브로커에 붙는 클라이언트 (MQTTnet 4.x).
 /// 끊기면 ReconnectDelay마다 다시 붙는다.
-/// 연결된 동안 HeartbeatInterval마다 hb/ui를 보낸다 (통신 규약 1장: 모든 프로그램은 하트비트를 보냄
+/// 연결된 동안 HeartbeatInterval마다 hb/<접속 이름>을 보낸다 (통신 규약 1장: 모든 프로그램은 하트비트를 보냄
 /// → 중앙 서버 장치 목록에 "관리자 화면"이 정상으로 보임).
 /// </summary>
 public sealed class MqttLineClient : LineClientBase
@@ -22,7 +22,6 @@ public sealed class MqttLineClient : LineClientBase
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan KeepAlive = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1);
-    private const string DeviceName = "ui";                 // 하트비트·status 토픽에 쓰는 이름
     // status/<장치>는 JSON이 아닌 글자 그대로 (central_server.py와 확인 2026-11-09)
     private const string OnlinePayload = "online";
     private const string OfflinePayload = "offline";
@@ -34,6 +33,8 @@ public sealed class MqttLineClient : LineClientBase
     };
 
     private readonly AppSettings _settings;
+    private readonly string _name;          // 접속 이름 = 하트비트·status 토픽 이름 (예: ui, ui-desktop-abc)
+    private readonly string _statusTopic;
     private readonly MqttFactory _factory = new();
     private readonly IMqttClient _client;
     private CancellationTokenSource? _cts;
@@ -44,6 +45,8 @@ public sealed class MqttLineClient : LineClientBase
     public MqttLineClient(AppSettings settings)
     {
         _settings = settings;
+        _name = settings.EffectiveClientId;
+        _statusTopic = Topics.StatusPrefix + _name;
         _client = _factory.CreateMqttClient();
         _client.ApplicationMessageReceivedAsync += OnMessageAsync;
         _client.DisconnectedAsync += _ =>
@@ -69,7 +72,7 @@ public sealed class MqttLineClient : LineClientBase
             try
             {
                 // 정상 종료 때는 LWT가 안 나가므로 직접 offline을 남긴다
-                await PublishAsync(Topics.UiStatus, OfflinePayload, retain: true, CancellationToken.None).ConfigureAwait(false);
+                await PublishAsync(_statusTopic, OfflinePayload, retain: true, CancellationToken.None).ConfigureAwait(false);
                 await _client.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -124,7 +127,7 @@ public sealed class MqttLineClient : LineClientBase
     }
 
     /// <summary>
-    /// hb/ui 발행: {"device":"ui","seq":1,"ts":1794191234.5,"state":"run"}
+    /// hb/<접속 이름> 발행: {"device":"ui","seq":1,"ts":1794191234.5,"state":"run"}
     /// ts는 유닉스 시각(초, 소수) — 다른 장치 하트비트와 같은 형식. seq는 프로그램을 켤 때마다 1부터.
     /// </summary>
     private async Task HeartbeatLoopAsync(CancellationToken ct)
@@ -137,13 +140,13 @@ public sealed class MqttLineClient : LineClientBase
                 {
                     var body = JsonSerializer.Serialize(new
                     {
-                        device = DeviceName,
+                        device = _name,
                         seq = ++_hbSeq,
                         ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
                         state = "run",
                     });
                     var message = new MqttApplicationMessageBuilder()
-                        .WithTopic(Topics.HeartbeatPrefix + DeviceName)
+                        .WithTopic(Topics.HeartbeatPrefix + _name)
                         .WithPayload(body)
                         .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)   // 하트비트는 QoS 0 (규약)
                         .Build();
@@ -168,11 +171,11 @@ public sealed class MqttLineClient : LineClientBase
     {
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(_settings.BrokerHost, _settings.BrokerPort)
-            .WithClientId(_settings.ClientId)
+            .WithClientId(_name)
             .WithCleanSession(true)
             .WithKeepAlivePeriod(KeepAlive)
             // 화면이 갑자기 꺼지면 브로커가 대신 offline을 남긴다 (LWT)
-            .WithWillTopic(Topics.UiStatus)
+            .WithWillTopic(_statusTopic)
             .WithWillPayload(Encoding.UTF8.GetBytes(OfflinePayload))
             .WithWillRetain(true)
             .WithWillQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
@@ -185,7 +188,7 @@ public sealed class MqttLineClient : LineClientBase
             subscribe.WithTopicFilter(f => f.WithTopic(topic).WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce));
         await _client.SubscribeAsync(subscribe.Build(), ct).ConfigureAwait(false);
 
-        await PublishAsync(Topics.UiStatus, OnlinePayload, retain: true, ct).ConfigureAwait(false);
+        await PublishAsync(_statusTopic, OnlinePayload, retain: true, ct).ConfigureAwait(false);
     }
 
     private Task PublishAsync(string topic, string payload, bool retain, CancellationToken ct)

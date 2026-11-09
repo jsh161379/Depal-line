@@ -9,9 +9,10 @@ public static class Topics
     public const string ServerResults = "server/results";
 
     public const string UiCmd = "ui/cmd";
-    public const string UiStatus = "status/ui";
+    /// <summary>접속 상태 토픽 앞부분. 관리자 화면은 status/<접속 이름> (online / offline)</summary>
+    public const string StatusPrefix = "status/";
 
-    /// <summary>하트비트 토픽 앞부분. 관리자 화면은 hb/ui (통신 규약 1장)</summary>
+    /// <summary>하트비트 토픽 앞부분. 관리자 화면은 hb/<접속 이름> (통신 규약 1장)</summary>
     public const string HeartbeatPrefix = "hb/";
 
     /// <summary>⚠ 통신 규약에 아직 없음 (채팅 상대 확정 후 추가)</summary>

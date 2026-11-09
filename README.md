@@ -61,6 +61,23 @@ A / B / 불량 / 재분류로 나눈다.
    ```
    그다음 `settings.local.json`에서 `"UseFakeDb": false`, `Password=`에 그 비밀번호 → 관리자 프로그램 다시 실행
 
+**다른 PC에서 서버 PC의 라인·DB에 붙을 때** (같은 학원 네트워크)
+1. 서버 PC에서 브로커(`start_demo.bat` 또는 `start_db_test.bat`)를 켜 둔다. MySQL은 서비스라 항상 켜져 있음
+2. 다른 PC의 PowerShell에서 연결 확인 (둘 다 `TcpTestSucceeded : True`여야 함)
+   ```
+   Test-NetConnection <서버PC IP> -Port 3306
+   Test-NetConnection <서버PC IP> -Port 1883
+   ```
+3. 관리자 프로그램 → **설정** 탭에서
+   - 가짜 MQTT 사용·가짜 DB 사용 **체크 해제**
+   - 브로커 주소: `<서버PC IP>`
+   - MySQL 연결: `Server=<서버PC IP>;Port=3306;Database=aa_battery_inspection;User ID=ui_reader;Password=<비밀번호>;`
+   - **저장** → 프로그램 다시 시작
+4. 서버 PC IP와 비밀번호는 통신 담당에게 따로 받는다 (README에 적지 않음)
+- MQTT 접속 이름은 `ui-PC이름`으로 자동으로 정해진다. 같은 이름으로 두 대가 붙으면 서로 끊기므로 `ClientId`는 비워 둘 것
+- 서버 PC 쪽 준비(이미 되어 있음): 네트워크용 읽기 전용 계정 `ui_reader@'192.168.0.%'`, 방화벽 3306·1883 허용
+- 학원 PC는 IP가 바뀔 수 있다. 접속이 안 되면 서버 PC에서 `ipconfig`로 IP부터 확인
+
 ## 규칙
 
 - **자기 담당 폴더만 고친다.** 공통 파일(`admin/src/DepalAdmin.Core`, `DepalAdmin.Comm`, `DepalAdmin.Shell`, `server/`)과 통신 규약은 통신 담당이 관리한다. 바꿔야 하면 먼저 말하기

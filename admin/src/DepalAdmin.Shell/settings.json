@@ -10,7 +10,8 @@
 
   "BrokerHost": "localhost",
   "BrokerPort": 1883,
-  "ClientId": "ui",
+  // MQTT 접속 이름. 비워 두면 "ui-PC이름"으로 자동 (PC마다 달라야 함)
+  "ClientId": "",
 
   // 비밀번호는 여기 말고 settings.local.json에 적기 (git에 안 올라감)
   "MySqlConnection": "Server=localhost;Port=3306;Database=aa_battery_inspection;User ID=ui_reader;Password=CHANGE_ME;",
