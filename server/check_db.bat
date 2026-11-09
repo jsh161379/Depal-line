@@ -1,0 +1,3 @@
+@echo off
+REM check_db.bat - row count of each table in aa_battery_inspection (asks MySQL password)
+"C:\Program Files\MySQL\MySQL Server 8.2\bin\mysql.exe" -u root -p -e "USE aa_battery_inspection; SELECT 'battery_cycles' AS tbl, COUNT(*) AS n FROM battery_cycles UNION ALL SELECT 'electrical_tests', COUNT(*) FROM electrical_tests UNION ALL SELECT 'equipment_events', COUNT(*) FROM equipment_events UNION ALL SELECT 'emergency_stop_events', COUNT(*) FROM emergency_stop_events UNION ALL SELECT 'environment_readings', COUNT(*) FROM environment_readings UNION ALL SELECT 'communication_logs', COUNT(*) FROM communication_logs UNION ALL SELECT 'runs', COUNT(*) FROM runs;"

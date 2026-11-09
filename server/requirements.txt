@@ -1,0 +1,10 @@
+# 서버 쪽 Python 패키지 (Python 3.11 이상)
+# 설치:  python -m pip install -r requirements.txt
+
+# 중앙 서버·라인 컨트롤러·가짜 장치·모니터
+aiomqtt>=2,<3
+pydantic>=2,<3
+
+# DB 저장 프로그램 (db/mqtt_db_writer.py)
+paho-mqtt>=2.1,<3
+mysql-connector-python>=9.4,<10
