@@ -28,6 +28,7 @@ public sealed class AuditingLineClient : ILineClient
     public LineStatus? LastLine => _inner.LastLine;
     public IReadOnlyDictionary<string, DeviceInfo> LastDevices => _inner.LastDevices;
     public DateTime? LastMessageAt => _inner.LastMessageAt;
+    public EnvReading? LastEnv => _inner.LastEnv;
 
     public event EventHandler<ConnectionState>? ConnectionChanged
     {
@@ -57,6 +58,12 @@ public sealed class AuditingLineClient : ILineClient
     {
         add => _inner.ResultReceived += value;
         remove => _inner.ResultReceived -= value;
+    }
+
+    public event EventHandler<EnvReading>? EnvReceived
+    {
+        add => _inner.EnvReceived += value;
+        remove => _inner.EnvReceived -= value;
     }
 
     public Task StartAsync(CancellationToken ct = default) => _inner.StartAsync(ct);

@@ -14,6 +14,7 @@ public abstract class LineClientBase : ILineClient
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public LineStatus? LastLine { get; private set; }
+    public EnvReading? LastEnv { get; private set; }
     public IReadOnlyDictionary<string, DeviceInfo> LastDevices => _lastDevices;
     public DateTime? LastMessageAt { get; private set; }
 
@@ -22,6 +23,7 @@ public abstract class LineClientBase : ILineClient
     public event EventHandler<IReadOnlyDictionary<string, DeviceInfo>>? DevicesReceived;
     public event EventHandler<LineEvent>? EventReceived;
     public event EventHandler<BatteryResult>? ResultReceived;
+    public event EventHandler<EnvReading>? EnvReceived;
 
     public abstract Task StartAsync(CancellationToken ct = default);
     public abstract Task StopAsync();
@@ -65,6 +67,13 @@ public abstract class LineClientBase : ILineClient
     {
         LastMessageAt = DateTime.Now;
         ResultReceived?.Invoke(this, result);
+    });
+
+    protected void RaiseEnv(EnvReading env) => OnUi(() =>
+    {
+        LastMessageAt = DateTime.Now;
+        LastEnv = env;
+        EnvReceived?.Invoke(this, env);
     });
 
     /// <summary>화면 자체에서 생긴 경고를 이벤트 로그에 남긴다 (device = "ui")</summary>

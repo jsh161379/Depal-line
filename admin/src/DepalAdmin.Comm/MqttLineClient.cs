@@ -30,6 +30,7 @@ public sealed class MqttLineClient : LineClientBase
     private static readonly string[] SubscribeTopics =
     {
         Topics.ServerLine, Topics.ServerDevices, Topics.ServerEvents, Topics.ServerResults,
+        Topics.SensorEnv,
     };
 
     private readonly AppSettings _settings;
@@ -230,6 +231,11 @@ public sealed class MqttLineClient : LineClientBase
                 case Topics.ServerResults:
                     var result = JsonSerializer.Deserialize<BatteryResult>(json, Json.Options);
                     if (result != null) RaiseResult(result);
+                    break;
+
+                case Topics.SensorEnv:
+                    var env = JsonSerializer.Deserialize<EnvReading>(json, Json.Options);
+                    if (env != null) RaiseEnv(env);
                     break;
             }
         }

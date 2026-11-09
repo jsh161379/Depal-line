@@ -36,6 +36,9 @@ public partial class ProcessViewModel : ObservableObject
 
     public ObservableCollection<LineEvent> AgvLog { get; } = new();
 
+    /// <summary>아래 환경 센서 칸 (온습도 그래프 · 가스 감시) — 조시현, EnvMonitorViewModel.cs</summary>
+    public EnvMonitorViewModel Env { get; }
+
     public FrameworkElement? PalletPanel { get; }
     public FrameworkElement? ControlPanel { get; }
 
@@ -58,8 +61,9 @@ public partial class ProcessViewModel : ObservableObject
     [ObservableProperty] private string _agvLoad = "-";
     [ObservableProperty] private double _agvFill;
 
-    public ProcessViewModel(ILineClient client, IEnumerable<IPanel> panels)
+    public ProcessViewModel(ILineClient client, IEnumerable<IPanel> panels, EnvMonitorViewModel env)
     {
+        Env = env;
         PalletPanel = PanelSlots.Find(panels, PanelSlots.LinePallet);
         ControlPanel = PanelSlots.Find(panels, PanelSlots.LineControls);
 

@@ -1,0 +1,146 @@
+<UserControl x:Class="DepalAdmin.Feature.Process.EnvPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:DepalAdmin.Feature.Process"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=local:EnvMonitorViewModel}"
+             d:DesignWidth="1200" d:DesignHeight="240">
+    <!-- 담당: 조시현 — 환경 센서 (sensor/env). 색은 이상일 때만: 기준 초과 = 호박색, 가스 감지 = 빨강 -->
+    <UserControl.Resources>
+        <!-- 온도·습도 카드 (EnvSeries) -->
+        <DataTemplate x:Key="SeriesCard" DataType="{x:Type local:EnvSeries}">
+            <Border x:Name="Card" Padding="10,8" BorderThickness="1"
+                    Background="{StaticResource Brush.Field}" BorderBrush="{StaticResource Brush.Rule}">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock x:Name="StatusText" DockPanel.Dock="Right" Text="{Binding StatusText}" FontSize="12"
+                                   VerticalAlignment="Center" Foreground="{StaticResource Brush.SubText}"/>
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource Label}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                        <TextBlock x:Name="Value" Text="{Binding CurrentText}" FontFamily="{StaticResource Font.Readout}" FontSize="26"/>
+                        <TextBlock Text="{Binding Unit}" FontSize="13" Margin="3,0,0,4" VerticalAlignment="Bottom"
+                                   Foreground="{StaticResource Brush.SubText}"/>
+                    </StackPanel>
+                    <local:TrendChart Height="110" Points="{Binding Points}" WarnLevel="{Binding WarnLevel}"
+                                      MinSpan="{Binding MinSpan}" LabelFormat="{Binding Format}" WindowMinutes="30"
+                                      Stroke="{StaticResource Brush.Frame}"/>
+                    <DockPanel Margin="0,4,0,0">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding WarnNote}" FontSize="11"
+                                   Foreground="{StaticResource Brush.Alarm}"/>
+                        <TextBlock Text="{Binding RangeText}" FontSize="11" Foreground="{StaticResource Brush.SubText}"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="warn">
+                    <Setter TargetName="Card" Property="Background" Value="{StaticResource Brush.WarnFill}"/>
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource Brush.Warn}"/>
+                    <Setter TargetName="Card" Property="BorderThickness" Value="2"/>
+                    <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Brush.Text}"/>
+                    <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="stale">
+                    <Setter TargetName="Value" Property="Foreground" Value="{StaticResource Brush.SubText}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <HeaderedContentControl Style="{StaticResource Section}">
+        <HeaderedContentControl.Header>
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Summary}" FontWeight="Normal"
+                           Foreground="{StaticResource Brush.SubText}"/>
+                <TextBlock Text="환경 센서 (온습도 30초마다 · 가스 상시 감시)"/>
+            </DockPanel>
+        </HeaderedContentControl.Header>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ContentControl Content="{Binding Temperature}" ContentTemplate="{StaticResource SeriesCard}" Focusable="False"/>
+            <ContentControl Grid.Column="2" Content="{Binding Humidity}" ContentTemplate="{StaticResource SeriesCard}" Focusable="False"/>
+
+            <!-- ── 가스: 평소 대기, 감지되면 빨강 ── -->
+            <Border x:Name="GasCard" Grid.Column="4" Padding="10,8">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource Brush.Field}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource Brush.Rule}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding GasStatus}" Value="alarm">
+                                <Setter Property="Background" Value="{StaticResource Brush.AlarmFill}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource Brush.Alarm}"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding GasStatus}" Value="stale">
+                                <Setter Property="BorderBrush" Value="{StaticResource Brush.Warn}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding GasValueText}" FontSize="12"
+                                   FontFamily="{StaticResource Font.Readout}" Foreground="{StaticResource Brush.SubText}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="가스 (MQ-9)" Style="{StaticResource Label}" VerticalAlignment="Center"/>
+                    </DockPanel>
+
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding GasStatusText}" Margin="0,4,0,0" FontSize="26">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontFamily" Value="{StaticResource Font.Readout}"/>
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding GasStatus}" Value="alarm">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Alarm}"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding GasStatus}" Value="stale">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Warn}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding GasDetailText}" FontSize="12" TextWrapping="Wrap"
+                               Margin="0,2,0,8" Foreground="{StaticResource Brush.SubText}"/>
+
+                    <!-- 감지 기록 -->
+                    <TextBlock DockPanel.Dock="Top" Text="감지 기록" Style="{StaticResource Label}"/>
+                    <ItemsControl ItemsSource="{Binding GasLog}" Focusable="False" Margin="0,2,0,0" MaxHeight="110">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,1">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="62" FontSize="11"
+                                               FontFamily="{StaticResource Font.Readout}" Foreground="{StaticResource Brush.SubText}"/>
+                                    <TextBlock Text="{Binding Text}" FontSize="12"
+                                               Foreground="{Binding Level, Converter={StaticResource StatusToBrush}}"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </HeaderedContentControl>
+</UserControl>

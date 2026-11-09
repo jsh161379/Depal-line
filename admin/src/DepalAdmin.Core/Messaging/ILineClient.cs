@@ -26,6 +26,9 @@ public interface ILineClient
     /// <summary>마지막으로 받은 server/devices</summary>
     IReadOnlyDictionary<string, DeviceInfo> LastDevices { get; }
 
+    /// <summary>마지막으로 받은 sensor/env (아직 없으면 null)</summary>
+    EnvReading? LastEnv { get; }
+
     /// <summary>마지막으로 아무 메시지나 받은 시각 (상태바 표시용)</summary>
     DateTime? LastMessageAt { get; }
 
@@ -42,6 +45,9 @@ public interface ILineClient
 
     /// <summary>server/results — 건전지 결과 1건</summary>
     event EventHandler<BatteryResult>? ResultReceived;
+
+    /// <summary>sensor/env — 환경 센서 1묶음 (온도·습도·가스)</summary>
+    event EventHandler<EnvReading>? EnvReceived;
 
     Task StartAsync(CancellationToken ct = default);
     Task StopAsync();
