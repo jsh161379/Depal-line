@@ -29,12 +29,37 @@ A / B / 불량 / 재분류로 나눈다.
 **가짜 장치로 라인 전체를 돌려 볼 때**
 1. `server/start_demo.bat` 더블클릭 → 브로커·서버·컨트롤러·모니터·가짜 라파·가짜 YOLO 창이 열림
 2. `7 COMMAND` 창에서 `python line_cmd.py start`
-3. 관리자 프로그램을 실제 연결로 보려면 실행 폴더(`bin\Debug\net8.0-windows`)에 `settings.local.json`을 만들고 `"UseFakeMqtt": false` (나머지 값은 `settings.json`과 같게)
+3. 관리자 프로그램을 실제 연결로 보려면 실행 폴더 `admin\src\DepalAdmin.Shell\bin\Debug\net8.0-windows`에
+   `settings.local.json`을 만든다. 이 파일이 있으면 `settings.json` 대신 읽으므로 **모든 값을 다 적어야 한다**
+
+```json
+{
+  "StationName": "DEPAL-01",
+  "UseFakeMqtt": false,
+  "UseFakeDb": true,
+  "BrokerHost": "localhost",
+  "BrokerPort": 1883,
+  "ClientId": "ui",
+  "MySqlConnection": "Server=localhost;Port=3306;Database=aa_battery_inspection;User ID=ui_reader;Password=여기에_비밀번호;",
+  "MaxRowsInMemory": 500,
+  "AutoLogoutMinutes": 10,
+  "AlarmSound": true,
+  "DataFolder": "data"
+}
+```
+   - `UseFakeMqtt`: `false` = 실제 브로커 연결 (라인 현황·장치 상태·검사 결과·조작 버튼)
+   - `UseFakeDb`: `false` = 실제 MySQL 연결 (이력 조회·통계·보고서). 아래 "DB까지" 준비 후
 
 **DB까지 저장해 볼 때** (MySQL 8 필요)
 1. `server/db/teamproject.sql`로 DB 만들기
 2. `server/start_db_test.bat` → `5 DB WRITER` 창에 MySQL 비밀번호 입력
 3. 확인: `server/check_db.bat`
+4. 관리자 프로그램이 DB를 읽게 하려면 **읽기 전용 계정**을 만든다 (root로 접속 후, 비밀번호는 각자 정함)
+   ```sql
+   CREATE USER 'ui_reader'@'localhost' IDENTIFIED BY '비밀번호';
+   GRANT SELECT ON aa_battery_inspection.* TO 'ui_reader'@'localhost';
+   ```
+   그다음 `settings.local.json`에서 `"UseFakeDb": false`, `Password=`에 그 비밀번호 → 관리자 프로그램 다시 실행
 
 ## 규칙
 
@@ -42,3 +67,4 @@ A / B / 불량 / 재분류로 나눈다.
 - **메시지 형식은 `server/docs/통신_규약_v1.0.md`가 기준.** 토픽·필드 이름을 임의로 바꾸지 않는다
 - **비밀번호·개인 설정은 올리지 않는다.** `settings.local.json`, `data/` 폴더는 `.gitignore`에 들어 있음. MySQL 비밀번호는 코드에 쓰지 말고 실행할 때 입력
 - 올리기 전에 빌드가 되는지 확인 (Visual Studio: 빌드 → 솔루션 빌드)
+- **작업 시작 전 풀, 작업 끝나면 커밋 → 푸시** (Visual Studio: Git → 풀 / Git → 커밋 또는 스태시 → 푸시). 풀을 안 하고 푸시하면 충돌 오류가 난다

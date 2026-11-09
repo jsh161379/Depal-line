@@ -34,7 +34,7 @@ class VisionResult(BaseModel):
     status: Literal["ok", "failed"]                 # failed = 카메라/모델 오류로 검사 못 함
     result: str | None                              # normal / scratch / sticker / ... (YOLO 클래스에 따라 추가)
     conf: float | None                              # YOLO 신뢰도 0~1
-    polarity: Literal["minus_up", "plus_up", "unknown"] | None   # OpenCV로 본 극 방향
+    polarity: Literal["minus_up", "plus_up", "unknown"] | None   # 상단 카메라로 본 극 방향
 
 
 class BatteryResult(BaseModel):
@@ -80,12 +80,12 @@ def make_samples(run_id: str) -> list[BatteryResult]:
                       vision=VisionResult(status="ok", result="scratch", conf=0.88, polarity="minus_up"),
                       electrical_status="skipped", polarity=None, v_open=None, v_load=None, r_int=None,
                       grade="NG", reason="외관 불량(스크래치)", dest="NG_BOX", finished_at=ts(t + timedelta(seconds=52))),
-        # 4) OpenCV가 +극 위로 판단: 측정 생략 → 재분류
+        # 4) 상단 카메라가 +극 위로 판단: 측정 생략 → 재분류
         BatteryResult(run_id=run_id, battery_id=4, pallet_cell=[0, 3], picked_at=ts(t + timedelta(seconds=55)),
                       vision=VisionResult(status="ok", result="normal", conf=0.93, polarity="plus_up"),
                       electrical_status="skipped", polarity=None, v_open=None, v_load=None, r_int=None,
-                      grade="RESORT", reason="+극이 위 (OpenCV)", dest="RESORT_BOX", finished_at=ts(t + timedelta(seconds=66))),
-        # 5) OpenCV는 몰랐는데 측정해 보니 거꾸로: 부하 안 걸고 → 재분류
+                      grade="RESORT", reason="+극이 위 (상단 카메라)", dest="RESORT_BOX", finished_at=ts(t + timedelta(seconds=66))),
+        # 5) 상단 카메라는 몰랐는데 측정해 보니 거꾸로: 부하 안 걸고 → 재분류
         BatteryResult(run_id=run_id, battery_id=5, pallet_cell=[0, 4], picked_at=ts(t + timedelta(seconds=68)),
                       vision=VisionResult(status="ok", result="normal", conf=0.91, polarity="unknown"),
                       electrical_status="measured", polarity="reversed", v_open=None, v_load=None, r_int=None,

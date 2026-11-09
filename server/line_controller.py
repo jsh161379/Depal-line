@@ -104,7 +104,12 @@ def judge_measure(m: dict | None):
         return "A", None
     if v >= GRADE_B["v_open_min"] and r <= GRADE_B["r_int_max"]:
         return "B", None
-    return "NG", f"전압 {v:.3f}V / 내부저항 {r:.3f}Ω 기준 미달"
+    # 사유는 정해진 문장만 쓴다 (통계에서 같은 사유끼리 묶이게). 측정값은 v_open·r_int 칸에 따로 있음
+    low_v = v < GRADE_B["v_open_min"]
+    high_r = r > GRADE_B["r_int_max"]
+    if low_v and high_r:
+        return "NG", "전압 낮음, 내부저항 큼"
+    return "NG", "전압 낮음" if low_v else "내부저항 큼"
 
 
 class LineController:
