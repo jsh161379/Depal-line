@@ -4,7 +4,7 @@
 가짜 장치를 알아서 켜고 끄면서 캡처할 장면 4개를 차례로 만듭니다.
 할 일: 장면이 완성되면 'monitor.py' 창을 캡처(Win+Shift+S)하고, 이 창에서 Enter.
 
-준비: start_line.bat으로 브로커·서버·모니터가 켜져 있어야 함
+준비: start_all.bat --no-fake --no-db 로 브로커·서버·모니터가 켜져 있어야 함
 실행: python demo_scenes.py
 필요한 파일(같은 폴더): fake_device.py, sample_results.py
 """
@@ -62,7 +62,7 @@ def stop(p: subprocess.Popen):
 
 def main():
     print(f"{B}포트폴리오 캡처 장면 자동 실행{X}")
-    print("  start_line.bat으로 브로커·서버·모니터가 켜져 있어야 합니다.")
+    print("  start_all.bat --no-fake --no-db 로 브로커·서버·모니터가 켜져 있어야 합니다.")
     print("  장면마다 모니터 창을 캡처해서 captures 폴더에 아래 이름으로 저장하세요.")
     input(f"  준비됐으면 {B}Enter{X} ")
 

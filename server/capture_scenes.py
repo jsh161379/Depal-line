@@ -9,8 +9,8 @@
   07 비상정지 버튼  : 운전 중 버튼 눌림 → 정지 확인 → 눌린 채 reset 거부 → 버튼 복귀 → 해제 확인
 
 준비
-  1. 1 BROKER, 2 SERVER, 3 CONTROLLER 창은 켜 둔 채로
-  2. 5 FAKE PI, 6 FAKE YOLO 창은 닫기 (이 프로그램이 직접 켜고 끔)
+  1. start_all.bat --no-fake --no-db 로 브로커·서버·컨트롤러를 켜 둔다
+  2. 가짜 라파·가짜 YOLO는 켜지 않는다 (이 프로그램이 직접 켜고 끔)
 실행: python capture_scenes.py           (약 3분)
 결과: captures\\logs\\scene_05.log, scene_06.log, scene_07.log
 """

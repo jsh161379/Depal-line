@@ -11,6 +11,9 @@ data/*
 ## 캡처 이미지·로그 (포트폴리오용, 각자 PC에만)
 captures/
 
+## 실행기(run_all.py) 로그·실행 표시
+logs/
+
 ## DB 저장 프로그램 옛 버전 백업
 db/*_backup.py
 

@@ -26,9 +26,25 @@ A / B / 불량 / 재분류로 나눈다.
 - `admin/DepalAdmin.sln` 열기 → F5. 기본 설정(`settings.json`)이 가짜 데이터 모드라 브로커가 없어도 동작한다
 - 처음 계정: `admin` / `admin1234` (첫 로그인 때 새 비밀번호를 정함)
 
+**서버 켜고 끄기** (`server` 폴더)
+
+| 파일 | 하는 일 |
+|---|---|
+| `start_all.bat` | 창 **1개**로 켜기. 그 창에 모니터가 뜨고, 나머지는 창 없이 실행. 시작할 때 MySQL 비밀번호를 한 번 물어봄. 끄기는 그 창에서 Ctrl+C |
+| `start_all.vbs` | 창 **없이** 켜기. 켜지면 알림 창이 한 번 뜸. 상태는 관리자 프로그램에서 확인 |
+| `stop_all.bat` | 어느 쪽으로 켰든 전부 끄기 |
+| `check_db.bat` | DB 표별 건수 확인 |
+
+- 켜지는 것: 브로커 → 중앙 서버 → 라인 컨트롤러 → DB 저장 → 가짜 라파·가짜 YOLO
+- 각 프로그램의 출력: `server/logs/<이름>.log` (지난번 것은 `<이름>.prev.log`). 하나가 꺼지면 "○○ 종료됨 → logs\○○.log 확인"이 뜬다
+- 라인 시작: 관리자 프로그램의 시작 버튼 (또는 다른 cmd에서 `python line_cmd.py start`)
+- 옵션은 cmd에서 붙인다: `start_all.bat --no-fake`(실제 장치를 붙일 때), `--no-db`(MySQL 없이), `--estop-test`(40초 뒤 가짜 비상정지)
+- `start_all.vbs`는 비밀번호를 물을 창이 없으므로 MySQL 비밀번호를 한 번 저장해 둬야 한다: cmd에서 `setx AA_DB_PASSWORD <비밀번호>` (이 PC 사용자 계정에만 저장됨).
+- 이미 켜져 있으면 다시 켜지지 않는다. 다시 켜려면 `stop_all.bat` 먼저
+
 **가짜 장치로 라인 전체를 돌려 볼 때**
-1. `server/start_demo.bat` 더블클릭 → 브로커·서버·컨트롤러·모니터·가짜 라파·가짜 YOLO 창이 열림
-2. `7 COMMAND` 창에서 `python line_cmd.py start`
+1. `server/start_all.bat` 더블클릭 → MySQL 비밀번호 입력 (DB 없이 보려면 cmd에서 `start_all.bat --no-db`)
+2. 관리자 프로그램의 시작 버튼, 또는 다른 cmd에서 `python line_cmd.py start`
 3. 관리자 프로그램을 실제 연결로 보려면 실행 폴더 `admin\src\DepalAdmin.Shell\bin\Debug\net8.0-windows`에
    `settings.local.json`을 만든다. 이 파일이 있으면 `settings.json` 대신 읽으므로 **모든 값을 다 적어야 한다**
 
@@ -52,7 +68,7 @@ A / B / 불량 / 재분류로 나눈다.
 
 **DB까지 저장해 볼 때** (MySQL 8 필요)
 1. `server/db/teamproject.sql`로 DB 만들기
-2. `server/start_db_test.bat` → `5 DB WRITER` 창에 MySQL 비밀번호 입력
+2. `server/start_all.bat` → MySQL 비밀번호 입력 → 라인 시작
 3. 확인: `server/check_db.bat`
 4. 관리자 프로그램이 DB를 읽게 하려면 **읽기 전용 계정**을 만든다 (root로 접속 후, 비밀번호는 각자 정함)
    ```sql
@@ -62,7 +78,7 @@ A / B / 불량 / 재분류로 나눈다.
    그다음 `settings.local.json`에서 `"UseFakeDb": false`, `Password=`에 그 비밀번호 → 관리자 프로그램 다시 실행
 
 **다른 PC에서 서버 PC의 라인·DB에 붙을 때** (같은 학원 네트워크)
-1. 서버 PC에서 브로커(`start_demo.bat` 또는 `start_db_test.bat`)를 켜 둔다. MySQL은 서비스라 항상 켜져 있음
+1. 서버 PC에서 `start_all.bat` 또는 `start_all.vbs`로 서버를 켜 둔다. MySQL은 서비스라 항상 켜져 있음
 2. 다른 PC의 PowerShell에서 연결 확인 (둘 다 `TcpTestSucceeded : True`여야 함)
    ```
    Test-NetConnection <서버PC IP> -Port 3306
