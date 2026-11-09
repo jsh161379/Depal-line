@@ -78,6 +78,7 @@ class DeviceInfo:
     last_seen: float | None = None     # time.monotonic() 기준 마지막 수신 시각
     last_seq: int | None = None
     info: dict = field(default_factory=dict)   # 마지막 하트비트의 추가 정보
+    appeared: float = field(default_factory=time.monotonic)   # 목록에 처음 나타난 시각 (기다리는 장치는 서버 시작 시각)
 
 
 def to_text(payload) -> str:
@@ -228,10 +229,12 @@ class CentralServer:
                 if dev.status == "offline":
                     continue
                 if dev.last_seen is None:
-                    # 서버 켜진 뒤 한 번도 하트비트가 안 온 장치
-                    if dev.status == "unknown" and now - self.started >= OFFLINE_AFTER_SEC:
+                    # 목록에 나타난 뒤 OFFLINE_AFTER_SEC 동안 하트비트가 한 번도 안 온 장치.
+                    # 서버 시작 시각이 아니라 장치가 나타난 시각부터 센다 → 서버가 켜진 뒤 새로 접속한 장치
+                    # (status 직후 첫 하트비트가 오기 전 1초 남짓한 틈)에 잘못 경고하지 않음
+                    if dev.status == "unknown" and now - dev.appeared >= OFFLINE_AFTER_SEC:
                         dev.status = "offline"
-                        await self.event(dev.name, "WARN", "서버 시작 후 하트비트를 한 번도 받지 못함")
+                        await self.event(dev.name, "WARN", f"{OFFLINE_AFTER_SEC:g}초 동안 하트비트를 한 번도 받지 못함")
                         changed = True
                     continue
                 elapsed = now - dev.last_seen
