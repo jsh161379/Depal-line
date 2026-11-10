@@ -129,7 +129,7 @@ DB 비밀번호는 `settings.json`이 아니라 같은 폴더의 `settings.local
 2. **`Shell` `Core` `Comm` `Directory.*.props`는 조시현만 고친다.** 필요하면 요청 → 반영 후 공지.
    (예: 새 데이터 칸, 새 공통 스타일, 새 NuGet 패키지, 새 패널 자리)
 3. **서버 데이터는 `ILineClient`로만** 받는다. 페이지에서 MQTTnet을 직접 쓰지 않는다. 토픽은 `Topics`, 명령은 `UiActions`.
-4. **색·글꼴은 `Common.xaml` 키**, 한글 표시는 `Labels` (`Labels.Grade("NG")` → "불량").
+4. **색·글꼴은 `Common.xaml` 키**, 한글 표시는 `Labels` (`Labels.Grade("NG_VISUAL")` → "외관 불량"). 등급 목록·불량 판단은 `Grades` (`Grades.All`, `Grades.IsNg(grade)`).
 5. **등급 기준을 화면에서 계산하지 않는다.** 서버가 준 `grade` 그대로. 기준값은 아직 임시.
 6. **권한은 `Session`으로 확인** (`session.Can(Permission.OperateLine)`). 명령 전송은 공통 틀이 한 번 더 확인하고 작업 기록에 남긴다.
 7. **다른 탭으로 보내려면 `Navigator`** (`navigator.Navigate("알람")`). 남의 ViewModel을 직접 부르지 않는다.
@@ -139,12 +139,15 @@ DB 비밀번호는 `settings.json`이 아니라 같은 폴더의 `settings.local
 ### Git
 
 ```
-main            ← 항상 실행되는 상태. 직접 push 금지
+master          ← 항상 실행되는 상태. 직접 push 금지
  └ cho-sihyun, jang-seongchan, yu-dongho, noh-wonjong, kim-hagyun, kim-choa   (각자 브랜치)
 ```
 
-- 하루 한 번 이상 `main`을 받아와 자기 브랜치에 합치기
-- 다 되면 Pull Request → 조시현이 실행 확인 후 합침
+- 하루 한 번 이상 `master`를 받아와 자기 브랜치에 합치기
+- 다 되면 Pull Request → **Files changed**에서 바뀐 파일 확인
+  - 자기 프로젝트 폴더 안만 바뀌었으면: 빌드 확인 후 본인이 합침
+  - `Shell` `Core` `Comm` `Directory.*.props` `DepalAdmin.sln`이 섞였으면: PR 제목 앞에 `[공통]` → 조시현이 확인 후 합침
+- 자세한 순서는 저장소 맨 위 `README.md`의 "규칙"
 - 빌드 안 되는 코드는 올리지 않기
 
 ---

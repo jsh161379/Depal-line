@@ -100,4 +100,16 @@ A / B / 불량 / 재분류로 나눈다.
 - **메시지 형식은 `server/docs/통신_규약_v1.2.md`가 기준.** 토픽·필드 이름을 임의로 바꾸지 않는다
 - **비밀번호·개인 설정은 올리지 않는다.** `settings.local.json`, `data/` 폴더는 `.gitignore`에 들어 있음. MySQL 비밀번호는 코드에 쓰지 말고 실행할 때 입력
 - 올리기 전에 빌드가 되는지 확인 (Visual Studio: 빌드 → 솔루션 빌드)
-- **작업 시작 전 풀, 작업 끝나면 커밋 → 푸시** (Visual Studio: Git → 풀 / Git → 커밋 또는 스태시 → 푸시). 풀을 안 하고 푸시하면 충돌 오류가 난다
+- **master에 바로 올리지 않는다. 자기 브랜치 → PR → 합치기**
+  1. 작업 시작 전: master로 바꾸고 **풀** (Visual Studio: Git → 풀)
+  2. 자기 브랜치에서 작업: 브랜치 이름은 영문 이름 (예: `kim-hagyun`). 처음 한 번 Git → 새 분기, 다음부터는 아래쪽 브랜치 표시에서 고르기
+  3. 끝나면 커밋 → 푸시 (자기 브랜치로 올라감)
+  4. GitHub 저장소에 뜨는 **Compare & pull request** → 무엇을 바꿨는지 적고 **Create pull request**
+  5. PR의 **Files changed** 탭에서 바뀐 파일 목록을 확인
+     - **자기 담당 폴더 안만 바뀌었으면**: 빌드 확인 후 본인이 **Merge pull request** → **Confirm merge**
+     - **공통 부분이 하나라도 섞였으면** (`admin/src/DepalAdmin.Core`, `Comm`, `Shell`, `admin/Directory.*.props`, `DepalAdmin.sln`, `server/`, `README.md`): 합치지 말고 PR 제목 앞에 `[공통]`을 붙인 뒤 조시현에게 알림 → 조시현이 확인 후 합침
+  6. 합쳐진 뒤 다시 master로 바꾸고 풀
+- PR 하나에는 한 가지 일만 (예: "검사 결과 탭 등급 5종 반영")
+- 남의 담당 폴더를 고쳐야 하면 직접 고치지 말고 담당자에게 요청
+- Claude Code로 작업할 때는 위 방식 그대로 (Claude Code가 브랜치를 만들고 PR까지 올려 줌). 공통 부분을 고쳤으면 PR 제목에 `[공통]`을 붙이라고 Claude에게 말할 것
+- GitHub가 이 규칙을 막아 주지는 않는다 (무료 계정의 비공개 저장소는 보호 규칙·CODEOWNERS를 쓸 수 없음). 약속으로 지킨다
