@@ -15,6 +15,11 @@ run_all.py - 서버 쪽 프로그램을 한 번에 켜고 끄는 실행기
   --hidden      창 없이 실행 (start_all.vbs가 붙임)
   --stop        실행 중인 실행기를 끔 (stop_all.bat가 붙임)
 
+서버 UI와 주고받는 파일 (logs 폴더)
+  run_all.status.json   실행기가 1초마다 씀: 프로그램별 상태(실행/꺼짐, PID, 시작 시각, 종료 코드)
+  run_all.request.json  서버 UI가 씀: {"id": "...", "action": "restart"|"stop"|"start", "name": "server"}
+                        실행기가 읽고 지운 뒤 처리, 결과는 status.json의 last_request에 남김
+
 MySQL 비밀번호
   환경변수 AA_DB_PASSWORD가 있으면 그 값을 쓴다.
   없으면 창 1개 모드에서는 시작할 때 한 번 묻고, 창 없는 모드에서는 시작하지 않는다.
@@ -44,6 +49,9 @@ HERE = Path(__file__).resolve().parent
 LOG_DIR = HERE / "logs"
 PID_FILE = LOG_DIR / "run_all.pid"      # 실행 중 표시 (실행기와 자식 PID)
 STOP_FILE = LOG_DIR / "run_all.stop"    # stop_all이 만들면 실행기가 알아서 끔
+STATUS_FILE = LOG_DIR / "run_all.status.json"    # 서버 UI가 읽는 상태
+REQUEST_FILE = LOG_DIR / "run_all.request.json"  # 서버 UI가 쓰는 요청
+STATUS_EVERY_SEC = 1.0
 IS_WIN = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WIN else 0  # CREATE_NO_WINDOW: 창 없이 실행
 
@@ -106,10 +114,22 @@ def read_pid_file():
         return None
 
 
-def write_pid_file(procs):
-    data = {"pid": os.getpid(), "started": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "children": {name: p.pid for name, p in procs}}
+def write_pid_file(progs, started):
+    data = {"pid": os.getpid(), "started": started,
+            "children": {g.name: g.proc.pid for g in progs if g.proc and g.proc.poll() is None}}
     PID_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def write_json_atomic(path, data):
+    """다 쓴 뒤 이름을 바꿔서, 읽는 쪽(서버 UI)이 반쯤 쓴 파일을 읽지 않게 함"""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    for _ in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # Windows: 읽는 쪽이 잠깐 열고 있으면 실패할 수 있음
+            time.sleep(0.05)
 
 
 def port_open(host, port):
@@ -185,30 +205,93 @@ def open_log(name):
     return open(path, "w", encoding="utf-8", errors="replace", buffering=1)
 
 
-def spawn(name, args, env, cwd=HERE):
-    log = open_log(name)
-    log.write(time.strftime("=== %Y-%m-%d %H:%M:%S 시작: ") + " ".join(args) + "\n")
-    p = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                         stdout=log, stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
-    p._log = log
-    say(f"{name} 켜짐 (PID {p.pid})")
-    return p
+class Prog:
+    """실행기가 관리하는 프로그램 하나 (브로커, 중앙 서버 등)"""
 
+    def __init__(self, name, args, cwd, env):
+        self.name, self.args, self.cwd, self.env = name, args, cwd, env
+        self.proc = None
+        self.log = None
+        self.started = None       # 마지막으로 켠 시각 (문자열)
+        self.stopped_by_user = False  # 서버 UI의 "끄기"로 꺼진 것 (알림 안 띄움)
+        self.reported = False     # 비정상 종료를 이미 알렸는지
 
-def stop_children(procs):
-    # 켠 순서의 반대로 끈다 (브로커가 마지막)
-    for name, p in reversed(procs):
-        if p.poll() is None:
-            p.terminate()
+    def start(self):
+        self.log = open_log(self.name)
+        self.log.write(time.strftime("=== %Y-%m-%d %H:%M:%S 시작: ") + " ".join(self.args) + "\n")
+        self.proc = subprocess.Popen(self.args, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL,
+                                     stdout=self.log, stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+        self.started = time.strftime("%Y-%m-%d %H:%M:%S")
+        self.stopped_by_user = False
+        self.reported = False
+        say(f"{self.name} 켜짐 (PID {self.proc.pid})")
+
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def stop(self):
+        if self.running():
+            self.proc.terminate()
             try:
-                p.wait(timeout=3)
+                self.proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                p.kill()
-            say(f"{name} 꺼짐")
-        try:
-            p._log.close()
-        except AttributeError:
-            pass
+                self.proc.kill()
+                self.proc.wait(timeout=3)
+            say(f"{self.name} 꺼짐")
+        if self.log:
+            self.log.close()
+            self.log = None
+
+    def status(self):
+        if self.running():
+            state = "running"
+        elif self.proc is None or self.stopped_by_user:
+            state = "stopped"      # 꺼 둔 상태 (정상)
+        else:
+            state = "exited"       # 스스로 꺼짐 (이상)
+        return {"name": self.name, "state": state,
+                "pid": self.proc.pid if self.running() else None,
+                "started": self.started,
+                "exit_code": None if self.proc is None or self.running() else self.proc.returncode,
+                "log": f"logs/{self.name}.log"}
+
+
+def stop_children(progs):
+    # 켠 순서의 반대로 끈다 (브로커가 마지막)
+    for g in reversed(progs):
+        g.stop()
+
+
+def handle_request(progs):
+    """서버 UI의 요청 파일을 처리. 결과(dict)를 돌려줌, 요청이 없으면 None"""
+    if not REQUEST_FILE.exists():
+        return None
+    try:
+        req = json.loads(REQUEST_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None  # 쓰는 중일 수 있음 → 다음 차례에 다시 읽음
+    REQUEST_FILE.unlink(missing_ok=True)
+    action, name = req.get("action"), req.get("name")
+    result = {"id": req.get("id"), "action": action, "name": name,
+              "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "ok": False, "message": ""}
+    g = next((g for g in progs if g.name == name), None)
+    if g is None:
+        result["message"] = f"{name}: 실행기가 관리하는 프로그램이 아님"
+    elif action not in ("start", "stop", "restart"):
+        result["message"] = f"모르는 요청: {action}"
+    elif action == "start" and g.running():
+        result["message"] = f"{name}: 이미 실행 중"
+    else:
+        say(f"서버 UI 요청: {name} {action}")
+        if action in ("stop", "restart"):
+            g.stop()
+            g.stopped_by_user = True
+        if action in ("start", "restart"):
+            g.start()
+        result["ok"] = True
+        result["message"] = {"start": "켬", "stop": "끔", "restart": "다시 켬"}[action]
+    say(f"요청 결과: {result['message']}")
+    return result
 
 
 def main():
@@ -257,20 +340,36 @@ def main():
         env["AA_DB_PASSWORD"] = getpass.getpass("MySQL 비밀번호 (DB 저장용): ")
 
     py = python_exe()
-    procs = []
+    progs = []
     monitor = None
+    started = time.strftime("%Y-%m-%d %H:%M:%S")
+    broker_external = False
+    last_request = None
+    options = {"no_fake": a.no_fake, "no_db": a.no_db, "estop_test": a.estop_test}
+
+    def write_status(running=True):
+        write_json_atomic(STATUS_FILE, {
+            "runner": {"running": running, "pid": os.getpid(), "started": started,
+                       "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "updated_unix": time.time(),
+                       "hidden": _hidden, "options": options, "broker_external": broker_external},
+            "programs": [g.status() for g in progs],
+            "last_request": last_request})
+
     PID_FILE.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
     try:
         # 1) 브로커
         if port_open(BROKER_HOST, BROKER_PORT):
+            broker_external = True
             say(f"{BROKER_PORT} 포트에 이미 브로커가 있어 그것을 씀 (Mosquitto 서비스나 이전 창)")
         else:
             if not Path(MOSQUITTO_EXE).exists():
                 raise RuntimeError(f"Mosquitto가 없습니다: {MOSQUITTO_EXE}")
-            procs.append(("broker", spawn("broker", [MOSQUITTO_EXE, "-c", "mosquitto.conf"], env)))
+            broker = Prog("broker", [MOSQUITTO_EXE, "-c", "mosquitto.conf"], HERE, env)
+            progs.append(broker)
+            broker.start()
             t0 = time.monotonic()
             while not port_open(BROKER_HOST, BROKER_PORT):
-                if procs[-1][1].poll() is not None or time.monotonic() - t0 > BROKER_WAIT_SEC:
+                if not broker.running() or time.monotonic() - t0 > BROKER_WAIT_SEC:
                     raise RuntimeError("브로커가 켜지지 않았습니다 → logs\\broker.log 확인")
                 time.sleep(0.2)
 
@@ -283,7 +382,9 @@ def main():
             pi_args = ["fake_pi.py"] + (["--estop-at", str(ESTOP_TEST_AT_SEC)] if a.estop_test else [])
             plan += [("fake_pi", pi_args, HERE), ("fake_yolo", ["fake_yolo.py"], HERE)]
         for i, (name, args, cwd) in enumerate(plan):
-            procs.append((name, spawn(name, [py, *args], env, cwd)))
+            g = Prog(name, [py, *args], cwd, env)
+            progs.append(g)
+            g.start()
             time.sleep(1.5 if i < 2 else 0.5)  # 서버·컨트롤러가 먼저 구독하도록
 
         # 3) 모니터: 창 1개 모드에서만, 이 창에 그대로 출력
@@ -294,13 +395,14 @@ def main():
             print("-" * 60, flush=True)
             monitor = subprocess.Popen([py, "monitor.py"], cwd=HERE, env=env)
 
-        write_pid_file(procs)
-        names = ", ".join(n for n, _ in procs)
+        write_pid_file(progs, started)
+        write_status()
+        names = ", ".join(g.name for g in progs)
         say(f"시작 완료: {names}")
         popup(f"서버를 켰습니다.\n{names}\n\n상태는 관리자 프로그램에서, 끄기는 stop_all.bat")
 
         # 4) 지켜보기: 하나가 꺼지면 알림, stop_all이 부르면 전부 끔
-        reported = set()
+        next_status = 0.0
         while True:
             if STOP_FILE.exists():
                 say("stop_all 요청을 받아 끕니다")
@@ -308,13 +410,22 @@ def main():
             if monitor and monitor.poll() is not None:
                 say("모니터가 꺼져 전부 끕니다")
                 break
-            for name, p in procs:
-                if name not in reported and p.poll() is not None:
-                    reported.add(name)
-                    msg = f"{name} 종료됨 (코드 {p.returncode}) → logs\\{name}.log 확인"
+            result = handle_request(progs)
+            if result:
+                last_request = result
+                write_pid_file(progs, started)  # PID가 바뀌었으므로
+                next_status = 0.0
+            for g in progs:
+                if not g.reported and not g.stopped_by_user and g.proc and g.proc.poll() is not None:
+                    g.reported = True
+                    msg = f"{g.name} 종료됨 (코드 {g.proc.returncode}) → logs\\{g.name}.log 확인"
                     say(msg)
                     popup(msg, warn=True)
-            time.sleep(0.5)
+                    next_status = 0.0
+            if time.monotonic() >= next_status:
+                write_status()
+                next_status = time.monotonic() + STATUS_EVERY_SEC
+            time.sleep(0.3)
     except KeyboardInterrupt:
         say("Ctrl+C → 전부 끕니다")
     except RuntimeError as e:
@@ -325,7 +436,12 @@ def main():
     finally:
         if monitor and monitor.poll() is None:
             monitor.terminate()
-        stop_children(procs)
+        stop_children(progs)
+        try:
+            write_status(running=False)
+        except OSError:
+            pass
+        REQUEST_FILE.unlink(missing_ok=True)
         STOP_FILE.unlink(missing_ok=True)
         PID_FILE.unlink(missing_ok=True)
         say("끝")
