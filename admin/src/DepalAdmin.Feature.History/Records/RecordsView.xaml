@@ -38,7 +38,7 @@
                         <DataGridTextColumn Header="회차" Binding="{Binding RunId}" Width="165"/>
                         <DataGridTextColumn Header="번호" Binding="{Binding BatteryId}" Width="50" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="칸" Binding="{Binding PalletSlot}" Width="40" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTemplateColumn Header="등급" Width="70">
+                        <DataGridTemplateColumn Header="등급" Width="90">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border Style="{StaticResource GradeTag}" Background="{Binding Grade, Converter={StaticResource GradeToBrush}}">

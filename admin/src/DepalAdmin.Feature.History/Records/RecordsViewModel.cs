@@ -20,7 +20,7 @@ public partial class RecordsViewModel : ObservableObject
 
     public ObservableCollection<HistoryRow> Rows { get; } = new();
     public ObservableCollection<RunSummary> Runs { get; } = new();
-    public string[] Grades { get; } = { All, "A", "B", "NG", "RESORT" };
+    public string[] Grades { get; } = new[] { All }.Concat(DepalAdmin.Core.Grades.All).ToArray();
 
     [ObservableProperty] private DateTime _from = DateTime.Today;
     [ObservableProperty] private DateTime _to = DateTime.Today;
@@ -137,7 +137,7 @@ public sealed class RunSummary
         Count = rows.Count;
         A = rows.Count(r => r.Grade == "A");
         B = rows.Count(r => r.Grade == "B");
-        Ng = rows.Count(r => r.Grade == "NG");
+        Ng = rows.Count(r => DepalAdmin.Core.Grades.IsNg(r.Grade));
         Resort = rows.Count(r => r.Grade == "RESORT");
     }
 
