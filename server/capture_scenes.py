@@ -92,7 +92,7 @@ async def ui(client, action):
     print(f"  → {action}", flush=True)
 
 
-async def scene(client, w: Watch, no, title, pi_args, yolo_args, body):
+async def scene(client, w: Watch, no, title, pi_args, yolo_args, mega_args, body):
     print(f"\n━━━ 장면 {no}. {title} ━━━", flush=True)
     path = os.path.join(HERE, LOG_DIR, f"scene_{no}.log")
     if os.path.exists(path):
@@ -101,14 +101,15 @@ async def scene(client, w: Watch, no, title, pi_args, yolo_args, body):
     await asyncio.sleep(1.5)
     pi = spawn("fake_pi.py", *pi_args)
     yolo = spawn("fake_yolo.py", *yolo_args)
+    mega = spawn("fake_mega.py", *mega_args)
     try:
-        ok = await w.until(lambda: w.devices.get("pi") == "ok" and w.devices.get("yolo") == "ok", 15, "장치 연결")
+        ok = await w.until(lambda: all(w.devices.get(d) == "ok" for d in ("pi", "mega", "yolo")), 15, "장치 연결")
         ok = ok and await w.until(lambda: w.mode == "idle", 10, "라인 대기 상태")
         if ok:
             await body()
         await asyncio.sleep(1.5)
     finally:
-        kill(pi, yolo)
+        kill(pi, yolo, mega)
         await asyncio.sleep(1.0)
         kill(mon)
     print(f"  저장: {os.path.relpath(path, HERE)}", flush=True)
@@ -134,7 +135,7 @@ async def main():
             await ui(client, "start")
             await w.until(lambda: w.mode == "running", 5, "운전 시작")
             await w.until(lambda: w.mode == "idle", 120, "회차 종료")
-        await scene(client, w, "05", "정상 회차", ["--seed", "3", "--env-interval", "0"], ["--seed", "3"], s05)
+        await scene(client, w, "05", "정상 회차", ["--seed", "3"], ["--seed", "3"], ["--seed", "3", "--env-interval", "0"], s05)
 
         # 06 집기 실패 → resume → skip
         async def s06():
@@ -154,8 +155,8 @@ async def main():
                         await ui(client, "stop")
                         continue
                     break
-        await scene(client, w, "06", "집기 실패", ["--seed", "2", "--pick-fail", "0.6", "--env-interval", "0"],
-                    ["--seed", "2"], s06)
+        await scene(client, w, "06", "집기 실패", ["--seed", "2", "--pick-fail", "0.6"],
+                    ["--seed", "2"], ["--seed", "2", "--env-interval", "0"], s06)
 
         # 07 비상정지 버튼
         async def s07():
@@ -170,8 +171,8 @@ async def main():
             await w.until(lambda: w.mode == "idle", 30, "해제")
         w.estop.clear()
         await scene(client, w, "07", "비상정지 버튼",
-                    ["--seed", "4", "--estop-at", "14", "--estop-hold", "6", "--env-interval", "0"],
-                    ["--seed", "4"], s07)
+                    ["--seed", "4"], ["--seed", "4"],
+                    ["--seed", "4", "--estop-at", "14", "--estop-hold", "6", "--env-interval", "0"], s07)
 
         watcher.cancel()
     print("\n끝났습니다. captures\\logs 폴더에 로그 3개가 있습니다.", flush=True)

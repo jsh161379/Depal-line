@@ -1,7 +1,7 @@
 namespace DepalAdmin.Core.Models;
 
 /// <summary>
-/// server/results — 건전지 1개 최종 결과. 메시지_형식 v1.2 3장.
+/// server/results — 건전지 1개 최종 결과. 메시지_형식 v1.4 3장.
 /// 등급 기준값은 임시값이므로 화면에서 기준을 직접 계산하지 말고 Grade를 그대로 쓴다.
 /// </summary>
 public sealed class BatteryResult
@@ -25,12 +25,12 @@ public sealed class BatteryResult
     public double? VLoad { get; set; }
     public double? RInt { get; set; }
 
-    /// <summary>A / B / NG / RESORT</summary>
+    /// <summary>A / B / NG_VISUAL / NG_VOLTAGE / RESORT (목록·판단은 Grades 클래스)</summary>
     public string Grade { get; set; } = "";
 
     public string? Reason { get; set; }
 
-    /// <summary>AGV / B_BOX / NG_BOX / RESORT_BOX / null(배출 실패)</summary>
+    /// <summary>AGV / B_BOX / NG_VISUAL_BOX / NG_VOLTAGE_BOX / RESORT_BOX / null(배출 실패)</summary>
     public string? Dest { get; set; }
 
     public string? FinishedAt { get; set; }
@@ -43,11 +43,29 @@ public sealed class VisionInfo
     /// <summary>ok / failed</summary>
     public string? Status { get; set; }
 
-    /// <summary>normal / scratch / sticker / ...</summary>
+    /// <summary>normal / defect (불량 종류는 Defects)</summary>
     public string? Result { get; set; }
 
     public double? Conf { get; set; }
 
     /// <summary>minus_up / plus_up / unknown</summary>
     public string? Polarity { get; set; }
+
+    /// <summary>불량 종류 목록. 정상이면 빈 목록</summary>
+    public List<VisionDefect> Defects { get; set; } = new();
+
+    /// <summary>화면용: "scratch, dent" (없으면 빈 문자열)</summary>
+    public string DefectsText => string.Join(", ", Defects.Select(d => d.Type));
+}
+
+/// <summary>vision.defects 한 항목</summary>
+public sealed class VisionDefect
+{
+    /// <summary>scratch / dent / sticker / leak ...</summary>
+    public string Type { get; set; } = "";
+
+    public double? Conf { get; set; }
+
+    /// <summary>불량을 찾은 카메라: front / back / top</summary>
+    public string? Cam { get; set; }
 }

@@ -52,7 +52,7 @@ public sealed class StatusToFillConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
 }
 
-/// <summary>등급(A/B/NG/RESORT) → 색. {Binding Grade, Converter={StaticResource GradeToBrush}}</summary>
+/// <summary>등급(A/B/NG_VISUAL/NG_VOLTAGE/RESORT) → 색. 불량은 모두 같은 빨강. {Binding Grade, Converter={StaticResource GradeToBrush}}</summary>
 public sealed class GradeToBrushConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -60,7 +60,7 @@ public sealed class GradeToBrushConverter : IValueConverter
         {
             "A" => "Brush.GradeA",
             "B" => "Brush.GradeB",
-            "NG" => "Brush.GradeNG",
+            "NG_VISUAL" or "NG_VOLTAGE" or "NG" => "Brush.GradeNG",
             "RESORT" => "Brush.GradeResort",
             _ => "Brush.Empty",
         });

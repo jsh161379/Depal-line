@@ -19,7 +19,9 @@ EVENTS = "server/events"
 RESULTS = "server/results"
 ENVIRONMENT = "sensor/env"
 EMERGENCY_STOP = "event/estop"
-COMMUNICATION_TOPICS = ("cmd/+", "res/+", "ui/cmd")
+# Notification topics kept as raw text in communication_logs (message_kind EVENT), with the sending device.
+EVENT_LOG_TOPICS = {"vision/result": "yolo", "event/mega": "mega"}
+COMMUNICATION_TOPICS = ("cmd/+", "res/+", "ui/cmd", *EVENT_LOG_TOPICS)
 COMMUNICATION_KINDS = {"cmd": "COMMAND", "res": "RESPONSE", "ui": "OPERATOR_COMMAND"}
 ELECTRICAL_STATES = {"measured": "COMPLETED", "skipped": "SKIPPED", "failed": "FAILED"}
 
@@ -46,7 +48,8 @@ class Event(BaseModel):
     event_id: EventId
     run_id: RunId
     ts: Timestamp
-    device: Annotated[str, StringConstraints(min_length=1, max_length=20)]
+    # Admin screens report as "ui-<PC name>", which can exceed 20 characters. equipment_name is varchar(64).
+    device: Annotated[str, StringConstraints(min_length=1, max_length=64)]
     level: Literal["INFO", "WARN", "ERROR"]
     message: Annotated[str, StringConstraints(max_length=255)]
 
@@ -77,11 +80,26 @@ class EnvironmentSample(BaseModel):
     readings: Annotated[list[EnvironmentReading], Field(min_length=1)]
 
 
+class VisionDefect(BaseModel):
+    type: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    conf: Confidence | None = None
+    cam: Annotated[str, StringConstraints(min_length=1, max_length=16)] | None = None
+
+
 class Vision(BaseModel):
     status: Literal["ok", "failed"]
+    # New messages use "normal" / "defect" and list the defect types in `defects`.
+    # Older messages put a single defect name (for example "scratch") here and omit `defects`.
     result: Annotated[str, StringConstraints(min_length=1, max_length=64)] | None
     conf: Confidence | None
     polarity: Literal["minus_up", "plus_up", "unknown"] | None = None
+    defects: list[VisionDefect] | None = None
+
+    @model_validator(mode="after")
+    def validate_defects(self):
+        if self.result == "normal" and self.defects:
+            raise ValueError("a normal vision result must not list defects")
+        return self
 
 
 class Result(BaseModel):
@@ -96,9 +114,11 @@ class Result(BaseModel):
     v_load: Voltage | None
     r_int: Resistance | None
     r_load: LoadResistance | None = None
-    grade: Literal["A", "B", "NG", "RESORT"]
+    # NG is kept for older data. New results use NG_VISUAL (appearance) or NG_VOLTAGE (voltage/resistance).
+    grade: Literal["A", "B", "NG", "RESORT", "NG_VISUAL", "NG_VOLTAGE"]
     reason: str | None
-    dest: Literal["AGV", "B_BOX", "NG_BOX", "RESORT_BOX"] | None
+    # NG_BOX is kept for older data. New results use NG_VISUAL_BOX or NG_VOLTAGE_BOX.
+    dest: Literal["AGV", "B_BOX", "NG_BOX", "RESORT_BOX", "NG_VISUAL_BOX", "NG_VOLTAGE_BOX"] | None
     finished_at: Timestamp
     rule_version: Annotated[str, StringConstraints(min_length=1, max_length=40)] | None = None
 
@@ -147,7 +167,17 @@ def insert_once(cursor, statement, parameters):
     return True
 
 
-def insert_result(cursor, run_id, result):
+def defect_rows(vision):
+    """(defect_type, confidence, camera) rows for a failed visual inspection."""
+    if vision.defects is not None:
+        return [(defect.type, defect.conf, defect.cam) for defect in vision.defects]
+    if vision.result != "defect":
+        # Older format: the defect name is the result itself.
+        return [(vision.result, vision.conf, None)]
+    return []
+
+
+def insert_result(cursor, run_id, result, has_camera):
     rule_id = None
     if result.rule_version is not None:
         # The result names the rule version without providing its settings or effective date.
@@ -180,10 +210,19 @@ def insert_result(cursor, run_id, result):
         VALUES (%s, %s, %s, %s, NULL)
         """, (cycle_id, visual_result, vision.polarity, vision.conf))
     if visual_result == "FAIL":
-        cursor.execute("""
-            INSERT INTO visual_defects (visual_inspection_id, defect_type, confidence)
-            VALUES (%s, %s, %s)
-            """, (cursor.lastrowid, vision.result, vision.conf))
+        visual_inspection_id = cursor.lastrowid
+        for defect_type, confidence, camera in defect_rows(vision):
+            if has_camera:
+                cursor.execute("""
+                    INSERT INTO visual_defects (visual_inspection_id, defect_type, confidence, camera)
+                    VALUES (%s, %s, %s, %s)
+                    """, (visual_inspection_id, defect_type, confidence, camera))
+            else:
+                # The DB has not been given the camera column yet; store the rest.
+                cursor.execute("""
+                    INSERT INTO visual_defects (visual_inspection_id, defect_type, confidence)
+                    VALUES (%s, %s, %s)
+                    """, (visual_inspection_id, defect_type, confidence))
 
     if result.electrical_status == "measured":
         cursor.execute("""
@@ -195,7 +234,7 @@ def insert_result(cursor, run_id, result):
     return True
 
 
-def insert_line_message(cursor, message, started_at):
+def insert_line_message(cursor, message, started_at, has_camera):
     cursor.execute("""
         INSERT INTO runs (source_run_id, run_type, started_at)
         VALUES (%s, 'LINE', %s)
@@ -209,7 +248,7 @@ def insert_line_message(cursor, message, started_at):
                 source_event_id, run_id, equipment_name, event_type, severity, details, occurred_at
             ) VALUES (%s, %s, %s, 'DEVICE_STATUS_CHANGED', %s, %s, %s)
             """, (message.event_id.lower(), run_id, message.device, message.level, message.message, message.ts))
-    return insert_result(cursor, run_id, message)
+    return insert_result(cursor, run_id, message, has_camera)
 
 
 def insert_environment_readings(cursor, sample):
@@ -238,14 +277,14 @@ def insert_emergency_stop(cursor, event):
               event.source, event.kind, event.details, event.ts))
 
 
-def save_message(connection, message, started_at):
+def save_message(connection, message, started_at, has_camera=False):
     with connection.cursor() as cursor:
         if isinstance(message, EnvironmentSample):
             inserted = insert_environment_readings(cursor, message)
         elif isinstance(message, EmergencyStopEvent):
             inserted = insert_emergency_stop(cursor, message)
         else:
-            inserted = insert_line_message(cursor, message, started_at)
+            inserted = insert_line_message(cursor, message, started_at, has_camera)
 
     if inserted:
         connection.commit()
@@ -261,10 +300,17 @@ def log_text(payload, key, max_length):
     return value.encode("utf-8", errors="replace").decode("utf-8")
 
 
-def save_communication_log(connection, received):
-    topic_group, topic_device = received.topic.split("/", 1)
+def communication_kind(topic):
+    """(message_kind, device) for a topic stored in communication_logs."""
+    if topic in EVENT_LOG_TOPICS:
+        return "EVENT", EVENT_LOG_TOPICS[topic]
+    topic_group, topic_device = topic.split("/", 1)
     kind = COMMUNICATION_KINDS[topic_group]
-    device = "ui" if kind == "OPERATOR_COMMAND" else topic_device[:255]
+    return kind, "ui" if kind == "OPERATOR_COMMAND" else topic_device[:255]
+
+
+def save_communication_log(connection, received):
+    kind, device = communication_kind(received.topic)
     payload_text = received.payload.decode("utf-8", errors="replace")
     try:
         payload = json.loads(payload_text)
@@ -300,6 +346,53 @@ def save_communication_log(connection, received):
     connection.commit()
 
 
+class Database:
+    """One MySQL connection reused across messages, reopened after an error."""
+
+    def __init__(self, options):
+        self.options = options
+        self.connection = None
+        self.has_camera = False
+        self.has_event_kind = False
+
+    def connect(self):
+        if self.connection is not None and self.connection.is_connected():
+            return self.connection
+        self.close()
+        self.connection = mysql.connector.connect(**self.options)
+        self.detect_schema()
+        return self.connection
+
+    def detect_schema(self):
+        # Optional columns added on 2026-11-10. Older databases keep working without them.
+        with self.connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND (
+                    (TABLE_NAME = 'visual_defects' AND COLUMN_NAME = 'camera') OR
+                    (TABLE_NAME = 'communication_logs' AND COLUMN_NAME = 'message_kind'))
+                """, (self.options["database"],))
+            rows = [tuple(value.decode() if isinstance(value, (bytes, bytearray)) else value for value in row)
+                    for row in cursor.fetchall()]
+        self.connection.commit()
+        self.has_camera = any(column == "camera" for _, column, _ in rows)
+        self.has_event_kind = any(column == "message_kind" and "'EVENT'" in str(column_type)
+                                  for _, column, column_type in rows)
+        if not self.has_camera:
+            logging.warning("visual_defects.camera is missing; defect cameras will not be stored")
+        if not self.has_event_kind:
+            logging.warning("communication_logs.message_kind has no EVENT; %s will not be logged",
+                            ", ".join(EVENT_LOG_TOPICS))
+
+    def close(self):
+        if self.connection is not None:
+            try:
+                self.connection.close()
+            except mysql.connector.Error:
+                pass
+        self.connection = None
+
+
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code.is_failure:
         logging.error("MQTT connection refused: %s", reason_code)
@@ -314,24 +407,27 @@ def on_subscribe(client, userdata, mid, reason_codes, properties):
         logging.info("Subscribed to %s", ", ".join((*MESSAGE_MODELS, *COMMUNICATION_TOPICS)))
 
 
-def on_message(client, db_options, received):
+def on_message(client, db, received):
     is_structured_message = received.topic in MESSAGE_MODELS
     try:
         if is_structured_message:
             message, started_at = parse_message(received.topic, received.payload)
-        with mysql.connector.connect(**db_options) as connection:
-            if is_structured_message:
-                inserted = save_message(connection, message, started_at)
-                logging.info("%s %s for run %s", "Saved" if inserted else "Duplicate", received.topic, message.run_id)
-            else:
-                save_communication_log(connection, received)
-                logging.info("Logged MQTT %s", received.topic)
+        connection = db.connect()
+        if is_structured_message:
+            inserted = save_message(connection, message, started_at, db.has_camera)
+            logging.info("%s %s for run %s", "Saved" if inserted else "Duplicate", received.topic, message.run_id)
+        elif received.topic in EVENT_LOG_TOPICS and not db.has_event_kind:
+            pass  # The DB cannot store EVENT rows yet; detect_schema has already warned.
+        else:
+            save_communication_log(connection, received)
+            logging.info("Logged MQTT %s", received.topic)
     except ValidationError as error:
         logging.error("Rejected malformed %s: %s", received.topic, error.errors(include_input=False))
     except (KeyError, ValueError) as error:
         logging.error("Rejected malformed %s: %s", received.topic, error)
     except mysql.connector.Error:
         logging.exception("MySQL save failed. Reconnecting without acknowledging %s", received.topic)
+        db.close()
         client.disconnect()
         return
 
@@ -361,9 +457,10 @@ def main():
         database=args.database, charset="utf8mb4", autocommit=False,
         connection_timeout=5, read_timeout=5, write_timeout=5,
     )
+    db = Database(db_options)
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2, client_id=args.client_id, clean_session=False,
-        userdata=db_options, protocol=mqtt.MQTTv311, manual_ack=True,
+        userdata=db, protocol=mqtt.MQTTv311, manual_ack=True,
     )
     if mqtt_user := os.environ.get("AA_MQTT_USER"):
         client.username_pw_set(mqtt_user, os.environ.get("AA_MQTT_PASSWORD"))
@@ -381,6 +478,7 @@ def main():
             time.sleep(3)
     except KeyboardInterrupt:
         client.disconnect()
+        db.close()
 
 
 if __name__ == "__main__":

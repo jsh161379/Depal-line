@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using DepalAdmin.Core;
 using DepalAdmin.Core.Messaging;
 using DepalAdmin.Core.Models;
 
@@ -24,12 +25,12 @@ public sealed class FakeLineClient : LineClientBase
     // ──────────────────────────────────────────────────────
 
     private static readonly string[] Steps = { "scan", "pick", "inspect", "measure", "home", "sort" };
-    private static readonly string[] DeviceNames = { "server", "controller", "pi", "yolo", "agv", "db_saver" };
+    private static readonly string[] DeviceNames = { "server", "controller", "pi", "mega", "yolo", "agv", "db_saver" };
     private static readonly string[] AgvCycle = { "going", "going", "away", "away", "returning", "returning", "home" };
 
     private readonly Random _rnd = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly Dictionary<string, int> _counts = new() { ["A"] = 0, ["B"] = 0, ["NG"] = 0, ["RESORT"] = 0 };
+    private readonly Dictionary<string, int> _counts = Grades.All.ToDictionary(g => g, _ => 0);
     private readonly Dictionary<string, int> _delayLeft = new();
 
     private string _mode = "idle";
@@ -304,15 +305,19 @@ public sealed class FakeLineClient : LineClientBase
         var p = _rnd.NextDouble();
         if (p < 0.08)
         {
-            r.Vision = new VisionInfo { Status = "ok", Result = "scratch", Conf = 0.91, Polarity = "minus_up" };
+            r.Vision = new VisionInfo
+            {
+                Status = "ok", Result = "defect", Conf = 0.91, Polarity = "minus_up",
+                Defects = { new VisionDefect { Type = "scratch", Conf = 0.91, Cam = "front" } },
+            };
             r.ElectricalStatus = "skipped";
-            (r.Grade, r.Dest, r.Reason) = ("NG", "NG_BOX", "외관 불량(scratch)");
+            (r.Grade, r.Dest, r.Reason) = (Grades.NgVisual, "NG_VISUAL_BOX", "외관 불량");
         }
         else if (p < 0.13)
         {
             r.Vision = new VisionInfo { Status = "ok", Result = "normal", Conf = 0.95, Polarity = "plus_up" };
             r.ElectricalStatus = "skipped";
-            (r.Grade, r.Dest, r.Reason) = ("RESORT", "RESORT_BOX", "상단 카메라: +극이 위");
+            (r.Grade, r.Dest, r.Reason) = (Grades.Resort, "RESORT_BOX", "+극이 위");
         }
         else
         {
@@ -327,10 +332,11 @@ public sealed class FakeLineClient : LineClientBase
             r.VLoad = Math.Round(v * 3.31 / (3.31 + ri), 3);
 
             // 흉내용 임시 기준 (실제 기준은 라인 컨트롤러에 있음)
-            (r.Grade, r.Dest) = v >= 1.50 && ri <= 0.35 ? ("A", "AGV")
-                              : v >= 1.30 && ri <= 1.0 ? ("B", "B_BOX")
-                              : ("NG", "NG_BOX");
-            if (r.Grade == "NG") r.Reason = "전압 낮음 또는 내부저항 큼";
+            (r.Grade, r.Dest) = v >= 1.50 && ri <= 0.9 ? (Grades.A, "AGV")
+                              : v >= 1.30 && ri <= 1.5 ? (Grades.B, "B_BOX")
+                              : (Grades.NgVoltage, "NG_VOLTAGE_BOX");
+            if (r.Grade == Grades.NgVoltage)
+                r.Reason = v < 1.30 && ri > 1.5 ? "전압 낮음, 내부저항 큼" : v < 1.30 ? "전압 낮음" : "내부저항 큼";
         }
         return r;
     }

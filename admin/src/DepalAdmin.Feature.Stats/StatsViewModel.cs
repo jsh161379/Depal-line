@@ -24,7 +24,6 @@ public partial class StatsViewModel : ObservableObject
     private const double TempLimitB = 1.30;
     // ──────────────────────────────────────────────────────
 
-    private static readonly string[] GradeOrder = { "A", "B", "NG", "RESORT" };
     private readonly IHistoryRepository _repo;
 
     public ObservableCollection<GradeBar> Grades { get; } = new();
@@ -80,7 +79,12 @@ public partial class StatsViewModel : ObservableObject
 
         // 등급 비율
         Grades.Clear();
-        foreach (var g in GradeOrder)
+        // 11/10 이전 데이터(NG)가 기간에 있으면 그 막대도 보여 줌
+        // (이 클래스에는 막대 목록 속성 Grades가 있어서, 등급 목록 클래스는 전체 이름으로 씀)
+        var order = rows.Any(r => r.Grade == DepalAdmin.Core.Grades.Ng)
+            ? DepalAdmin.Core.Grades.All.Append(DepalAdmin.Core.Grades.Ng)
+            : DepalAdmin.Core.Grades.All;
+        foreach (var g in order)
         {
             var n = rows.Count(r => r.Grade == g);
             Grades.Add(new GradeBar(g, Labels.Grade(g), n, Total == 0 ? 0 : n * 100.0 / Total));

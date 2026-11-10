@@ -43,12 +43,14 @@ public static class ReportBuilder
 
         // ── 요약 ──
         Heading(doc, "요약");
-        doc.Blocks.Add(MakeTable(new[] { "처리", "A", "B", "불량", "재분류", "배출 실패", "1개당 평균" }, new[]
-        {
-            new[] { $"{d.Total}개", $"{d.Count("A")} ({d.Ratio("A")})", $"{d.Count("B")} ({d.Ratio("B")})",
-                    $"{d.Count("NG")} ({d.Ratio("NG")})", $"{d.Count("RESORT")} ({d.Ratio("RESORT")})",
-                    d.SortFailed.ToString(), d.AvgCycle },
-        }));
+        var grades = d.GradeColumns;
+        doc.Blocks.Add(MakeTable(
+            new[] { "처리" }.Concat(grades.Select(ShortGrade)).Concat(new[] { "배출 실패", "1개당 평균" }).ToArray(),
+            new[]
+            {
+                new[] { $"{d.Total}개" }.Concat(grades.Select(g => $"{d.Count(g)} ({d.Ratio(g)})"))
+                                        .Concat(new[] { d.SortFailed.ToString(), d.AvgCycle }).ToArray(),
+            }));
         doc.Blocks.Add(Note("등급 기준값은 아직 임시값입니다. 기준이 바뀌면 결과의 기준 버전(rule_version)이 달라집니다. 배출 실패는 등급은 정해졌지만 분류함에 넣지 못한 건(등급 개수에 포함)."));
 
         // ── 불량·재분류 사유 ──
@@ -72,10 +74,11 @@ public static class ReportBuilder
             Heading(doc, "회차별");
             var runs = d.Runs;
             if (runs.Count == 0) doc.Blocks.Add(Note("이 날짜에 회차가 없습니다."));
-            else doc.Blocks.Add(MakeTable(new[] { "회차", "시작", "개수", "A", "B", "불량", "재분류" },
-                     runs.Select(r => new[] { r.RunId, r.Start?.ToString("HH:mm") ?? "-", r.Count.ToString(),
-                                              r.A.ToString(), r.B.ToString(), r.Ng.ToString(), r.Resort.ToString() }).ToArray(),
-                     widths: new[] { 3.0, 1, 1, 1, 1, 1, 1 }));
+            else doc.Blocks.Add(MakeTable(
+                     new[] { "회차", "시작", "개수" }.Concat(grades.Select(ShortGrade)).ToArray(),
+                     runs.Select(r => new[] { r.RunId, r.Start?.ToString("HH:mm") ?? "-", r.Count.ToString() }
+                                      .Concat(r.ByGrade.Select(n => n.ToString())).ToArray()).ToArray(),
+                     widths: new[] { 2.6, 0.9, 0.8 }.Concat(grades.Select(_ => 1.2)).ToArray()));
         }
 
         // ── 인수인계 메모 ──
@@ -107,6 +110,15 @@ public static class ReportBuilder
 
     private static Paragraph Note(string text) =>
         new(new Run(text)) { Foreground = Sub, FontSize = 11, Margin = new Thickness(0, 2, 0, 4) };
+
+    /// <summary>표 머리용 짧은 등급 이름 (칸이 좁아 "외관 불량"이 두 줄로 꺾이지 않게)</summary>
+    private static string ShortGrade(string grade) => grade switch
+    {
+        "NG_VISUAL" => "외관불량",
+        "NG_VOLTAGE" => "전압불량",
+        "NG" => "이전 NG",
+        _ => Labels.Grade(grade),
+    };
 
     private static Table MakeTable(string[] headers, string[][] rows, double[]? widths = null)
     {

@@ -1,3 +1,4 @@
+using DepalAdmin.Core;
 using DepalAdmin.Core.Data;
 using DepalAdmin.Core.Handover;
 
@@ -45,11 +46,15 @@ public sealed class ReportData
             .Take(5)
             .ToList();
 
-    public IReadOnlyList<(string RunId, DateTime? Start, int Count, int A, int B, int Ng, int Resort)> Runs =>
+    /// <summary>보고서 칸에 쓸 등급: 5종 + 기간에 이전 데이터(NG)가 있으면 NG도</summary>
+    public IReadOnlyList<string> GradeColumns =>
+        Rows.Any(r => r.Grade == Grades.Ng) ? Grades.All.Append(Grades.Ng).ToList() : (IReadOnlyList<string>)Grades.All;
+
+    /// <summary>회차별: 등급 개수는 GradeColumns 순서</summary>
+    public IReadOnlyList<(string RunId, DateTime? Start, int Count, int[] ByGrade)> Runs =>
         Rows.GroupBy(r => r.RunId)
             .Select(g => (g.Key, g.Min(r => r.StartedAt ?? r.FinishedAt), g.Count(),
-                          g.Count(r => r.Grade == "A"), g.Count(r => r.Grade == "B"),
-                          g.Count(r => r.Grade == "NG"), g.Count(r => r.Grade == "RESORT")))
+                          GradeColumns.Select(grade => g.Count(r => r.Grade == grade)).ToArray()))
             .OrderBy(x => x.Item2)
             .ToList();
 

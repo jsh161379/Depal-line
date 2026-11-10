@@ -24,7 +24,7 @@ v2에서 바뀐 점
 BROKER_HOST = "127.0.0.1"        # 브로커(Mosquitto)가 서버와 같은 PC면 그대로
 BROKER_PORT = 1883
 SERVER_NAME = "server"
-EXPECTED_DEVICES = ["pi", "yolo", "agv"]   # 서버가 기다리는 장치 이름
+EXPECTED_DEVICES = ["pi", "mega", "yolo", "agv"]   # 서버가 기다리는 장치 이름
 
 HB_INTERVAL_SEC = 1.0            # 서버 하트비트 보내는 간격
 WARN_AFTER_SEC = 3.0             # 이 시간 동안 하트비트 없으면 '지연'  (임시값)

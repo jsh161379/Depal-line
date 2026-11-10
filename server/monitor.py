@@ -6,7 +6,7 @@ mosquitto_sub 대신 쓰는 프로그램입니다. 서버가 보내는 메시지
   - 이벤트: 시각, 등급(색), 장치, 내용
   - 결과: 건전지 번호, 등급(색), 보낸 곳, 이유, 전압·내부저항
   - 비상정지(event/estop) 항상 표시, 환경 센서(sensor/env)는 --env일 때 표시
-  - 라인 현황(server/line): 운전 상태, 지금 건전지·단계, 등급별 개수, AGV 적재 수 (라인 컨트롤러가 있을 때)
+  - 라인 현황(server/line): 운전 상태, 벨트 위 퍽 번호, 등급별 개수(5종), AGV 적재 수 (라인 컨트롤러가 있을 때)
 
 필요한 것: Python 3.11 이상,  pip install "aiomqtt>=2"
 실행:
@@ -51,8 +51,9 @@ def print(*args, **kwargs):  # noqa: A001 - 화면 출력과 함께 로그 파�
 
 LEVEL_COLOR = {"INFO": GREEN, "WARN": YELLOW, "ERROR": RED}
 STATUS_VIEW = {"ok": (GREEN, "정상"), "warn": (YELLOW, "지연"), "offline": (RED, "끊김"), "unknown": (GRAY, "확인 전")}
-GRADE_COLOR = {"A": GREEN, "B": CYAN, "NG": RED, "RESORT": MAGENTA}
-DEST_KR = {"AGV": "AGV", "B_BOX": "B함", "NG_BOX": "불량함", "RESORT_BOX": "재분류함", None: "배출 안 됨"}
+GRADE_COLOR = {"A": GREEN, "B": CYAN, "NG_VISUAL": RED, "NG_VOLTAGE": RED, "RESORT": MAGENTA}
+DEST_KR = {"AGV": "AGV", "B_BOX": "B함", "NG_VISUAL_BOX": "외관불량함", "NG_VOLTAGE_BOX": "전압불량함",
+           "RESORT_BOX": "재분류함", None: "배출 안 됨"}
 
 
 def short_time(ts: str | None) -> str:
@@ -82,10 +83,10 @@ def show_devices(d: dict):
         print(f"{GRAY}{short_time(d.get('ts'))}{RESET}  {CYAN}{BOLD}[장치]{RESET} {line}", flush=True)
 
 
-MODE_VIEW = {"idle": (GRAY, "대기"), "running": (GREEN, "운전"), "paused": (YELLOW, "일시정지"), "estop": (RED, "비상정지")}
-STEP_KR = {"idle": "-", "scan": "팔레트 인식", "pick": "집기", "inspect": "외관 검사", "measure": "전압 측정",
-           "home": "원점 복귀", "sort": "분류", "wait_agv": "AGV 대기", "wait_operator": "작업자 확인 대기",
-           "estop": "비상정지", "reset": "해제 중"}
+MODE_VIEW = {"idle": (GRAY, "대기"), "running": (GREEN, "운전"), "paused": (YELLOW, "일시정지"),
+             "draining": (CYAN, "마무리"), "estop": (RED, "비상정지")}
+STEP_KR = {"idle": "-", "running": "운전 중", "scan": "팔레트 인식", "pick": "퍽 올리기", "paused": "일시정지",
+           "draining": "벨트 비우는 중", "wait_operator": "작업자 확인 대기", "estop": "비상정지", "reset": "해제 중"}
 last_line = None
 
 
@@ -94,15 +95,17 @@ def show_line(d: dict):
     global last_line
     c = d.get("counts") or {}
     agv = d.get("agv") or {}
-    key = (d.get("mode"), d.get("step"), d.get("battery_id"), tuple(sorted(c.items())), d.get("message"))
+    on_belt = d.get("on_belt") or []
+    key = (d.get("mode"), d.get("step"), tuple(on_belt), tuple(sorted(c.items())), d.get("message"))
     if key == last_line:
         return
     last_line = key
     mc, mk = MODE_VIEW.get(d.get("mode"), (GRAY, d.get("mode")))
-    bid = f"#{d['battery_id']}" if d.get("battery_id") else "  "
+    belt = ("벨트 " + ",".join(f"#{n}" for n in on_belt)) if on_belt else "벨트 비었음"
     print(f"{GRAY}{short_time(d.get('ts'))}{RESET}  {MAGENTA}{BOLD}[라인]{RESET} {mc}{BOLD}{mk:<4}{RESET} "
-          f"{bid:<4} {STEP_KR.get(d.get('step'), d.get('step')):<8}  "
-          f"{GREEN}A {c.get('A', 0)}{RESET} {CYAN}B {c.get('B', 0)}{RESET} {RED}NG {c.get('NG', 0)}{RESET} "
+          f"{STEP_KR.get(d.get('step'), d.get('step')):<8} {belt:<12}  "
+          f"{GREEN}A {c.get('A', 0)}{RESET} {CYAN}B {c.get('B', 0)}{RESET} "
+          f"{RED}외관 {c.get('NG_VISUAL', 0)} 전압 {c.get('NG_VOLTAGE', 0)}{RESET} "
           f"{MAGENTA}재분류 {c.get('RESORT', 0)}{RESET}  AGV {agv.get('loaded', 0)}/{agv.get('batch', '-')}"
           + (f"  {YELLOW}{d['message']}{RESET}" if d.get("message") else ""), flush=True)
 
@@ -130,13 +133,18 @@ def fmt(v, unit):
     return "  -  " if v is None else f"{v:.3f}{unit}"
 
 
+def defects(vis: dict) -> str:
+    d = vis.get("defects") or []
+    return ("(" + ",".join(x.get("type", "?") for x in d) + ") ") if d else ""
+
+
 def show_result(r: dict, raw: str, with_json: bool):
     g = r.get("grade", "?")
     c = GRADE_COLOR.get(g, "")
     vis = r.get("vision") or {}
     print(f"{GRAY}{short_time(r.get('finished_at'))}{RESET}  {BOLD}[결과]{RESET} #{r.get('battery_id'):<3} "
-          f"{c}{BOLD}{g:<6}{RESET} → {c}{DEST_KR.get(r.get('dest'), r.get('dest')):<6}{RESET} "
-          f"외관 {vis.get('result') or '-':<8} 측정 {r.get('electrical_status'):<8} "
+          f"{c}{BOLD}{g:<10}{RESET} → {c}{DEST_KR.get(r.get('dest'), r.get('dest')):<6}{RESET} "
+          f"외관 {vis.get('result') or vis.get('status') or '-':<7}{defects(vis):<14} 측정 {r.get('electrical_status'):<8} "
           f"V {fmt(r.get('v_open'), 'V')} / {fmt(r.get('v_load'), 'V')}  R {fmt(r.get('r_int'), 'Ω')}"
           + (f"  {DIM}({r.get('reason')}){RESET}" if r.get("reason") else ""), flush=True)
     if with_json:
@@ -146,7 +154,7 @@ def show_result(r: dict, raw: str, with_json: bool):
 async def main(args):
     print(f"{BOLD}라인 모니터{RESET} {GRAY}({BROKER_HOST}:{BROKER_PORT}){RESET}  "
           f"{GREEN}INFO{RESET} {YELLOW}WARN{RESET} {RED}ERROR{RESET}  |  "
-          f"등급 {GREEN}A{RESET} {CYAN}B{RESET} {RED}NG{RESET} {MAGENTA}RESORT{RESET}", flush=True)
+          f"등급 {GREEN}A{RESET} {CYAN}B{RESET} {RED}NG_VISUAL NG_VOLTAGE{RESET} {MAGENTA}RESORT{RESET}", flush=True)
     print(GRAY + "─" * 100 + RESET, flush=True)
     async with aiomqtt.Client(BROKER_HOST, BROKER_PORT) as client:
         await client.subscribe("server/events", qos=1)

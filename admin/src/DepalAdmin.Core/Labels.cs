@@ -11,6 +11,7 @@ public static class Labels
         "idle" => "대기",
         "running" => "가동 중",
         "paused" => "일시정지",
+        "draining" => "마무리 중",       // 회차 종료: 새 퍽 안 올리고 벨트 위 퍽만 분류
         "estop" => "비상정지",
         "manual" => "수동",
         null => "-",
@@ -19,8 +20,16 @@ public static class Labels
 
     public static string Step(string? step) => step switch
     {
+        // 규약 v1.2 (퍽 여러 개가 동시에 벨트 위) — 퍽별 단계는 없고 라인 전체 상태만 보냄
+        "idle" => "-",
+        "running" => "운전 중",
+        "paused" => "일시정지",
+        "draining" => "벨트 비우는 중",
+        "estop" => "비상정지",
+        "reset" => "해제 중",
+        // 이전 규약 (가짜 데이터 모드에서 아직 씀)
         "scan" => "팔레트 인식",
-        "pick" => "집기",
+        "pick" => "퍽 올리기",
         "inspect" => "외관 검사",
         "measure" => "전압 측정",
         "home" => "원점 복귀",
@@ -35,8 +44,10 @@ public static class Labels
     {
         "A" => "A",
         "B" => "B",
-        "NG" => "불량",
+        "NG_VISUAL" => "외관 불량",
+        "NG_VOLTAGE" => "전압 불량",
         "RESORT" => "재분류",
+        "NG" => "불량(이전)",            // 11/10 이전 데이터
         null or "" => "-",
         _ => grade,
     };
@@ -45,8 +56,10 @@ public static class Labels
     {
         "AGV" => "AGV 적재",
         "B_BOX" => "B 분류함",
-        "NG_BOX" => "불량함",
+        "NG_VISUAL_BOX" => "외관불량함",
+        "NG_VOLTAGE_BOX" => "전압불량함",
         "RESORT_BOX" => "재분류함",
+        "NG_BOX" => "불량함(이전)",
         null => "배출 안 됨",
         _ => dest,
     };
@@ -66,6 +79,7 @@ public static class Labels
         "server" => "중앙 서버",
         "controller" => "라인 컨트롤러",
         "pi" => "라즈베리파이",
+        "mega" => "Mega (벨트·측정)",
         "yolo" => "YOLO 검사",
         "agv" => "AGV",
         "db_saver" => "DB 저장",

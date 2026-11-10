@@ -6,8 +6,9 @@ public sealed class FakeHistoryRepository : IHistoryRepository
     private const int RunsPerDay = 3;
     private const int BatteriesPerRun = 10;
 
-    private static readonly string[] NgReasons = { "외관 불량(scratch)", "외관 불량(sticker)", "전압 낮음", "내부저항 큼" };
-    private static readonly string[] ResortReasons = { "상단 카메라: +극이 위", "측정 극성 반대", "측정 접촉 불량" };
+    // 사유는 메시지_형식 v1.4의 고정 문장
+    private static readonly string[] VoltageReasons = { "전압 낮음", "내부저항 큼", "전압 낮음, 내부저항 큼" };
+    private static readonly string[] ResortReasons = { "+극이 위", "측정 극성 반대", "접촉 불량", "외관 검사 실패" };
 
     public async Task<IReadOnlyList<HistoryRow>> GetResultsAsync(DateTime from, DateTime to, string? grade, CancellationToken ct = default)
     {
@@ -57,11 +58,11 @@ public sealed class FakeHistoryRepository : IHistoryRepository
                     var p = rnd.NextDouble();
                     if (p < 0.10)
                     {
-                        (row.Grade, row.Dest, row.Reason) = ("NG", "NG_BOX", NgReasons[rnd.Next(2)]);
+                        (row.Grade, row.Dest, row.Reason) = (Grades.NgVisual, "NG_VISUAL_BOX", "외관 불량");
                     }
                     else if (p < 0.16)
                     {
-                        (row.Grade, row.Dest, row.Reason) = ("RESORT", "RESORT_BOX", ResortReasons[rnd.Next(ResortReasons.Length)]);
+                        (row.Grade, row.Dest, row.Reason) = (Grades.Resort, "RESORT_BOX", ResortReasons[rnd.Next(ResortReasons.Length)]);
                     }
                     else
                     {
@@ -69,10 +70,11 @@ public sealed class FakeHistoryRepository : IHistoryRepository
                         var ri = Math.Round(0.10 + Math.Pow(rnd.NextDouble(), 2), 3);
                         row.VOpen = v;
                         row.RInt = ri;
-                        (row.Grade, row.Dest) = v >= 1.50 && ri <= 0.35 ? ("A", "AGV")
-                                              : v >= 1.30 && ri <= 1.0 ? ("B", "B_BOX")
-                                              : ("NG", "NG_BOX");
-                        if (row.Grade == "NG") row.Reason = NgReasons[2 + rnd.Next(2)];
+                        (row.Grade, row.Dest) = v >= 1.50 && ri <= 0.9 ? (Grades.A, "AGV")
+                                              : v >= 1.30 && ri <= 1.5 ? (Grades.B, "B_BOX")
+                                              : (Grades.NgVoltage, "NG_VOLTAGE_BOX");
+                        if (row.Grade == Grades.NgVoltage)
+                            row.Reason = v < 1.30 && ri > 1.5 ? VoltageReasons[2] : v < 1.30 ? VoltageReasons[0] : VoltageReasons[1];
                     }
                     yield return row;
                 }
