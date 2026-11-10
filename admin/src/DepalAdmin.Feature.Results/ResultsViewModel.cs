@@ -22,7 +22,7 @@ public partial class ResultsViewModel : ObservableObject
 
     public ObservableCollection<ResultRow> Rows { get; } = new();
     public ICollectionView View { get; }
-    public string[] Grades { get; } = { All, "A", "B", "NG", "RESORT" };
+    public string[] Grades { get; } = new[] { All }.Concat(DepalAdmin.Core.Grades.All).ToArray();
 
     [ObservableProperty] private ResultRow? _selected;
     [ObservableProperty] private string _grade = All;
@@ -46,7 +46,7 @@ public partial class ResultsViewModel : ObservableObject
         while (Rows.Count > _maxRows) Rows.RemoveAt(Rows.Count - 1);
 
         int N(string g) => Rows.Count(r => r.Grade == g);
-        Summary = $"받은 결과 {Rows.Count}건   A {N("A")}   B {N("B")}   불량 {N("NG")}   재분류 {N("RESORT")}";
+        Summary = $"받은 결과 {Rows.Count}건   A {N("A")}   B {N("B")}   불량 {Rows.Count(r => DepalAdmin.Core.Grades.IsNg(r.Grade))}   재분류 {N("RESORT")}";
     }
 
     [RelayCommand]
@@ -76,6 +76,7 @@ public sealed class ResultRow
     {
         null => "-",
         { Status: "failed" } => "검사 실패",
+        { Result: "defect" } v when v.Defects.Count > 0 => $"불량({v.DefectsText}) {v.Conf:0.00}",
         var v => $"{v.Result} {v.Conf:0.00}",
     };
 
