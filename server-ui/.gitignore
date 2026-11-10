@@ -1,0 +1,5 @@
+# Qt Creator / CMake 빌드 결과
+build/
+build-*/
+CMakeLists.txt.user*
+*.autosave
