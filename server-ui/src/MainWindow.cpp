@@ -1,6 +1,9 @@
 #include "MainWindow.h"
 
 #include "AppConfig.h"
+#include "DevicesPage.h"
+#include "MessagesPage.h"
+#include "MqttLite.h"
 #include "PortProbe.h"
 #include "ProgramsPage.h"
 
@@ -17,6 +20,7 @@
 #include <QStatusBar>
 #include <QStyle>
 #include <QSysInfo>
+#include <QTabWidget>
 #include <QToolBar>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -29,8 +33,18 @@ MainWindow::MainWindow(QWidget *parent)
     resize(920, 580);
     setMinimumSize(760, 440);
 
+    // 브로커의 모든 메시지를 받음 (#은 $SYS를 뺀 전부). 접속 이름은 PC마다 달라야 함 (같으면 서로 끊음)
+    m_mqtt = new MqttLite(AppConfig::kBrokerHost, AppConfig::kBrokerPort,
+                          AppConfig::kMqttClientPrefix + QSysInfo::machineHostName().toLower(),
+                          {QStringLiteral("#")}, this);
+
     m_programs = new ProgramsPage(m_runner, this);
-    setCentralWidget(m_programs);
+    m_tabs = new QTabWidget(this);
+    m_tabs->setDocumentMode(true);
+    m_tabs->addTab(m_programs, QStringLiteral("프로그램"));
+    m_tabs->addTab(new DevicesPage(m_mqtt, this), QStringLiteral("장치 접속"));
+    m_tabs->addTab(new MessagesPage(m_mqtt, this), QStringLiteral("메시지"));
+    setCentralWidget(m_tabs);
     buildToolBar();
     buildStatusBar();
 
@@ -38,6 +52,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_runner, &RunnerClient::message, this, &MainWindow::onMessage);
     connect(m_programs, &ProgramsPage::notice, this, &MainWindow::onMessage);
     connect(m_programs, &ProgramsPage::selectionChanged, this, &MainWindow::updateActions);
+    connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::updateActions);
+    connect(m_mqtt, &MqttLite::connectedChanged, this, [this](bool on, const QString &reason) {
+        onMessage(on ? QStringLiteral("메시지 받는 중 (장치 접속·메시지 탭)")
+                     : QStringLiteral("메시지 수신 끊김: %1 → 3초마다 다시 연결").arg(reason),
+                  !on);
+    });
+    m_mqtt->start();
 
     if (!m_runner->serverDirOk())
         onMessage(QStringLiteral("서버 폴더를 찾지 못했습니다 (AppConfig.h의 kServerDir 확인)"), true);
@@ -147,9 +168,10 @@ void MainWindow::updateActions()
     // 응답 없는 실행기가 남긴 프로그램도 정리할 수 있게, 상태 파일이 있으면 끄기 허용
     m_stopAll->setEnabled(dirOk && (alive || (status.fileFound && status.stale)));
     const bool running = st == QStringLiteral("running");
-    m_start->setEnabled(alive && !name.isEmpty() && !running);   // 꺼져 있을 때만
-    m_stop->setEnabled(alive && running);                       // 실행 중일 때만
-    m_openLog->setEnabled(dirOk && !name.isEmpty());
+    const bool onPrograms = m_tabs->currentWidget() == m_programs;   // 켜기·끄기·로그는 프로그램 탭에서만
+    m_start->setEnabled(onPrograms && alive && !name.isEmpty() && !running);   // 꺼져 있을 때만
+    m_stop->setEnabled(onPrograms && alive && running);                       // 실행 중일 때만
+    m_openLog->setEnabled(onPrograms && dirOk && !name.isEmpty());
 }
 
 void MainWindow::onMessage(const QString &text, bool warning)

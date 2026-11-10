@@ -335,6 +335,13 @@ class LineController:
         """새 퍽을 올리지 않고, 벨트 위 퍽을 모두 분류한 뒤 회차를 끝냄"""
         self.mode = "draining"
         await self.set_step("draining", "벨트 위 퍽 분류 중")
+        # Mega는 계획을 받은 퍽만 안다 → 벨트 위 모든 퍽의 계획을 보낸 뒤 drain (규약 3-1-1)
+        # 일시정지 중에 종료했으면 벨트가 서 있으므로 먼저 켬 (안 켜면 퍽이 측정 자리에 못 감)
+        if any(p.plan is None for p in self.belt):
+            await self.send_belt(True)
+        deadline = time.monotonic() + PUCK_TIMEOUT_SEC
+        while any(p.plan is None for p in self.belt) and time.monotonic() < deadline:
+            await asyncio.sleep(0.2)
         await self.send_belt(False, drain=True)
         deadline = time.monotonic() + PUCK_TIMEOUT_SEC
         while self.belt and time.monotonic() < deadline:

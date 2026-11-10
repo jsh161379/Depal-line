@@ -61,6 +61,19 @@ QPlainTextEdit { border: none; }
 #detailInfo { background: #252526; }
 #detailInfo #key { color: #A0A0A0; }
 #divider { color: #3F3F46; }
+QTabWidget::pane { border: none; }
+QTabBar { background: #2D2D30; }
+QTabBar::tab { background: transparent; color: #B0B0B0; padding: 4px 14px; border: 1px solid transparent; border-bottom: none; }
+QTabBar::tab:selected { background: #1E1E1E; color: #FFFFFF; border-color: #3F3F46; }
+QTabBar::tab:hover:!selected { color: #FFFFFF; }
+#filterBar, #chartHead, #detailHead { background: #252526; border-bottom: 1px solid #3F3F46; }
+#detailHead { padding: 3px 8px; }
+#filterBar #key { color: #A0A0A0; }
+QLineEdit { background: #1E1E1E; border: 1px solid #3F3F46; padding: 1px 4px; }
+QLineEdit:focus { border-color: #007ACC; }
+QPushButton { background: #333337; border: 1px solid #3F3F46; padding: 2px 10px; }
+QPushButton:hover { background: #3E3E40; }
+QPushButton:checked { background: #264F78; border-color: #007ACC; }
 QStatusBar { background: #007ACC; color: #FFFFFF; }
 QStatusBar QLabel { color: #FFFFFF; padding: 0 8px; border-right: 1px solid rgba(255,255,255,70); }
 QStatusBar::item { border: none; }
