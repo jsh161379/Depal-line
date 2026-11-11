@@ -21,7 +21,26 @@ public sealed class ChatMessage
     /// <summary>붙여 보낸 것의 내용 (알람 문구, "회차 #번호" 등)</summary>
     public string? RefText { get; set; }
 
+    /// <summary>
+    /// @로 부른 사람 (통신 규약 v1.3 5-1). 비어 있으면 그냥 단톡방 메시지.
+    /// 받는 쪽은 id가 같거나, id가 비었으면 이름이 같을 때 "나를 부름"으로 본다
+    /// (계정이 PC마다 따로라 id가 다를 수 있어서 이름도 같이 본다).
+    /// </summary>
+    public List<ChatMention> Mentions { get; set; } = new();
+
     public string Ts { get; set; } = Json.Now();
+}
+
+/// <summary>채팅에서 @로 부른 사람 한 명. Id는 모르면 빈 문자열.</summary>
+public sealed class ChatMention
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+
+    /// <summary>이 사람이 나인가 (나 = 지금 로그인한 계정)</summary>
+    public bool Is(string myId, string myName) =>
+        Id != "" ? string.Equals(Id, myId, StringComparison.OrdinalIgnoreCase) || Name == myName
+                 : Name == myName;
 }
 
 /// <summary>

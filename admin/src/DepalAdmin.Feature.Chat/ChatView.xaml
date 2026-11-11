@@ -7,39 +7,59 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:ChatViewModel}"
              d:DesignWidth="1100" d:DesignHeight="650">
-    <Grid MaxWidth="980" HorizontalAlignment="Left">
+    <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- 자리를 비운 사이 나를 부른 메시지 (있을 때만) -->
+        <Border Margin="0,0,0,10" Padding="10,6" BorderThickness="1"
+                Background="{StaticResource Brush.WarnFill}" BorderBrush="{StaticResource Brush.Warn}"
+                Visibility="{Binding MentionNotice, Converter={StaticResource TextToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="닫기" Command="{Binding CloseNoticeCommand}"
+                        Style="{StaticResource Cmd}" MinHeight="24" Padding="10,1" Margin="0"/>
+                <Button DockPanel.Dock="Right" Content="나를 부른 것만 보기" Command="{Binding ShowMentionsCommand}"
+                        Style="{StaticResource Cmd}" MinHeight="24" Padding="10,1"/>
+                <TextBlock Text="{Binding MentionNotice}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
         <!-- 대화 -->
-        <HeaderedContentControl Style="{StaticResource Section}" Padding="0">
+        <HeaderedContentControl Grid.Row="1" Style="{StaticResource Section}" Padding="0">
             <HeaderedContentControl.Header>
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Content="지난 대화 불러오기" Command="{Binding LoadHistoryCommand}"
                             Style="{StaticResource Cmd}" MinHeight="24" Padding="10,1" Margin="0"/>
-                    <TextBlock Text="채팅 (같은 서버에 붙은 관리자 프로그램끼리)" VerticalAlignment="Center"/>
+                    <CheckBox DockPanel.Dock="Right" Content="나를 부른 것만 보기" IsChecked="{Binding OnlyMentionsMe}"
+                              FontWeight="Normal" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <TextBlock Text="채팅 (같은 서버에 붙은 관리자 프로그램끼리, @이름으로 사람 부르기)" VerticalAlignment="Center"/>
                 </DockPanel>
             </HeaderedContentControl.Header>
 
             <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" Background="{StaticResource Brush.Field}">
-                <ItemsControl ItemsSource="{Binding Messages}" Margin="12,8" Focusable="False">
+                <ItemsControl ItemsSource="{Binding View}" Margin="12,8" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <!-- 말풍선 대신 기록장처럼: 왼쪽 세로줄 + 이름·시각 + 내용. 내 글은 진한 줄. -->
+                            <!-- 기록장처럼: 세로줄 + 이름·시각 + 내용.
+                                 남의 글 = 왼쪽(세로줄 왼쪽, 오른쪽 140 비움), 내 글 = 오른쪽(세로줄 오른쪽, 왼쪽 140 비움, 진한 줄),
+                                 나를 부른 글 = 호박색 줄·바탕(주의 색) -->
                             <Border x:Name="Row" BorderThickness="3,0,0,0" BorderBrush="{StaticResource Brush.RuleSoft}"
-                                    Padding="10,4" Margin="0,0,0,8">
+                                    Padding="10,4" Margin="0,0,140,8" HorizontalAlignment="Left">
                                 <StackPanel>
-                                    <TextBlock>
+                                    <TextBlock x:Name="Head">
                                         <Run Text="{Binding Who, Mode=OneWay}" FontWeight="SemiBold"/>
                                         <Run Text="  "/>
                                         <Run Text="{Binding Time, Mode=OneWay}" FontFamily="{StaticResource Font.Readout}"
                                              Foreground="{StaticResource Brush.SubText}" FontSize="11"/>
+                                        <Run Text="  "/>
+                                        <Run Text="{Binding MentionText, Mode=OneWay}" Foreground="{StaticResource Brush.SubText}" FontSize="11"/>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="Body" Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     <!-- 붙여 보낸 알람·건전지 -->
-                                    <Border Margin="0,5,0,0" Padding="7,3" BorderThickness="1" HorizontalAlignment="Left"
+                                    <Border x:Name="Ref" Margin="0,5,0,0" Padding="7,3" BorderThickness="1" HorizontalAlignment="Left"
                                             BorderBrush="{StaticResource Brush.Rule}" Background="{StaticResource Brush.Panel}"
                                             Visibility="{Binding RefText, Converter={StaticResource TextToVis}}">
                                         <TextBlock Text="{Binding RefText}" FontSize="12" TextWrapping="Wrap"/>
@@ -48,7 +68,20 @@
                             </Border>
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsMine}" Value="True">
+                                    <!-- 내 글: 오른쪽에 붙임 -->
+                                    <Setter TargetName="Row" Property="Margin" Value="140,0,0,8"/>
+                                    <Setter TargetName="Row" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="Row" Property="BorderThickness" Value="0,0,3,0"/>
                                     <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource Brush.Frame}"/>
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource Brush.Panel}"/>
+                                    <Setter TargetName="Head" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="Body" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="Body" Property="TextAlignment" Value="Right"/>
+                                    <Setter TargetName="Ref" Property="HorizontalAlignment" Value="Right"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding MentionsMe}" Value="True">
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource Brush.Warn}"/>
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource Brush.WarnFill}"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -58,17 +91,27 @@
         </HeaderedContentControl>
 
         <!-- 쓰기 -->
-        <Border Grid.Row="1" Style="{StaticResource Box}" Margin="0,10,0,0">
+        <Border Grid.Row="2" Style="{StaticResource Box}" Margin="0,10,0,0">
             <DockPanel>
-                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <TextBlock Text="붙여 보내기" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox ItemsSource="{Binding Attachments}" SelectedItem="{Binding SelectedAttachment}"
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="부를 사람" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <!-- 고르면 입력칸에 @이름이 들어간다. 목록은 채팅에서 말한 적 있는 사람 -->
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding People}" SelectedItem="{Binding SelectedPerson}"
+                              DisplayMemberPath="Text" ToolTip="직접 @이름을 써도 됩니다"/>
+                    <TextBlock Grid.Column="2" Text="붙여 보내기" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                    <ComboBox Grid.Column="3" ItemsSource="{Binding Attachments}" SelectedItem="{Binding SelectedAttachment}"
                               DisplayMemberPath="Text"/>
-                </DockPanel>
+                </Grid>
                 <Button DockPanel.Dock="Right" Content="보내기" Command="{Binding SendCommand}" Style="{StaticResource CmdMain}"
                         IsDefault="True" Margin="8,0,0,0" MinHeight="34"/>
                 <StackPanel>
-                    <TextBox Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" Height="34" MaxLength="500"/>
+                    <TextBox x:Name="DraftBox" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" Height="34" MaxLength="500"/>
                     <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" Margin="0,4,0,0"
                                Visibility="{Binding Status, Converter={StaticResource TextToVis}}"/>
                 </StackPanel>
