@@ -76,7 +76,11 @@ def show_devices(d: dict):
     parts = []
     for dev in d.get("devices", []):
         c, kr = STATUS_VIEW.get(dev.get("status"), (GRAY, dev.get("status")))
-        parts.append(f"{BOLD}{dev.get('name')}{RESET} {c}● {kr}{RESET}")
+        name = dev.get('name')
+        user = (dev.get('info') or {}).get('user')    # 관리자 화면은 로그인한 사람 이름을 하트비트에 실어 보냄 (규약 v1.4)
+        if user:
+            name = f"{name}({user})"
+        parts.append(f"{BOLD}{name}{RESET} {c}● {kr}{RESET}")
     line = "   ".join(parts)
     if line != last_devices:       # 바뀌었을 때만 출력
         last_devices = line

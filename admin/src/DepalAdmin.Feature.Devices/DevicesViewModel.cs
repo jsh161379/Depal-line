@@ -53,11 +53,13 @@ public partial class DeviceCard : ObservableObject
     public DeviceCard(string name)
     {
         Name = name;
-        DisplayName = Labels.Device(name);
+        _displayName = Labels.Device(name);
     }
 
     public string Name { get; }
-    public string DisplayName { get; }
+
+    /// <summary>카드 제목. 관리자 화면은 로그인한 사람 이름을 붙임: "관리자 화면 1 (조시현)" (규약 v1.4 하트비트 user)</summary>
+    [ObservableProperty] private string _displayName;
 
     [ObservableProperty] private string _state = "unknown";
     [ObservableProperty] private string _stateText = "-";
@@ -70,5 +72,8 @@ public partial class DeviceCard : ObservableObject
         State = info.State;
         StateText = Labels.DeviceState(info.State);
         IsNormal = StateText == "정상";
+        DisplayName = info.Extra.TryGetValue("user", out var user) && !string.IsNullOrWhiteSpace(user)
+            ? $"{Labels.Device(Name)} ({user})"
+            : Labels.Device(Name);
     }
 }

@@ -78,18 +78,22 @@ public static class Labels
     {
         "server" => "중앙 서버",
         "controller" => "라인 컨트롤러",
-        "pi" => "라즈베리파이",
+        "arm1" => "로봇팔 1",
+        "pi" => "로봇팔 1 (옛 이름 pi)",
         "mega" => "Mega (벨트·측정)",
         "yolo" => "YOLO 검사",
         "agv" => "AGV",
         "db_saver" => "DB 저장",
         "ui" => "관리자 화면",
         null => "-",
-        string s when s.StartsWith("ui-") => $"관리자 화면 ({s[3..]})",   // 서버 PC 외 다른 PC의 관리자 화면
+        string s when s.StartsWith("admin-") => int.TryParse(s[6..], out var no)
+            ? $"관리자 화면 {no}"                    // admin-01 → 관리자 화면 1 (규약 v1.4)
+            : $"관리자 화면 ({s[6..]})",            // 번호를 안 정한 PC (admin-PC이름)
+        string s when s.StartsWith("ui-") => $"관리자 화면 ({s[3..]})",      // v1.3까지의 이름 (ui-PC이름)
         _ => name,
     };
 
-    /// <summary>hb/pi의 gripper 값</summary>
+    /// <summary>hb/arm1의 gripper 값</summary>
     public static string Gripper(string? state) => state switch
     {
         "normal" => "집게 정상",

@@ -25,7 +25,7 @@ public sealed class FakeLineClient : LineClientBase
     // ──────────────────────────────────────────────────────
 
     private static readonly string[] Steps = { "scan", "pick", "inspect", "measure", "home", "sort" };
-    private static readonly string[] DeviceNames = { "server", "controller", "pi", "mega", "yolo", "agv", "db_saver" };
+    private static readonly string[] DeviceNames = { "server", "controller", "arm1", "mega", "yolo", "agv", "db_saver" };
     private static readonly string[] AgvCycle = { "going", "going", "away", "away", "returning", "returning", "home" };
 
     private readonly Random _rnd = new();
@@ -127,7 +127,7 @@ public sealed class FakeLineClient : LineClientBase
         AdvanceEnv();
     }
 
-    // ── sensor/env 흉내 (아두이노 → 라파 → MQTT) ─────────────
+    // ── sensor/env 흉내 (Mega → PC 중계 → MQTT) ─────────────
     //   온습도: 30초마다 / 가스: 상태가 바뀌면 바로 + 60초마다 살아 있음 (value 0/1)
 
     private void AdvanceEnv()
@@ -158,7 +158,7 @@ public sealed class FakeLineClient : LineClientBase
 
     private EnvReading Env(params EnvValue[] values)
     {
-        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "pi" };
+        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "mega" };
         env.Readings.AddRange(values);
         return env;
     }
@@ -180,7 +180,7 @@ public sealed class FakeLineClient : LineClientBase
                     _mode = "paused";
                     _step = "wait_operator";
                     _message = $"건전지 {_batteryId} 집기 실패 — [재개]로 다시 시도하거나 [건너뛰기]";
-                    Event("ERROR", "pi", $"pick 실패 (grip_failed) 칸 [{_cell[0]},{_cell[1]}]");
+                    Event("ERROR", "arm1", $"pick 실패 (grip_failed) 칸 [{_cell[0]},{_cell[1]}]");
                 }
                 break;
             case "sort":
@@ -279,7 +279,7 @@ public sealed class FakeLineClient : LineClientBase
                 Name = name,
                 State = _delayLeft.ContainsKey(name) ? "delayed" : "ok",
             };
-            if (name == "pi")
+            if (name == "arm1")
             {
                 info.Extra["gripper"] = _batteryId >= 7 ? "weak" : "normal";   // 시험용: 뒤쪽에서 집게 약해짐
                 info.Extra["arm"] = _mode == "estop" ? "stopped" : "ok";

@@ -95,7 +95,7 @@ void MainWindow::buildToolBar()
     bar->addWidget(spacer);
     m_withFake = new QCheckBox(QStringLiteral("가짜 장치 포함  "), bar);
     m_withFake->setChecked(true);
-    m_withFake->setToolTip(QStringLiteral("끄면 가짜 라파·가짜 YOLO 없이 켭니다 (실제 장치를 붙일 때)"));
+    m_withFake->setToolTip(QStringLiteral("끄면 가짜 로봇팔·가짜 YOLO 없이 켭니다 (실제 장치를 붙일 때)"));
     bar->addWidget(m_withFake);
 
     connect(m_startAll, &QAction::triggered, this, &MainWindow::startAll);

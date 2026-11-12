@@ -4,7 +4,7 @@
 벨트 위에 퍽이 여러 개 동시에 있다. 컨트롤러는 퍽을 올린 순서(battery_id)대로 줄을 만들고,
 장치들이 보내는 알림을 받을 때마다 그 퍽의 다음 단계를 정한다.
 
-  로봇팔 1(cmd/pi pick done) ──▶ 퍽 줄 맨 뒤에 추가
+  로봇팔 1(cmd/arm1 pick done) ──▶ 퍽 줄 맨 뒤에 추가
   YOLO(vision/result)       ──▶ 줄에서 YOLO 결과가 없는 첫 퍽에 붙임 → Mega에 plan (PASS/MEASURE + 보낼 곳)
   Mega(event/mega)
     WAIT_PLAN   계획 없이 측정 자리 도착 → 결과 없는 첫 퍽을 "외관 검사 실패" → plan PASS 재분류
@@ -16,7 +16,7 @@
   새 퍽 올리기(feeder): 벨트 위 퍽이 MAX_ON_BELT보다 적고, 마지막으로 올린 뒤 FEED_INTERVAL_SEC가 지났을 때
   일시정지: 새 퍽을 올리지 않고 belt run:false (그 자리 정지)
   회차 종료: 새 퍽을 올리지 않고 belt run:false, drain:true (벨트 위 퍽을 모두 분류한 뒤 정지)
-  비상정지: 실제 버튼(event/estop) 또는 작업자 화면 → pi·mega에 estop, STOP_CONFIRMED
+  비상정지: 실제 버튼(event/estop) 또는 작업자 화면 → arm1·mega에 estop, STOP_CONFIRMED
 
 필요한 것: Python 3.11 이상, pip install "aiomqtt>=2" pydantic, 같은 폴더에 line_common.py
 실행: python line_controller.py      (명령은 관리자 프로그램 버튼, 또는 python line_cmd.py start / pause / resume / skip / stop / estop / reset)
@@ -34,7 +34,7 @@ PUCK_TIMEOUT_SEC = 60.0         # 퍽을 올린 뒤 배출 완료까지 이 시�
 
 ACCEPT_TIMEOUT_SEC = 2.0        # accepted 응답까지
 TIMEOUT_SEC = {                 # done/failed 응답까지
-    "pi":   {"pick": 20, "estop": 3, "reset": 30},
+    "arm1": {"pick": 20, "estop": 3, "reset": 30},
     "mega": {"plan": 2, "route": 2, "belt": 2, "belt_drain": 60, "estop": 3, "reset": 30},
     "yolo": {"scan_pallet": 5},
     "agv":  {"go": 120, "return": 120},
@@ -48,7 +48,7 @@ GRADE_B = {"v_open_min": 1.30, "r_int_max": 1.5}
 USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림)
 AGV_BATCH = 8                   # A 몇 개마다 출발 (잠정)
 
-WATCH_DEVICES = ["pi", "mega", "yolo"]   # 끊기면 일시정지할 장치
+WATCH_DEVICES = ["arm1", "mega", "yolo"]   # 끊기면 일시정지할 장치
 # ====================================================================
 
 import asyncio
@@ -274,7 +274,7 @@ class LineController:
         while True:
             await self.set_step("pick")
             try:
-                await self.send("pi", "pick", {"cell": cell}, battery_id=bid)
+                await self.send("arm1", "pick", {"cell": cell}, battery_id=bid)
                 break
             except CmdError as e:
                 await self.event("ERROR", f"#{bid} pick 실패 ({e.kind}: {e.detail})")
@@ -546,7 +546,7 @@ class LineController:
             await self.reset_estop()
 
     async def emergency_stop(self, source, button_id, message):
-        """비상정지: 회차 중단 → pi·mega 정지 → STOP_CONFIRMED"""
+        """비상정지: 회차 중단 → arm1·mega 정지 → STOP_CONFIRMED"""
         if self.cycle and not self.cycle.done():
             self.cycle.cancel()
         already = self.mode == "estop"
@@ -561,7 +561,7 @@ class LineController:
             await self.event("WARN", f"벨트 위에 있던 퍽 {[p.bid for p in self.belt]}은 결과 없이 정리됨 (작업자가 회수)")
             self.belt.clear()
         details = []
-        for dev in ("pi", "mega"):
+        for dev in ("arm1", "mega"):
             try:
                 await self.send(dev, "estop")
                 details.append(f"{dev} 정지 확인")
@@ -578,7 +578,7 @@ class LineController:
             await self.event("WARN", f"해제 거부: 비상정지 버튼이 아직 눌려 있음 {sorted(self.estop_pressed)}")
             return
         await self.set_step("reset", "비상정지 해제 중")
-        for dev in ("pi", "mega"):
+        for dev in ("arm1", "mega"):
             try:
                 await self.send(dev, "reset")
             except CmdError as e:

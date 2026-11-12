@@ -7,12 +7,12 @@ namespace DepalAdmin.Core.Models;
 /// </summary>
 public sealed class DeviceInfo
 {
-    /// <summary>server / controller / pi / yolo / agv / db_saver</summary>
+    /// <summary>server / controller / arm1 / mega / yolo / agv / db_saver / admin-자리이름</summary>
     public string Name { get; set; } = "";
 
     /// <summary>예: ok / delayed / lost / offline</summary>
     public string State { get; set; } = "unknown";
 
-    /// <summary>나머지 값 (pi의 gripper, arm, arduino 등)</summary>
+    /// <summary>나머지 값 (arm1의 arm, mega의 serial·belt·queue 등)</summary>
     public Dictionary<string, string> Extra { get; set; } = new();
 }

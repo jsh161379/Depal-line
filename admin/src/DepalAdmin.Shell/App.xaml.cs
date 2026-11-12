@@ -50,7 +50,7 @@ public partial class App : Application
         // 라인 통신: 가짜/실제를 고르고, 권한 확인·작업 기록 겉포장을 씌운다
         services.AddSingleton<ILineClient>(sp =>
         {
-            ILineClient inner = settings.UseFakeMqtt ? new FakeLineClient() : new MqttLineClient(settings);
+            ILineClient inner = settings.UseFakeMqtt ? new FakeLineClient() : new MqttLineClient(settings, sp.GetRequiredService<Session>());
             return new AuditingLineClient(inner, sp.GetRequiredService<Session>(), sp.GetRequiredService<IAuditLog>());
         });
 

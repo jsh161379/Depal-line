@@ -8,7 +8,7 @@ public static class Topics
     public const string ServerEvents = "server/events";
     public const string ServerResults = "server/results";
 
-    /// <summary>환경 센서 (아두이노 → 라파가 발행, 규약 v1.0 3-4)</summary>
+    /// <summary>환경 센서 (Mega → PC 중계 프로그램이 발행, 규약 v1.4 3-4)</summary>
     public const string SensorEnv = "sensor/env";
 
     public const string UiCmd = "ui/cmd";

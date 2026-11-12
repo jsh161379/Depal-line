@@ -162,7 +162,7 @@ QString ProgramsPage::label(const QString &name)
         {QStringLiteral("server"), QStringLiteral("중앙 서버 - 장치 감시, 하트비트")},
         {QStringLiteral("controller"), QStringLiteral("라인 컨트롤러 - 명령, 등급 판정")},
         {QStringLiteral("db_writer"), QStringLiteral("DB 저장 프로그램 (MySQL)")},
-        {QStringLiteral("fake_pi"), QStringLiteral("가짜 라즈베리파이 (시험용)")},
+        {QStringLiteral("fake_arm1"), QStringLiteral("가짜 로봇팔 1 (시험용)")},
         {QStringLiteral("fake_yolo"), QStringLiteral("가짜 YOLO (시험용)")},
     };
     return labels.value(name, name);

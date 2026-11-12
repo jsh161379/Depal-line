@@ -7,7 +7,7 @@ public sealed class LineEvent
     public string RunId { get; set; } = "";
     public string Ts { get; set; } = "";
 
-    /// <summary>server / controller / pi / yolo / agv (화면 자체 경고는 ui)</summary>
+    /// <summary>server / controller / arm1 / mega / yolo / agv (화면 자체 경고는 ui)</summary>
     public string Device { get; set; } = "";
 
     /// <summary>INFO / WARN / ERROR</summary>

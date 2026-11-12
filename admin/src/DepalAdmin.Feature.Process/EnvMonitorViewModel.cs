@@ -10,7 +10,7 @@ namespace DepalAdmin.Feature.Process;
 
 /// <summary>
 /// 담당: 조시현 — 라인 현황 아래 "환경 센서" 칸 (온도 · 습도 그래프 + 가스 감시).
-/// 받는 것: sensor/env (메시지_형식 v1.3.1 5장). 센서는 아두이노가 읽고 라파가 MQTT로 발행.
+/// 받는 것: sensor/env (메시지_형식 v1.3.1 5장). 센서는 Mega가 읽고 PC 중계 프로그램이 MQTT로 발행.
 ///
 ///   온습도: 30초마다 1건 → 최근 30분 그래프. 75초 넘게 안 오면 "값 없음"
 ///   가스  : 평소엔 대기. 감지되면 카드가 빨갛게 + 알람(아래 알람 줄). 해제되면 기록만 남김
@@ -29,7 +29,7 @@ public partial class EnvMonitorViewModel : ObservableObject
     private const double GasRawThreshold = 400;      // raw로 올 때 이 값 이상 = 감지 (임시, DO 방식이면 안 씀)
     private const double GasSilenceSeconds = 150;    // 가스 신호가 이만큼 안 오면 "신호 없음" 주의 (아두이노가 60초마다 살아 있음을 보낼 때)
     private const int GasLogMax = 20;
-    private const string AlarmDevice = "pi";         // 알람 줄에 표시할 장치 (센서 → 아두이노 → 라파)
+    private const string AlarmDevice = "mega";       // 알람 줄에 표시할 장치 (센서 → Mega → PC 중계)
     // ──────────────────────────────────────────────────────
 
     private readonly IAlarmService _alarms;
@@ -70,7 +70,7 @@ public partial class EnvMonitorViewModel : ObservableObject
 
     private void Apply(EnvReading env)
     {
-        // 받은 시각 기준 (라파 시계가 조금 틀려도 그래프가 밀리지 않게). 측정 시각 env.Ts는 DB에 저장됨
+        // 받은 시각 기준 (PC 중계 시계가 조금 틀려도 그래프가 밀리지 않게). 측정 시각 env.Ts는 DB에 저장됨
         var now = DateTime.Now;
 
         foreach (var series in new[] { Temperature, Humidity })
@@ -146,7 +146,7 @@ public partial class EnvMonitorViewModel : ObservableObject
             GasStatus = "stale";
             GasStatusText = "신호 없음";
             GasDetailText = _gasLastSignal is { } l
-                ? $"마지막 신호 {Ago(now - l)} 전 — 아두이노·라파 연결 확인"
+                ? $"마지막 신호 {Ago(now - l)} 전 — Mega USB 선·중계 프로그램 확인"
                 : "아직 가스 센서 신호를 받지 못했습니다";
         }
         else

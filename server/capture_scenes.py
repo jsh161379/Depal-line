@@ -10,7 +10,7 @@
 
 준비
   1. start_all.bat --no-fake --no-db 로 브로커·서버·컨트롤러를 켜 둔다
-  2. 가짜 라파·가짜 YOLO는 켜지 않는다 (이 프로그램이 직접 켜고 끔)
+  2. 가짜 로봇팔·가짜 YOLO는 켜지 않는다 (이 프로그램이 직접 켜고 끔)
 실행: python capture_scenes.py           (약 3분)
 결과: captures\\logs\\scene_05.log, scene_06.log, scene_07.log
 """
@@ -92,24 +92,24 @@ async def ui(client, action):
     print(f"  → {action}", flush=True)
 
 
-async def scene(client, w: Watch, no, title, pi_args, yolo_args, mega_args, body):
+async def scene(client, w: Watch, no, title, arm1_args, yolo_args, mega_args, body):
     print(f"\n━━━ 장면 {no}. {title} ━━━", flush=True)
     path = os.path.join(HERE, LOG_DIR, f"scene_{no}.log")
     if os.path.exists(path):
         os.remove(path)
     mon = spawn("monitor.py", "--log", path)
     await asyncio.sleep(1.5)
-    pi = spawn("fake_pi.py", *pi_args)
+    arm1 = spawn("fake_arm1.py", *arm1_args)
     yolo = spawn("fake_yolo.py", *yolo_args)
     mega = spawn("fake_mega.py", *mega_args)
     try:
-        ok = await w.until(lambda: all(w.devices.get(d) == "ok" for d in ("pi", "mega", "yolo")), 15, "장치 연결")
+        ok = await w.until(lambda: all(w.devices.get(d) == "ok" for d in ("arm1", "mega", "yolo")), 15, "장치 연결")
         ok = ok and await w.until(lambda: w.mode == "idle", 10, "라인 대기 상태")
         if ok:
             await body()
         await asyncio.sleep(1.5)
     finally:
-        kill(pi, yolo, mega)
+        kill(arm1, yolo, mega)
         await asyncio.sleep(1.0)
         kill(mon)
     print(f"  저장: {os.path.relpath(path, HERE)}", flush=True)

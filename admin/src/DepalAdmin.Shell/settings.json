@@ -10,7 +10,10 @@
 
   "BrokerHost": "localhost",
   "BrokerPort": 1883,
-  // MQTT 접속 이름. 비워 두면 "ui-PC이름"으로 자동 (PC마다 달라야 함)
+  // 이 PC의 관리자 화면 번호 (1, 2, 3 …). 접속 이름이 "admin-01"처럼 됨 (PC마다 달라야 함)
+  // 여기 말고 각 PC의 settings.local.json에 적기. 0이면 "admin-PC이름"
+  "AdminNo": 0,
+  // 접속 이름을 직접 정할 때만 적기 (보통은 비워 둠)
   "ClientId": "",
 
   // 비밀번호는 여기 말고 settings.local.json에 적기 (git에 안 올라감)
