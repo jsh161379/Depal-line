@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QSet>
 #include <QSplitter>
 #include <QTableWidget>
 #include <QTimer>
@@ -160,14 +161,30 @@ void DevicesPage::onHeartbeat(const QString &name, const QJsonObject &hb, qint64
 
 void DevicesPage::onSnapshot(const QJsonObject &snap)
 {
+    QSet<QString> listed;
     for (const auto &v : snap.value(QStringLiteral("devices")).toArray()) {
         const auto o = v.toObject();
         const QString name = o.value(QStringLiteral("name")).toString();
         if (name.isEmpty())
             continue;
+        listed.insert(name);
         Device &d = device(name);
         d.status = o.value(QStringLiteral("status")).toString(QStringLiteral("unknown"));
         d.fromServer = true;
+    }
+    // 중앙 서버 목록에서 빠진 장치 (서버를 다시 켜서 예전 이름이 사라진 경우 등)
+    //  → 하트비트도 최근에 없으면 표에서 뺌. 하트비트가 오는 중이면(hb/server 등) 남기고 직접 판단
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (int i = int(m_order.size()) - 1; i >= 0; --i) {
+        const QString name = m_order[i];
+        Device &d = m_devices[name];
+        if (!d.fromServer || listed.contains(name))
+            continue;
+        d.fromServer = false;
+        if (d.lastMs == 0 || now - d.lastMs > qint64(AppConfig::kHbOfflineSec * 1000)) {
+            m_devices.remove(name);
+            m_order.removeAt(i);
+        }
     }
 }
 

@@ -18,6 +18,7 @@ qt_add_executable(depal_server_ui WIN32
     src/HbChart.h src/HbChart.cpp
     src/DevicesPage.h src/DevicesPage.cpp
     src/MessagesPage.h src/MessagesPage.cpp
+    src/RetainedPage.h src/RetainedPage.cpp
     src/MainWindow.h src/MainWindow.cpp
 )
 
