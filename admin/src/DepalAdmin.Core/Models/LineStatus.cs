@@ -20,6 +20,16 @@ public sealed class LineStatus
     /// <summary>지금 벨트 위에 있는 퍽 번호 (올린 순서)</summary>
     public List<int> OnBelt { get; set; } = new();
 
+    /// <summary>
+    /// 벨트 위 퍽이 지금 있는 공정 → 퍽 번호 (통신 규약 v1.4.1). 퍽이 없는 공정은 키가 없음.
+    /// 키: "inspect"(검사 부스), "measure"(측정 자리), "sort"(분류). 예: {"inspect":[19], "measure":[18], "sort":[17]}
+    /// 공정 흐름도는 Step(scan·pick)과 이 값을 함께 보고 칸을 켠다.
+    /// </summary>
+    public Dictionary<string, List<int>> Stations { get; set; } = new();
+
+    /// <summary>그 공정에 퍽이 하나라도 있으면 true</summary>
+    public bool HasStation(string station) => Stations.TryGetValue(station, out var n) && n.Count > 0;
+
     /// <summary>키: "A", "B", "NG_VISUAL", "NG_VOLTAGE", "RESORT"</summary>
     public Dictionary<string, int> Counts { get; set; } = new();
 

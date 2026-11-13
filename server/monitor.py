@@ -94,18 +94,28 @@ STEP_KR = {"idle": "-", "running": "운전 중", "scan": "팔레트 인식", "pi
 last_line = None
 
 
+STATION_KR = {"inspect": "검사", "measure": "측정", "sort": "분류"}
+
+
 def show_line(d: dict):
     """server/line: 라인 현황 (바뀔 때만 출력)"""
     global last_line
     c = d.get("counts") or {}
     agv = d.get("agv") or {}
     on_belt = d.get("on_belt") or []
-    key = (d.get("mode"), d.get("step"), tuple(on_belt), tuple(sorted(c.items())), d.get("message"))
+    st = d.get("stations") or {}
+    key = (d.get("mode"), d.get("step"), tuple(on_belt), json.dumps(st, sort_keys=True),
+           tuple(sorted(c.items())), d.get("message"))
     if key == last_line:
         return
     last_line = key
     mc, mk = MODE_VIEW.get(d.get("mode"), (GRAY, d.get("mode")))
-    belt = ("벨트 " + ",".join(f"#{n}" for n in on_belt)) if on_belt else "벨트 비었음"
+    # 공정별 퍽 번호 (v1.4.1 stations). 없으면 예전처럼 번호만
+    if st:
+        belt = " ".join(f"{STATION_KR.get(k, k)} " + ",".join(f"#{n}" for n in st[k])
+                        for k in ("inspect", "measure", "sort") if st.get(k))
+    else:
+        belt = ("벨트 " + ",".join(f"#{n}" for n in on_belt)) if on_belt else "벨트 비었음"
     print(f"{GRAY}{short_time(d.get('ts'))}{RESET}  {MAGENTA}{BOLD}[라인]{RESET} {mc}{BOLD}{mk:<4}{RESET} "
           f"{STEP_KR.get(d.get('step'), d.get('step')):<8} {belt:<12}  "
           f"{GREEN}A {c.get('A', 0)}{RESET} {CYAN}B {c.get('B', 0)}{RESET} "

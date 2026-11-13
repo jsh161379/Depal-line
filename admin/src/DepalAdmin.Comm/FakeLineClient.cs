@@ -257,17 +257,29 @@ public sealed class FakeLineClient : LineClientBase
 
     // ── 가짜 메시지 만들기 ────────────────────────────────
 
-    private LineStatus MakeLine() => new()
+    private LineStatus MakeLine()
     {
-        RunId = _runId,
-        Mode = _mode,
-        Step = _mode is "running" or "paused" ? _step : null,
-        BatteryId = _batteryId == 0 ? null : _batteryId,
-        Counts = new Dictionary<string, int>(_counts),
-        Agv = new AgvInfo { Loaded = _agvLoaded, Batch = AgvBatch, State = AgvCycle[_agvCycleIndex] },
-        Message = _message,
-        Ts = Json.Now(),
-    };
+        // 실제 서버(v1.4.1)와 같은 모양: 팔레트 인식·집기만 step으로, 벨트 위 공정은 stations로 보냄
+        // (가짜는 건전지를 하나씩 처리하므로 공정에 퍽이 하나뿐)
+        var onBelt = _step is "inspect" or "measure" or "home" or "sort";
+        var station = _step == "home" ? "sort" : _step;
+        var step = _mode is "running" or "paused" ? (onBelt ? (_mode == "paused" ? "paused" : "running") : _step) : null;
+        return new LineStatus
+        {
+            RunId = _runId,
+            Mode = _mode,
+            Step = step,
+            BatteryId = _batteryId == 0 ? null : _batteryId,
+            OnBelt = onBelt && _batteryId > 0 ? new List<int> { _batteryId } : new List<int>(),
+            Stations = onBelt && _batteryId > 0 && station != null
+                ? new Dictionary<string, List<int>> { [station] = new List<int> { _batteryId } }
+                : new Dictionary<string, List<int>>(),
+            Counts = new Dictionary<string, int>(_counts),
+            Agv = new AgvInfo { Loaded = _agvLoaded, Batch = AgvBatch, State = AgvCycle[_agvCycleIndex] },
+            Message = _message,
+            Ts = Json.Now(),
+        };
+    }
 
     private Dictionary<string, DeviceInfo> MakeDevices()
     {

@@ -178,10 +178,26 @@ class LineController:
         print(f"[{now_str()}] {level:<5} {message}", flush=True)
         await self.publish("server/events", event_body(self.run_id or self.boot_id, NAME, level, message))
 
+    def stations(self) -> dict:
+        """벨트 위 퍽이 지금 있는 공정 → 퍽 번호 목록 (퍽이 없는 공정은 넣지 않음)
+           inspect: YOLO 결과 아직 없음 (부스로 가는 중·촬영 중)
+           measure: 측정할 퍽인데 측정값이 아직 없음 (측정 자리로 가는 중·측정 중)
+           sort:    그 밖 (통과 계획, 또는 측정 끝나고 보낼 곳을 받음 → 분류로 가는 중)"""
+        out: dict[str, list[int]] = {}
+        for p in self.belt:
+            if p.vision is None:
+                key = "inspect"
+            elif p.plan is None or (p.plan["act"] == "MEASURE" and p.measure is None):
+                key = "measure"
+            else:
+                key = "sort"
+            out.setdefault(key, []).append(p.bid)
+        return out
+
     async def publish_line(self):
         body = {"run_id": self.run_id, "mode": self.mode, "step": self.step,
                 "battery_id": self.battery_id or None, "counts": self.counts,
-                "on_belt": [p.bid for p in self.belt],
+                "on_belt": [p.bid for p in self.belt], "stations": self.stations(),
                 "agv": {"enabled": USE_AGV, "loaded": self.agv_loaded, "batch": AGV_BATCH, "state": self.agv_state},
                 "message": self.message, "ts": now_str()}
         await self.publish("server/line", json.dumps(body, ensure_ascii=False), retain=True)
@@ -385,6 +401,7 @@ class LineController:
             puck.plan = {"act": "PASS", "to": DEST[puck.grade]}
         else:
             puck.plan = {"act": "MEASURE", "to": None}
+        await self.publish_line()               # 공정 표시: 검사 → 측정(측정할 퍽) 또는 분류(통과)
         await self.send_quiet("mega", "plan", {"no": puck.bid, **puck.plan}, battery_id=puck.bid)
 
     # ---------- Mega 알림 ----------
@@ -430,6 +447,7 @@ class LineController:
             puck.measure = data
             puck.electrical = "measured" if data.get("polarity") else "failed"
             puck.grade, puck.reason = judge_measure(data)
+            await self.publish_line()           # 공정 표시: 측정 → 분류
             await self.send_quiet("mega", "route", {"no": puck.bid, "to": DEST[puck.grade]}, battery_id=puck.bid)
         elif ev == "DIVERTED":
             await self.finish_puck(puck, "RESORT_BOX")
