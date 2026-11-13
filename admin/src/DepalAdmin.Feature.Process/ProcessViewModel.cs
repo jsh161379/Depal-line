@@ -10,7 +10,7 @@ namespace DepalAdmin.Feature.Process;
 
 /// <summary>
 /// 담당: 김초아 — 라인 현황: 공정 흐름도, 분류 개수·현재 상태, AGV.
-/// 받는 것: server/line (mode · step · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
+/// 받는 것: server/line (mode · step · stations · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
 ///         server/devices 안의 "agv" 칸 (실제 AGV 하트비트: link · agv_state · carrying, agv_relay_v3)
 /// 이 화면에 끼워 들어오는 남의 패널:
 ///   가운데 팔레트 맵 — 김하균 (PanelSlots.LinePallet)
@@ -98,9 +98,17 @@ public partial class ProcessViewModel : ObservableObject
         RunId = s.RunId ?? "-";
         ServerMessage = s.Message;
 
-        // 일시정지·작업자 대기 중에도 멈춘 공정이 보이도록 running/paused 둘 다 표시
-        var activeStep = s.Mode is "running" or "paused" ? s.Step : null;
-        foreach (var st in Stations) st.IsActive = st.Step == activeStep;
+        // 공정 흐름: step(scan·pick)으로 팔레트·로봇팔 칸, stations(v1.4.1)로 검사·측정·분류 칸
+        // 벨트 위 퍽이 여러 개면 칸도 여러 개 동시에 켜짐. 일시정지·작업자 대기·마무리(draining) 중에도 표시
+        //  - 컨베이어(원점 복귀) 칸은 서버에 따로 없어서, 분류로 가는 퍽(sort)이 있을 때 같이 켬 (가짜 데이터와 같은 기준)
+        //  - AGV 칸은 UpdateAgvState에서 AGV가 움직일 때 켬
+        var live = s.Mode is "running" or "paused" or "draining";
+        foreach (var st in Stations)
+        {
+            if (st.Step == "wait_agv") continue;
+            var key = st.Step == "home" ? "sort" : st.Step;
+            st.IsActive = live && (st.Step == s.Step || s.HasStation(key));
+        }
 
         CountA = s.Count("A");
         CountB = s.Count("B");
@@ -159,6 +167,8 @@ public partial class ProcessViewModel : ObservableObject
     {
         var key = _realAgvState ?? _lineAgvState;
         AgvStateKey = key ?? "home";
+        // 공정 흐름 AGV 칸: 이동 중·목적지·복귀 중이면 켬
+        Stations[^1].IsActive = key is "going" or "away" or "returning";
         AgvState = key switch
         {
             "stopped" => "멈춤 (위치 모름)",
