@@ -140,9 +140,20 @@
                 <!-- AGV: 공정의 마지막 칸 (A 건전지 운송) -->
                 <HeaderedContentControl Header="AGV" Style="{StaticResource Section}">
                     <StackPanel>
+                        <!-- 실제 AGV 연결 (중계 프로그램 + 블루투스). 이상일 때만 색 -->
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding AgvLink}" FontWeight="SemiBold"
+                                       Foreground="{Binding AgvLinkKey, Converter={StaticResource StatusToBrush}}"/>
+                            <TextBlock Text="연결" Style="{StaticResource Label}"/>
+                        </DockPanel>
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Right" Text="{Binding AgvState}" FontWeight="SemiBold"/>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding AgvState}" FontWeight="SemiBold"
+                                       Foreground="{Binding AgvStateKey, Converter={StaticResource StatusToBrush}}"/>
                             <TextBlock Text="위치" Style="{StaticResource Label}"/>
+                        </DockPanel>
+                        <DockPanel Margin="0,8,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding AgvCarrying}"/>
+                            <TextBlock Text="지게" Style="{StaticResource Label}"/>
                         </DockPanel>
                         <DockPanel Margin="0,8,0,0">
                             <TextBlock DockPanel.Dock="Right" Text="{Binding AgvLoad}" Style="{StaticResource ReadoutSmall}"/>

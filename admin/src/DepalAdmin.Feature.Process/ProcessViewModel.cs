@@ -11,6 +11,7 @@ namespace DepalAdmin.Feature.Process;
 /// <summary>
 /// 담당: 김초아 — 라인 현황: 공정 흐름도, 분류 개수·현재 상태, AGV.
 /// 받는 것: server/line (mode · step · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
+///         server/devices 안의 "agv" 칸 (실제 AGV 하트비트: link · agv_state · carrying, agv_relay_v3)
 /// 이 화면에 끼워 들어오는 남의 패널:
 ///   가운데 팔레트 맵 — 김하균 (PanelSlots.LinePallet)
 ///   오른쪽 조작 버튼 — 유동호 (PanelSlots.LineControls)
@@ -61,6 +62,14 @@ public partial class ProcessViewModel : ObservableObject
     [ObservableProperty] private string _agvLoad = "-";
     [ObservableProperty] private double _agvFill;
 
+    // ── 실제 AGV 하트비트 (server/devices → "agv") ──
+    [ObservableProperty] private string _agvLink = "수신 대기";
+    [ObservableProperty] private string _agvLinkKey = "neutral";
+    [ObservableProperty] private string _agvCarrying = "-";
+
+    private string? _lineAgvState;      // server/line의 agv.state (서버가 생각하는 위치)
+    private string? _realAgvState;      // AGV가 직접 보낸 agv_state (연결됐을 때만)
+
     public ProcessViewModel(ILineClient client, IEnumerable<IPanel> panels, EnvMonitorViewModel env)
     {
         Env = env;
@@ -75,6 +84,9 @@ public partial class ProcessViewModel : ObservableObject
             while (AgvLog.Count > AgvLogMax) AgvLog.RemoveAt(AgvLog.Count - 1);
         };
         if (client.LastLine != null) Apply(client.LastLine);
+
+        client.DevicesReceived += (_, devices) => ApplyDevices(devices);
+        if (client.LastDevices.Count > 0) ApplyDevices(client.LastDevices);
     }
 
     private void Apply(LineStatus s)
@@ -99,11 +111,60 @@ public partial class ProcessViewModel : ObservableObject
 
         if (s.Agv != null)
         {
-            AgvState = Labels.AgvState(s.Agv.State);
-            AgvStateKey = s.Agv.State;
+            _lineAgvState = s.Agv.State;
+            UpdateAgvState();
             AgvLoad = $"{s.Agv.Loaded} / {s.Agv.Batch}";
             AgvFill = s.Agv.Batch == 0 ? 0 : Math.Min(100, s.Agv.Loaded * 100.0 / s.Agv.Batch);
         }
+    }
+
+    /// <summary>
+    /// 실제 AGV 하트비트. agv_relay_v3가 hb/agv에 실어 보내는 값:
+    ///   link: ok / offline (블루투스),  agv_state: home / going / away / returning / stopped / estop,  carrying: true / false
+    /// 서버 status: ok / warn / offline / unknown (중계 프로그램이 살아 있는지)
+    /// </summary>
+    private void ApplyDevices(IReadOnlyDictionary<string, DeviceInfo> devices)
+    {
+        _realAgvState = null;
+        if (!devices.TryGetValue("agv", out var agv) || agv.State is "unknown" or "")
+        {
+            (AgvLink, AgvLinkKey, AgvCarrying) = ("수신 대기", "neutral", "-");
+        }
+        else if (agv.State is "offline" or "lost")
+        {
+            (AgvLink, AgvLinkKey, AgvCarrying) = ("중계 꺼짐", "offline", "-");
+        }
+        else
+        {
+            var link = agv.Extra.TryGetValue("link", out var l) ? l : "ok";
+            if (link == "offline")
+            {
+                (AgvLink, AgvLinkKey, AgvCarrying) = ("블루투스 끊김", "offline", "-");
+            }
+            else
+            {
+                (AgvLink, AgvLinkKey) = agv.State is "warn" or "delayed" ? ("지연", "warn") : ("정상", "ok");
+                if (agv.Extra.TryGetValue("agv_state", out var st) && st is not ("" or "unknown"))
+                    _realAgvState = st;
+                AgvCarrying = agv.Extra.TryGetValue("carrying", out var c)
+                    ? (c == "true" ? "팔레트 실음" : "비어 있음")
+                    : "-";
+            }
+        }
+        UpdateAgvState();
+    }
+
+    /// <summary>위치: AGV가 직접 보낸 값이 있으면 그것, 없으면 서버(server/line)가 아는 값</summary>
+    private void UpdateAgvState()
+    {
+        var key = _realAgvState ?? _lineAgvState;
+        AgvStateKey = key ?? "home";
+        AgvState = key switch
+        {
+            "stopped" => "멈춤 (위치 모름)",
+            "estop" => "비상정지",
+            _ => Labels.AgvState(key),
+        };
     }
 }
 
