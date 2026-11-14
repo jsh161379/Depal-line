@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DepalAdmin.Core;
 using DepalAdmin.Core.Messaging;
 using DepalAdmin.Core.Models;
@@ -12,6 +14,7 @@ namespace DepalAdmin.Feature.Process;
 /// 담당: 김초아 — 라인 현황: 공정 흐름도, 분류 개수·현재 상태, AGV.
 /// 받는 것: server/line (mode · step · stations · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
 ///         server/devices 안의 "agv" 칸 (실제 AGV 하트비트: link · agv_state · carrying, agv_relay_v3)
+/// 카메라 실시간 (MJPEG 주소, 실행 폴더 cameras.json): 상단 · 측면 L · 측면 R · 팔레트. 라인 현황을 보고 있을 때만 받음
 /// 이 화면에 끼워 들어오는 남의 패널:
 ///   가운데 팔레트 맵 — 김하균 (PanelSlots.LinePallet)
 ///   오른쪽 조작 버튼 — 유동호 (PanelSlots.LineControls)
@@ -35,10 +38,17 @@ public partial class ProcessViewModel : ObservableObject
         new Station("AGV", "A 운송 대기", "wait_agv", isLast: true),
     };
 
-    public ObservableCollection<LineEvent> AgvLog { get; } = new();
+    /// <summary>AGV 기록 (최근이 위). 시각은 시:분:초만</summary>
+    public ObservableCollection<AgvLogRow> AgvLog { get; } = new();
 
-    /// <summary>아래 환경 센서 칸 (온습도 그래프 · 가스 감시) — 조시현, EnvMonitorViewModel.cs</summary>
+    /// <summary>카메라 4대 (상단 · 측면 L · 측면 R · 팔레트)</summary>
+    public ObservableCollection<LiveCamera> Cameras { get; } = new();
+
+    /// <summary>아래 환경 센서 칸 (온습도 그래프 · 가스 감시) — 조시현, EnvMonitorViewModel.cs. 맨 위 공정 흐름 머리에 한 줄 요약도</summary>
     public EnvMonitorViewModel Env { get; }
+
+    private readonly DispatcherTimer _cameraTimer;
+    private bool _viewing;
 
     public FrameworkElement? PalletPanel { get; }
     public FrameworkElement? ControlPanel { get; }
@@ -73,6 +83,13 @@ public partial class ProcessViewModel : ObservableObject
     public ProcessViewModel(ILineClient client, IEnumerable<IPanel> panels, EnvMonitorViewModel env)
     {
         Env = env;
+
+        var urls = CameraConfig.Load();
+        foreach (var (key, title) in CameraConfig.Order)
+            Cameras.Add(new LiveCamera(key, title, urls[key]));
+        _cameraTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _cameraTimer.Tick += (_, _) => { var now = DateTime.Now; foreach (var c in Cameras) c.Tick(now); };
+        _cameraTimer.Start();
         PalletPanel = PanelSlots.Find(panels, PanelSlots.LinePallet);
         ControlPanel = PanelSlots.Find(panels, PanelSlots.LineControls);
 
@@ -80,13 +97,33 @@ public partial class ProcessViewModel : ObservableObject
         client.EventReceived += (_, ev) =>
         {
             if (ev.Device != "agv") return;
-            AgvLog.Insert(0, ev);
+            AgvLog.Insert(0, AgvLogRow.From(ev));
             while (AgvLog.Count > AgvLogMax) AgvLog.RemoveAt(AgvLog.Count - 1);
         };
         if (client.LastLine != null) Apply(client.LastLine);
 
         client.DevicesReceived += (_, devices) => ApplyDevices(devices);
         if (client.LastDevices.Count > 0) ApplyDevices(client.LastDevices);
+    }
+
+    /// <summary>라인 현황 화면이 보이거나 숨을 때 (ProcessView.xaml.cs) → 카메라 영상 받기 켜고 끄기</summary>
+    public void SetViewing(bool viewing)
+    {
+        if (_viewing == viewing) return;
+        _viewing = viewing;
+        foreach (var c in Cameras)
+        {
+            if (viewing) c.AddViewer();
+            else c.RemoveViewer();
+        }
+    }
+
+    /// <summary>카메라 칸을 누르면 그 카메라만 큰 창으로 (다른 탭으로 가도 창은 계속 떠 있음)</summary>
+    [RelayCommand]
+    private void OpenCamera(LiveCamera? camera)
+    {
+        if (camera == null) return;
+        new CameraWindow(camera).Show();
     }
 
     private void Apply(LineStatus s)
@@ -195,4 +232,21 @@ public partial class Station : ObservableObject
     public bool IsLast { get; }
 
     [ObservableProperty] private bool _isActive;
+}
+
+/// <summary>AGV 기록 한 줄 (화면용: 시각은 시:분:초, 경고·오류는 색)</summary>
+public sealed record AgvLogRow(string Time, string Level, string Message)
+{
+    public static AgvLogRow From(LineEvent ev)
+    {
+        // "2026-11-13 14:10:19.123" → "14:10:19"
+        var t = ev.Ts ?? "";
+        var sp = t.IndexOf(' ');
+        if (sp >= 0) t = t[(sp + 1)..];
+        if (t.Length > 8) t = t[..8];
+        return new AgvLogRow(t, ev.Level, ev.Message);
+    }
+
+    /// <summary>StatusToBrush용: WARN → warn, ERROR → alarm</summary>
+    public string LevelKey => Level switch { "ERROR" => "alarm", "WARN" => "warn", _ => "neutral" };
 }
