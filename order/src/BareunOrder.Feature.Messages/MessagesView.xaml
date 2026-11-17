@@ -119,6 +119,11 @@
                                             BorderThickness="1" CornerRadius="6" Padding="12,9">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14" />
+                                            <Border Margin="0,8,0,0" Padding="8,4" BorderThickness="1" CornerRadius="4" HorizontalAlignment="Left"
+                                                    BorderBrush="{StaticResource Line}" Background="{StaticResource SurfaceAlt}"
+                                                    Visibility="{Binding Attachment, Converter={StaticResource NullToCollapsed}}">
+                                                <TextBlock Text="{Binding Attachment}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource Ink2}" />
+                                            </Border>
                                             <Button Style="{StaticResource Btn.Small}" HorizontalAlignment="Left" Margin="0,8,0,0"
                                                     Visibility="{Binding OrderNo, Converter={StaticResource NullToCollapsed}}"
                                                     Command="{Binding DataContext.OpenOrderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

@@ -19,6 +19,9 @@ public sealed record ChatLine(string Who, string Station, string Text, DateTime 
 
     /// <summary>"→ 조시현, 장성찬" (부른 사람이 없으면 빈 글자)</summary>
     public string MentionText { get; init; } = "";
+
+    /// <summary>관리자 프로그램이 붙여 보낸 알람·건전지 글자 (주문이 아닌 첨부). 없으면 null</summary>
+    public string? Attachment { get; init; }
 }
 
 /// <summary>@로 부를 수 있는 사람 (채팅에서 말한 적 있는 사람)</summary>
@@ -131,6 +134,9 @@ public sealed partial class ChatStore : ObservableObject
         {
             MentionsMe = !mine && mentions.Any(IsMe),
             MentionText = mentions.Count == 0 ? "" : "→ " + string.Join(", ", mentions.Select(x => x.Name)),
+            Attachment = m.RefKind is "alarm" or "battery" && !string.IsNullOrWhiteSpace(m.RefText)
+                ? (m.RefKind == "alarm" ? "알람 · " : "건전지 · ") + m.RefText
+                : null,
         };
         Lines.Add(line);
         if (!mine) RememberPerson(m);

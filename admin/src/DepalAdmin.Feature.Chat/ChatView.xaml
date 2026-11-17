@@ -58,11 +58,11 @@
                                         <Run Text="{Binding MentionText, Mode=OneWay}" Foreground="{StaticResource Brush.SubText}" FontSize="11"/>
                                     </TextBlock>
                                     <TextBlock x:Name="Body" Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    <!-- 붙여 보낸 알람·건전지 -->
+                                    <!-- 붙여 보낸 알람·건전지·주문(주문 관리 프로그램) -->
                                     <Border x:Name="Ref" Margin="0,5,0,0" Padding="7,3" BorderThickness="1" HorizontalAlignment="Left"
                                             BorderBrush="{StaticResource Brush.Rule}" Background="{StaticResource Brush.Panel}"
                                             Visibility="{Binding RefText, Converter={StaticResource TextToVis}}">
-                                        <TextBlock Text="{Binding RefText}" FontSize="12" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding RefDisplay}" FontSize="12" TextWrapping="Wrap"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
