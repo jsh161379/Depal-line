@@ -20,3 +20,6 @@ db/*_backup.py
 ## 개인 설정·비밀번호
 *.local.*
 .env
+
+## 설정 고치기 전 백업 (mosquitto.conf.bak 등)
+*.bak

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    담당: (미정) — 메인 창 + 시작 코드. 모든 탭을 모아서 실행한다.
+    탭은 이미 전부 등록돼 있으니 각자 이 파일을 고칠 필요 없음.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>BareunOrder</AssemblyName>
+    <RootNamespace>BareunOrder.Shell</RootNamespace>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 공통 -->
+    <ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
+    <!-- 탭 7개 (README 역할 분담표) -->
+    <ProjectReference Include="..\BareunOrder.Feature.Orders\BareunOrder.Feature.Orders.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Shipping\BareunOrder.Feature.Shipping.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Stock\BareunOrder.Feature.Stock.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Stats\BareunOrder.Feature.Stats.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Customers\BareunOrder.Feature.Customers.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Certificate\BareunOrder.Feature.Certificate.csproj" />
+    <ProjectReference Include="..\BareunOrder.Feature.Messages\BareunOrder.Feature.Messages.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="settings.local.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>
