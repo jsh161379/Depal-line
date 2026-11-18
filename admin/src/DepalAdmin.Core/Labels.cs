@@ -83,6 +83,7 @@ public static class Labels
         "mega" => "Mega (벨트·측정)",
         "yolo" => "YOLO 검사",
         "agv" => "AGV",
+        "env" => "환경 센서 (Uno)",          // 규약 v1.5: 가스·온습도·부저를 따로 둔 Uno
         "db_saver" => "DB 저장",
         "ui" => "관리자 화면",
         null => "-",

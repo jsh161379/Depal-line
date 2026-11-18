@@ -11,7 +11,9 @@
     MEASURED    측정값 → 등급 판정 → route (A·B·전압불량·재분류)
     DIVERTED / SORTED  배출 완료 → server/results 발행, 줄에서 뺌
     AT_PICK     기록만 (Mega가 시간으로 계산한 값)
-    NO_RESPONSE / FAULT / ENV_ALARM → 이벤트, 필요하면 일시정지
+    NO_RESPONSE / FAULT → 이벤트, 필요하면 일시정지
+  환경 Uno(event/env, 규약 v1.5)
+    ENV_ALARM   가스·온습도 기준 초과 → WARN 이벤트 (라인은 계속). v1.4까지는 event/mega로 왔음 (지금도 받음)
 
   새 퍽 올리기(feeder): 벨트 위 퍽이 MAX_ON_BELT보다 적고, 마지막으로 올린 뒤 FEED_INTERVAL_SEC가 지났을 때
   일시정지: 새 퍽을 올리지 않고 belt run:false (그 자리 정지)
@@ -410,12 +412,23 @@ class LineController:
     def find(self, no) -> Puck | None:
         return next((p for p in self.belt if p.bid == no), None)
 
+    async def on_env(self, msg):
+        """환경 Uno 알림 (규약 v1.5 3-4). 지금은 ENV_ALARM 하나 — 라인은 멈추지 않고 경고만"""
+        if warn := self.check_seq("env", msg.get("seq")):
+            await self.event("WARN", warn)
+        if msg.get("ev") == "ENV_ALARM":
+            await self.env_alarm(msg.get("data") or {})
+
+    async def env_alarm(self, data):
+        metric = {"GAS": "가스", "TEMPERATURE": "온도", "HUMIDITY": "습도"}.get(data.get("metric"), data.get("metric") or "")
+        await self.event("WARN", f"환경 경고: {data.get('sensor')} {metric} = {data.get('value')}".replace("  ", " "))
+
     async def on_mega(self, msg):
         ev, no, data = msg.get("ev"), msg.get("no"), msg.get("data") or {}
         if warn := self.check_seq("mega", msg.get("seq")):
             await self.event("WARN", warn)
-        if ev == "ENV_ALARM":
-            await self.event("WARN", f"환경 경고: {data.get('sensor')} = {data.get('value')}")
+        if ev == "ENV_ALARM":           # v1.4까지 (센서가 Mega에 있던 때). v1.5부터는 event/env → on_env
+            await self.env_alarm(data)
             return
         if self.mode in ("idle", "estop"):
             return
@@ -652,6 +665,8 @@ class LineController:
                 asyncio.create_task(self.on_vision(data))
             elif topic == "event/mega":
                 asyncio.create_task(self.on_mega(data))
+            elif topic == "event/env":
+                asyncio.create_task(self.on_env(data))
             elif topic == "ui/cmd":
                 asyncio.create_task(self.on_ui(data))
             elif topic == "server/devices":
@@ -669,7 +684,7 @@ class LineController:
                 async with aiomqtt.Client(BROKER_HOST, BROKER_PORT, identifier=NAME, keepalive=5, will=will) as c:
                     self.client = c
                     await c.publish(status_topic, "online", qos=1, retain=True)
-                    for t in ("res/+", "ui/cmd", "server/devices", "event/estop", "vision/result", "event/mega"):
+                    for t in ("res/+", "ui/cmd", "server/devices", "event/estop", "vision/result", "event/mega", "event/env"):
                         await c.subscribe(t, qos=1)
                     self.mode, self.step = "idle", "idle"
                     await self.publish_line()

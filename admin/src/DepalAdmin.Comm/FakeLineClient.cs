@@ -25,7 +25,7 @@ public sealed class FakeLineClient : LineClientBase
     // ──────────────────────────────────────────────────────
 
     private static readonly string[] Steps = { "scan", "pick", "inspect", "measure", "home", "sort" };
-    private static readonly string[] DeviceNames = { "server", "controller", "arm1", "mega", "yolo", "agv", "db_saver" };
+    private static readonly string[] DeviceNames = { "server", "controller", "arm1", "mega", "yolo", "agv", "env", "db_saver" };
     private static readonly string[] AgvCycle = { "going", "going", "away", "away", "returning", "returning", "home" };
 
     private readonly Random _rnd = new();
@@ -127,7 +127,7 @@ public sealed class FakeLineClient : LineClientBase
         AdvanceEnv();
     }
 
-    // ── sensor/env 흉내 (Mega → PC 중계 → MQTT) ─────────────
+    // ── sensor/env 흉내 (환경 Uno → PC 중계 env_relay → MQTT, 규약 v1.5) ─────────────
     //   온습도: 30초마다 / 가스: 상태가 바뀌면 바로 + 60초마다 살아 있음 (value 0/1)
 
     private void AdvanceEnv()
@@ -158,7 +158,7 @@ public sealed class FakeLineClient : LineClientBase
 
     private EnvReading Env(params EnvValue[] values)
     {
-        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "mega" };
+        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "env" };
         env.Readings.AddRange(values);
         return env;
     }

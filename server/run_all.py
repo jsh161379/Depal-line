@@ -306,6 +306,7 @@ def main():
     ap.add_argument("--agv", action="store_true", help="컨트롤러가 AGV에 명령을 보냄 (실제 AGV 중계용)")
     ap.add_argument("--no-db", action="store_true", help="DB 저장 프로그램을 켜지 않음")
     ap.add_argument("--estop-test", action="store_true", help=f"가짜 Mega가 {ESTOP_TEST_AT_SEC}초 뒤 비상정지")
+    ap.add_argument("--env-port", metavar="COM", help="환경 Uno 중계(env_relay.py)를 이 포트로 켬 (없으면 가짜 환경 센서)")
     ap.add_argument("--yolo", action="store_true", help="가짜 YOLO 대신 yolo_vision.py (실제 카메라·모델)")
     ap.add_argument("--yolo-fake", action="store_true", help="가짜 YOLO 대신 yolo_vision.py --fake")
     ap.add_argument("--hidden", action="store_true", help="창 없이 실행")
@@ -355,7 +356,8 @@ def main():
     last_request = None
     fake_agv = not a.no_fake and not a.no_fake_agv
     options = {"no_fake": a.no_fake, "no_db": a.no_db, "estop_test": a.estop_test,
-               "yolo": a.yolo, "yolo_fake": a.yolo_fake, "fake_agv": fake_agv, "agv": a.agv or fake_agv}
+               "yolo": a.yolo, "yolo_fake": a.yolo_fake, "fake_agv": fake_agv, "agv": a.agv or fake_agv,
+               "env_port": a.env_port}
 
     def write_status(running=True):
         write_json_atomic(STATUS_FILE, {
@@ -395,6 +397,10 @@ def main():
                 plan.append(("fake_yolo", ["fake_yolo.py"], HERE))
             if fake_agv:
                 plan.append(("fake_agv", ["fake_agv.py"], HERE))
+            if not a.env_port:   # 환경 센서 Uno (규약 v1.5): 실제 포트를 안 주면 가짜 값
+                plan.append(("fake_env", ["env_relay.py", "--fake"], HERE))
+        if a.env_port:
+            plan.append(("env_relay", ["env_relay.py", "--port", a.env_port], HERE))
         if a.yolo or a.yolo_fake:
             yolo_dir = HERE.parent / "yolo"
             plan.append(("yolo", ["yolo_vision.py"] + (["--fake"] if a.yolo_fake else []), yolo_dir))

@@ -5,7 +5,7 @@
   - cmd/yolo scan_pallet: 건전지가 있는 칸 목록. 로봇팔 1이 집어 간 칸(cmd/arm1 pick)은 목록에서 빠짐
     회차가 끝나 팔레트가 빈 뒤 start가 오면 새 팔레트를 올린 것처럼 다시 채움
   - vision/result: 퍽이 촬영 부스를 지나면 결과를 스스로 보냄 (명령 없음)
-      외관 normal / defect(+ defects 목록: scratch, dent, sticker, leak), 카메라 front·back·top
+      외관 normal / defect(+ defects 목록: scratch, dent, sticker), 카메라 front·back·top
       극 방향 minus_up / plus_up / unknown, 가끔 검사 실패(status failed)나 결과 빠짐(--miss)
   - 1초마다 hb/yolo 하트비트
 
@@ -26,7 +26,7 @@ BROKER_PORT = 1883
 PALLET_ROWS, PALLET_COLS = 2, 5
 BOOTH_SEC = 3.0                  # 벨트에 올린 뒤 촬영 부스를 지나 결과가 나올 때까지 (--speed 1 기준) 🟡
 TIME_SEC = {"scan_pallet": 0.5}
-DEFECT_TYPES = ["scratch", "dent", "sticker", "leak"]
+DEFECT_TYPES = ["scratch", "dent", "sticker"]   # 규약 3-2 불량 종류 (yolo\train\side.yaml과 같게)
 # =================================================
 
 import argparse
