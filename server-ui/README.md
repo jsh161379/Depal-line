@@ -10,16 +10,17 @@
 | 프로그램 탭 | 브로커·중앙 서버·컨트롤러·DB 저장·가짜 장치의 상태, PID, 가동 시간, 종료 코드 + 고른 프로그램의 로그 마지막 부분 (1초마다 이어 읽기, 오류 줄 빨강) |
 | 장치 접속 탭 | 장치별 상태(중앙 서버 판단), 마지막 수신, 하트비트 평균·최대 간격, 놓친 수(seq 건너뜀), 접속 시각, 추가 정보 + 고른 장치의 하트비트 간격 그래프(최근 2분, 지연 3초·끊김 5초 선) |
 | 메시지 탭 | 브로커에 오가는 모든 메시지 실시간 목록 (종류별 보기·찾기·멈춤), 고른 메시지의 JSON 펼쳐 보기 |
+| 남은 기록 탭 | 브로커가 보관 중인 메시지(retained) 목록, "예전 이름 고르기"(status/pi·status/ui-… 등, `AppConfig.h`의 목록), 확인 창 후 지우기 → 다시 받아 사라졌는지 확인 |
 | 상태 줄 | 서버 가동 시간, MQTT 1883·MySQL 3306 연결, 알림 |
 
-예정: 남은 기록(retained) 지우기
+
 
 ## 구조
 - 서버 UI는 프로그램을 직접 켜지 않고 `server/run_all.py`(실행기)에 부탁만 한다. 서버 UI가 꺼져도 서버와 라인은 계속 돈다.
   - 읽기: `server/logs/run_all.status.json` (실행기가 1초마다 씀)
   - 쓰기: `server/logs/run_all.request.json` (`{"id", "action": start|stop|restart, "name"}`)
   - 전부 켜기: `python run_all.py --hidden` (창 없이, 서버 UI와 별도 프로세스), 전부 끄기: `python run_all.py --stop`
-- 장치 접속·메시지 탭: `src/MqttLite.cpp`가 브로커에 직접 붙어 `#`(모든 토픽)을 받는다. Qt 무료 버전에 MQTT 모듈이 없어서 MQTT 3.1.1의 CONNECT·SUBSCRIBE·PUBLISH(받기, QoS 1이면 PUBACK)·PINGREQ만 QTcpSocket으로 직접 구현했다. 보내기는 하지 않는다. 접속 이름은 `server-ui-<PC 이름>`
+- 장치 접속·메시지 탭: `src/MqttLite.cpp`가 브로커에 직접 붙어 `#`(모든 토픽)을 받는다. Qt 무료 버전에 MQTT 모듈이 없어서 MQTT 3.1.1의 CONNECT·SUBSCRIBE·PUBLISH(받기, QoS 1이면 PUBACK)·PINGREQ와, 남은 기록 지우기용 PUBLISH 보내기(빈 내용 + retain)만 QTcpSocket으로 직접 구현했다. 접속 이름은 `server-ui-<PC 이름>`
 - 수정할 값: `src/AppConfig.h` (서버 폴더, python, 브로커 주소, 하트비트 기준, 메시지 보관 개수)
 
 ## 빌드

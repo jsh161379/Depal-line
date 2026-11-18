@@ -45,7 +45,7 @@ RULE_VERSION = "temp-2026-11-10"
 GRADE_A = {"v_open_min": 1.50, "r_int_max": 0.9}
 GRADE_B = {"v_open_min": 1.30, "r_int_max": 1.5}
 
-USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림)
+USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림). 실행할 때 --agv를 붙여도 True
 AGV_BATCH = 8                   # A 몇 개마다 출발 (잠정)
 
 WATCH_DEVICES = ["arm1", "mega", "yolo"]   # 끊기면 일시정지할 장치
@@ -174,14 +174,31 @@ class LineController:
             with contextlib.suppress(aiomqtt.MqttError):
                 await self.client.publish(topic, body, qos=1, retain=retain)
 
-    async def event(self, level, message):
+    async def event(self, level, message, device=NAME):
+        """server/events 발행. device: 이벤트가 어느 장치 일인지 (기본 controller, AGV 일은 "agv")"""
         print(f"[{now_str()}] {level:<5} {message}", flush=True)
-        await self.publish("server/events", event_body(self.run_id or self.boot_id, NAME, level, message))
+        await self.publish("server/events", event_body(self.run_id or self.boot_id, device, level, message))
+
+    def stations(self) -> dict:
+        """벨트 위 퍽이 지금 있는 공정 → 퍽 번호 목록 (퍽이 없는 공정은 넣지 않음)
+           inspect: YOLO 결과 아직 없음 (부스로 가는 중·촬영 중)
+           measure: 측정할 퍽인데 측정값이 아직 없음 (측정 자리로 가는 중·측정 중)
+           sort:    그 밖 (통과 계획, 또는 측정 끝나고 보낼 곳을 받음 → 분류로 가는 중)"""
+        out: dict[str, list[int]] = {}
+        for p in self.belt:
+            if p.vision is None:
+                key = "inspect"
+            elif p.plan is None or (p.plan["act"] == "MEASURE" and p.measure is None):
+                key = "measure"
+            else:
+                key = "sort"
+            out.setdefault(key, []).append(p.bid)
+        return out
 
     async def publish_line(self):
         body = {"run_id": self.run_id, "mode": self.mode, "step": self.step,
                 "battery_id": self.battery_id or None, "counts": self.counts,
-                "on_belt": [p.bid for p in self.belt],
+                "on_belt": [p.bid for p in self.belt], "stations": self.stations(),
                 "agv": {"enabled": USE_AGV, "loaded": self.agv_loaded, "batch": AGV_BATCH, "state": self.agv_state},
                 "message": self.message, "ts": now_str()}
         await self.publish("server/line", json.dumps(body, ensure_ascii=False), retain=True)
@@ -216,7 +233,8 @@ class LineController:
         try:
             return await self.send(device, action, params, battery_id, timeout_key)
         except CmdError as e:
-            await self.event("ERROR", f"{device} {action} 실패 ({e.kind}: {e.detail})")
+            await self.event("ERROR", f"{device} {action} 실패 ({e.kind}: {e.detail})",
+                             device="agv" if device == "agv" else NAME)
             await self.pause(f"{device} {action} 실패 — 확인 후 resume")
             return None
 
@@ -385,6 +403,7 @@ class LineController:
             puck.plan = {"act": "PASS", "to": DEST[puck.grade]}
         else:
             puck.plan = {"act": "MEASURE", "to": None}
+        await self.publish_line()               # 공정 표시: 검사 → 측정(측정할 퍽) 또는 분류(통과)
         await self.send_quiet("mega", "plan", {"no": puck.bid, **puck.plan}, battery_id=puck.bid)
 
     # ---------- Mega 알림 ----------
@@ -430,6 +449,7 @@ class LineController:
             puck.measure = data
             puck.electrical = "measured" if data.get("polarity") else "failed"
             puck.grade, puck.reason = judge_measure(data)
+            await self.publish_line()           # 공정 표시: 측정 → 분류
             await self.send_quiet("mega", "route", {"no": puck.bid, "to": DEST[puck.grade]}, battery_id=puck.bid)
         elif ev == "DIVERTED":
             await self.finish_puck(puck, "RESORT_BOX")
@@ -486,18 +506,22 @@ class LineController:
             if n == 0:
                 return
             if not USE_AGV:
-                await self.event("INFO", f"AGV 출발 조건 ({why}, A {n}개) — USE_AGV=False라 명령은 보내지 않음")
+                await self.event("INFO", f"AGV 출발 조건 ({why}, A {n}개) — USE_AGV=False라 명령은 보내지 않음", device="agv")
                 self.agv_loaded = 0
                 await self.publish_line()
                 return
-            await self.event("INFO", f"AGV 출발 ({why}, A {n}개)")
+            await self.event("INFO", f"AGV 출발 ({why}, A {n}개)", device="agv")
             self.agv_state = "going"
             await self.publish_line()
             if await self.send_quiet("agv", "go", {"count": n}) is not None:
                 self.agv_loaded = 0
+                self.agv_state = "away"          # 목적지 도착·하역 (화면에 한 번 보이도록 발행)
+                await self.publish_line()
+                await self.event("INFO", f"AGV 목적지 도착, 하역 (A {n}개)", device="agv")
                 self.agv_state = "returning"
                 await self.publish_line()
-                await self.send_quiet("agv", "return")
+                if await self.send_quiet("agv", "return") is not None:
+                    await self.event("INFO", "AGV 복귀 완료", device="agv")
             self.agv_state = "home"
             await self.publish_line()
 
@@ -669,4 +693,7 @@ class LineController:
 
 
 if __name__ == "__main__":
+    import sys
+    if "--agv" in sys.argv[1:]:          # run_all.py가 가짜 AGV를 켤 때 붙임
+        USE_AGV = True
     run_main(lambda: LineController().run_forever())

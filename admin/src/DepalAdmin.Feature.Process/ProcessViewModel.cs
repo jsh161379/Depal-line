@@ -24,8 +24,10 @@ public partial class ProcessViewModel : ObservableObject
     private const int AgvLogMax = 30;
 
     /// <summary>
-    /// 공정 순서. Step은 server/line의 step 값 (통신 규약 5장).
-    /// TODO(김초아): 실제 라인 배치를 보고 이름·설명·순서를 맞추기
+    /// 공정 순서. Key가 켜지는 기준 (통신 규약 v1.4.1):
+    ///   scan · pick           → server/line의 step 값
+    ///   inspect · measure · sort → server/line의 stations (그 공정에 퍽이 있으면 켜짐, 퍽 번호 표시)
+    ///   agv                   → agv.state가 home이 아니면 켜짐 (운송 중)
     /// </summary>
     public ObservableCollection<Station> Stations { get; } = new()
     {
@@ -33,9 +35,8 @@ public partial class ProcessViewModel : ObservableObject
         new Station("로봇팔", "집기", "pick"),
         new Station("검사 부스", "외관·극 방향", "inspect"),
         new Station("측정", "전압·내부저항", "measure"),
-        new Station("컨베이어", "원점 복귀", "home"),
         new Station("분류", "분류함에 넣기", "sort"),
-        new Station("AGV", "A 운송 대기", "wait_agv", isLast: true),
+        new Station("AGV", "A 운송", "agv", isLast: true),
     };
 
     /// <summary>AGV 기록 (최근이 위). 시각은 시:분:초만</summary>
@@ -138,13 +139,17 @@ public partial class ProcessViewModel : ObservableObject
         // 공정 흐름: step(scan·pick)으로 팔레트·로봇팔 칸, stations(v1.4.1)로 검사·측정·분류 칸
         // 벨트 위 퍽이 여러 개면 칸도 여러 개 동시에 켜짐. 일시정지·작업자 대기·마무리(draining) 중에도 표시
         //  - 컨베이어(원점 복귀) 칸은 서버에 따로 없어서, 분류로 가는 퍽(sort)이 있을 때 같이 켬 (가짜 데이터와 같은 기준)
-        //  - AGV 칸은 UpdateAgvState에서 AGV가 움직일 때 켬
+        //  - AGV 칸은 UpdateAgvState에서 AGV가 움직일 때 켬 (실제 AGV 하트비트 우선)
+        //  - 검사·측정·분류 칸에는 지금 그 공정에 있는 퍽 번호 표시 (예: #17 #18)
         var live = s.Mode is "running" or "paused" or "draining";
         foreach (var st in Stations)
         {
-            if (st.Step == "wait_agv") continue;
-            var key = st.Step == "home" ? "sort" : st.Step;
-            st.IsActive = live && (st.Step == s.Step || s.HasStation(key));
+            if (st.Key is "agv" or "wait_agv") continue;   // AGV 칸은 UpdateAgvState 담당
+            var key = st.Key == "home" ? "sort" : st.Key;
+            st.IsActive = live && (st.Key == s.Step || s.HasStation(key));
+            st.Pucks = live && s.HasStation(st.Key)
+                ? string.Join(" ", s.Stations[st.Key].Select(n => $"#{n}"))
+                : "";
         }
 
         CountA = s.Count("A");
@@ -218,20 +223,25 @@ public partial class ProcessViewModel : ObservableObject
 /// <summary>공정 흐름도의 한 칸</summary>
 public partial class Station : ObservableObject
 {
-    public Station(string title, string sub, string step, bool isLast = false)
+    public Station(string title, string sub, string key, bool isLast = false)
     {
         Title = title;
         Sub = sub;
-        Step = step;
+        Key = key;
         IsLast = isLast;
     }
 
     public string Title { get; }
     public string Sub { get; }
-    public string Step { get; }
+
+    /// <summary>scan · pick · inspect · measure · sort · agv</summary>
+    public string Key { get; }
     public bool IsLast { get; }
 
     [ObservableProperty] private bool _isActive;
+
+    /// <summary>지금 이 공정에 있는 퍽 번호 (예: "#3 #4"). 없으면 빈 글자</summary>
+    [ObservableProperty] private string _pucks = "";
 }
 
 /// <summary>AGV 기록 한 줄 (화면용: 시각은 시:분:초, 경고·오류는 색)</summary>

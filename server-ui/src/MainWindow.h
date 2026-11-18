@@ -1,7 +1,7 @@
 // MainWindow.h - 서버 관리 창
 //  창 제목: DEPAL 서버 - PC 이름 (IP)
 //  도구 모음: 전부 켜기 · 전부 끄기 | 켜기 · 끄기 | 로그 열기 ...... [가짜 장치 포함]
-//  가운데 탭: 프로그램(ProgramsPage) · 장치 접속(DevicesPage) · 메시지(MessagesPage)
+//  가운데 탭: 프로그램(ProgramsPage) · 장치 접속(DevicesPage) · 메시지(MessagesPage) · 남은 기록(RetainedPage)
 //  장치 접속·메시지 탭은 MqttLite 하나로 브로커의 모든 토픽(#)을 받아 나눠 씀
 //  상태 줄: 서버 상태·가동 시간 | MQTT | MySQL | 알림
 #pragma once

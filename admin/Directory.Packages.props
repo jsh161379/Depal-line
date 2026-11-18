@@ -13,6 +13,6 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
-    <PackageVersion Include="MySqlConnector" Version="2.3.7" />
+    <PackageVersion Include="MySqlConnector" Version="2.6.1" />
   </ItemGroup>
 </Project>

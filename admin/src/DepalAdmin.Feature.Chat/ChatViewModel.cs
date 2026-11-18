@@ -285,6 +285,12 @@ public sealed class ChatRow
     public string? RefText => Raw.RefText;
     public string RefKind => Raw.RefKind ?? "";
 
+    /// <summary>
+    /// 붙여 보낸 것을 화면에 보일 글자. 주문 관리 프로그램이 주문을 붙이면 ref_kind "order", ref_text 주문번호
+    /// (주문 통신 규약 5장) → "주문 BR-…". 알람·건전지는 원래 글자 그대로.
+    /// </summary>
+    public string? RefDisplay => RefKind == "order" && !string.IsNullOrEmpty(RefText) ? $"주문 {RefText}" : RefText;
+
     /// <summary>"→ 조시현, 장성찬" (부른 사람이 없으면 빈 글자)</summary>
     public string MentionText => Raw.Mentions is not { Count: > 0 } ? "" : "→ " + string.Join(", ", Raw.Mentions.Select(m => m.Name));
 }

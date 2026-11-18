@@ -1,0 +1,176 @@
+<UserControl x:Class="BareunOrder.Feature.Shipping.ShippingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 담당: (미정) — F2 출고·배송 -->
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="16" />
+            <ColumnDefinition Width="400" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ═══ 위쪽 숫자 3칸 ═══ -->
+        <UniformGrid Grid.ColumnSpan="3" Rows="1">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,0">
+                <StackPanel>
+                    <TextBlock Text="출고 대기" Style="{StaticResource Caption}" />
+                    <TextBlock Style="{StaticResource BigNumber}">
+                        <Run Text="{Binding PendingCount, Mode=OneWay}" /><Run Text="건" FontSize="16" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}" Margin="8,0">
+                <StackPanel>
+                    <TextBlock Text="출고에 필요한 건전지" Style="{StaticResource Caption}" />
+                    <TextBlock Style="{StaticResource BigNumber}">
+                        <Run Text="{Binding NeededBatteries, Mode=OneWay}" /><Run Text="개" FontSize="16" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border Margin="8,0,0,0">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsShort}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AmberSoft}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="라인 A 등급 준비 (오늘 검사 통과)" Style="{StaticResource Caption}" />
+                        <TextBlock Style="{StaticResource BigNumber}">
+                            <Run Text="{Binding LineReadyA, Mode=OneWay}" /><Run Text="개" FontSize="16" />
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="부족 — 라인 검사 대기" Foreground="{StaticResource Amber}" FontWeight="Bold"
+                                   HorizontalAlignment="Right" Margin="0,0,0,6"
+                                   Visibility="{Binding IsShort, Converter={StaticResource BoolToVis}}" />
+                        <Button Content="라인에 요청" Style="{StaticResource Btn.Small}" HorizontalAlignment="Right"
+                                ToolTip="현장 관리자에게 A 등급 요청 메시지 (F7 라인 메시지)"
+                                Command="{Binding RequestLineCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </UniformGrid>
+
+        <!-- ═══ 왼쪽: 출고 대기 목록 ═══ -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="16,14,16,10">
+                    <TextBlock Text="출고 대기 (오래된 주문부터)" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
+                    <Button Content="출고 지시서 인쇄" Style="{StaticResource Btn.Small}" HorizontalAlignment="Right"
+                            Command="{Binding PrintCommand}" />
+                </Grid>
+                <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceAlt}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="0,1" Padding="20,9,12,9">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="90" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="접수" Style="{StaticResource ColHead}" />
+                        <TextBlock Grid.Column="1" Text="주문번호" Style="{StaticResource ColHead}" />
+                        <TextBlock Grid.Column="2" Text="고객" Style="{StaticResource ColHead}" />
+                        <TextBlock Grid.Column="3" Text="상품" Style="{StaticResource ColHead}" />
+                        <TextBlock Grid.Column="4" Text="건전지" Style="{StaticResource ColHead}" HorizontalAlignment="Right" />
+                    </Grid>
+                </Border>
+                <Grid>
+                    <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Pending}" SelectedItem="{Binding Selected}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="52">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding ReceivedAt, StringFormat={}{0:MM-dd HH:mm}}" FontFamily="{StaticResource Mono}"
+                                               Foreground="{StaticResource Ink2}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding No}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding ItemsSummary}" Foreground="{StaticResource Ink2}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{Binding BatteryCount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}"
+                                               FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="출고 대기 중인 주문이 없습니다" Foreground="{StaticResource Ink3}" FontSize="15"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Visibility="{Binding Pending.IsEmpty, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+            </DockPanel>
+        </Border>
+
+        <!-- ═══ 오른쪽: 송장 입력 + 배송 중 ═══ -->
+        <Grid Grid.Row="2" Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="출고 처리" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" Text="왼쪽에서 주문을 고르세요"
+                               Visibility="{Binding Selected, Converter={StaticResource NullToCollapsed}, ConverterParameter=invert}" />
+                    <StackPanel Visibility="{Binding Selected, Converter={StaticResource NullToCollapsed}}">
+                        <TextBlock Text="{Binding Selected.No}" FontFamily="{StaticResource Mono}" FontSize="18" FontWeight="Bold" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0">
+                            <Run Text="{Binding Selected.Name, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Selected.Address, Mode=OneWay}" />
+                        </TextBlock>
+
+                        <TextBlock Text="택배사" Style="{StaticResource Caption}" Margin="0,16,0,6" />
+                        <ComboBox ItemsSource="{Binding Couriers}" SelectedItem="{Binding Courier}" MinHeight="38"
+                                  FontSize="14" VerticalContentAlignment="Center" />
+
+                        <TextBlock Text="송장번호 (10자리 이상)" Style="{StaticResource Caption}" Margin="0,14,0,6" />
+                        <TextBox Style="{StaticResource Input}" FontFamily="{StaticResource Mono}" FontSize="16"
+                                 Text="{Binding Tracking, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Button Content="출고 처리 (배송 중으로)" Style="{StaticResource Btn.Primary}" MinHeight="48"
+                                FontSize="15" Margin="0,18,0,0" Command="{Binding ShipCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Margin="16,14,16,10">
+                        <Run Text="배송 중" /><Run Text="  " /><Run Text="{Binding OnTheWay.Count, Mode=OneWay}" Foreground="{StaticResource Ink3}" />
+                    </TextBlock>
+                    <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding OnTheWay}" BorderBrush="{StaticResource Line}"
+                             BorderThickness="0,1,0,0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="44">
+                                    <TextBlock Text="{Binding No}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Tracking}" FontFamily="{StaticResource Mono}" Foreground="{StaticResource Ink2}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

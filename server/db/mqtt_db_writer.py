@@ -1,4 +1,4 @@
-"""Store MQTT v1.3 messages in the project's MySQL schema."""
+"""Store MQTT v1.3 line messages and order-management messages in the project's MySQL schema."""
 
 import argparse
 import json
@@ -19,6 +19,19 @@ EVENTS = "server/events"
 RESULTS = "server/results"
 ENVIRONMENT = "sensor/env"
 EMERGENCY_STOP = "event/estop"
+# Order management, as in 주문_통신_규약_v1.0 chapters 3-4 (2026-11-17).
+# The homepage account is public, so only messages the order program has checked are stored:
+# order/accepted and inquiry/accepted, never order/new or inquiry/new.
+ORDER_ACCEPTED = "order/accepted"
+ORDER_STATUS = "order/status/+"  # retained; the last level is the order number
+ORDER_STOCK = "order/stock"
+ORDER_RUN = "order/run"
+INQUIRY_ACCEPTED = "inquiry/accepted"
+INQUIRY_ANSWER = "inquiry/answer/+"  # retained; the last level is the inquiry number
+# Subscribed by the first 11-17 draft. A persistent session would keep them, so they are dropped on connect.
+LEGACY_ORDER_TOPICS = ("order/new", "inquiry/new", "inquiry/answer")
+ORDER_TABLES = ("orders", "order_items", "order_status_log", "order_runs", "stock", "stock_log", "inquiries")
+FINAL_ORDER_STATUSES = ("delivered", "canceled")
 # Notification topics kept as raw text in communication_logs (message_kind EVENT), with the sending device.
 EVENT_LOG_TOPICS = {"vision/result": "yolo", "event/mega": "mega"}
 COMMUNICATION_TOPICS = ("cmd/+", "res/+", "ui/cmd", *EVENT_LOG_TOPICS)
@@ -141,20 +154,144 @@ class Result(BaseModel):
         return self
 
 
-MESSAGE_MODELS = {
+OrderNo = Annotated[str, StringConstraints(pattern=r"^BR-[0-9]{8}-[0-9A-Za-z]{4}$")]
+InquiryNo = Annotated[str, StringConstraints(pattern=r"^Q-[0-9]{8}-[0-9A-Za-z]{4}$")]
+OrderStatusName = Literal["received", "inspect", "shipping", "delivered", "canceled"]
+ProductId = Annotated[str, StringConstraints(min_length=1, max_length=10)]
+PersonName = Annotated[str, StringConstraints(min_length=1, max_length=50)]
+Phone = Annotated[str, StringConstraints(min_length=1, max_length=20)]
+Won = Annotated[int, Field(ge=0, le=2**32 - 1)]
+Packs = Annotated[int, Field(ge=1, le=2**31 - 1)]
+LongText = Annotated[str, StringConstraints(min_length=1, max_length=10000)]  # TEXT holds 65,535 bytes
+Operator = Annotated[str, StringConstraints(min_length=1, max_length=50)] | None
+
+
+class OrderItem(BaseModel):
+    id: ProductId  # product id: aa4 / aa12 / aa24 / aar2
+    name: Annotated[str, StringConstraints(min_length=1, max_length=50)]
+    qty: Packs
+    price: Won
+
+
+class OrderAccepted(BaseModel):
+    # The order/new message as the homepage sent it, republished by the order program after its checks.
+    no: OrderNo
+    ts: Timestamp  # when the customer ordered
+    accepted_at: Timestamp | None = None  # when the order program accepted it
+    name: PersonName
+    phone: Phone
+    addr: Annotated[str, StringConstraints(min_length=1, max_length=255)]
+    memo: Annotated[str, StringConstraints(max_length=255)] | None = None  # "" is stored as NULL
+    items: Annotated[list[OrderItem], Field(min_length=1)]
+    total: Won
+
+
+class OrderStatusChange(BaseModel):
+    # Published retained, so it is delivered again after every reconnect (stored once by the unique key).
+    no: OrderNo
+    ts: Timestamp
+    status: OrderStatusName
+    # Omitted, null or "" keeps the stored courier / tracking number / certificate number.
+    courier: Annotated[str, StringConstraints(max_length=30)] | None = None
+    tracking: Annotated[str, StringConstraints(max_length=30)] | None = None
+    cert_no: Annotated[str, StringConstraints(max_length=40)] | None = None  # inspection certificate (format by F6)
+    by: Operator = None  # who changed the status
+
+
+class StockChange(BaseModel):
+    event_id: EventId
+    ts: Timestamp
+    product_id: ProductId
+    # restock: add `packs`. adjust: set the warehouse count to `packs`.
+    kind: Literal["restock", "adjust"]
+    packs: Annotated[int, Field(ge=0, le=2**31 - 1)]
+    by: Operator = None
+
+    @model_validator(mode="after")
+    def validate_packs(self):
+        if self.kind == "restock" and self.packs == 0:
+            raise ValueError("restock needs at least one pack")
+        return self
+
+
+class OrderRun(BaseModel):
+    no: OrderNo
+    run_id: RunId
+    battery_count: Annotated[int, Field(ge=0, le=2**32 - 1)]
+    ts: Timestamp
+
+
+class InquiryAccepted(BaseModel):
+    no: InquiryNo
+    ts: Timestamp
+    name: PersonName
+    phone: Phone
+    type: Literal["delivery", "cancel", "product", "bulk", "etc"]
+    order_no: Annotated[str, StringConstraints(min_length=1, max_length=20)] | None = None
+    question: LongText
+
+
+class InquiryAnswer(BaseModel):
+    # Published retained, so the latest answer is delivered again after every reconnect.
+    no: InquiryNo
+    answer: LongText
+    by: Operator = None
+    ts: Timestamp
+
+
+class Rejected(ValueError):
+    """A well-formed message that the stored data does not allow (for example an unknown order)."""
+
+
+LINE_MODELS = {
     EVENTS: Event,
     RESULTS: Result,
     ENVIRONMENT: EnvironmentSample,
     EMERGENCY_STOP: EmergencyStopEvent,
 }
+ORDER_MODELS = {
+    ORDER_ACCEPTED: OrderAccepted,
+    ORDER_STATUS: OrderStatusChange,
+    ORDER_STOCK: StockChange,
+    ORDER_RUN: OrderRun,
+    INQUIRY_ACCEPTED: InquiryAccepted,
+    INQUIRY_ANSWER: InquiryAnswer,
+}
+MESSAGE_MODELS = {**LINE_MODELS, **ORDER_MODELS}
+
+
+def topic_matches(subscription, topic):
+    """MQTT matching for the single-level '+' wildcard used in this program."""
+    sub_levels, topic_levels = subscription.split("/"), topic.split("/")
+    return len(sub_levels) == len(topic_levels) and all(
+        s == "+" or s == t for s, t in zip(sub_levels, topic_levels))
+
+
+def subscription_for(topic):
+    """The MESSAGE_MODELS key that covers this topic, or None."""
+    if topic in MESSAGE_MODELS:
+        return topic
+    return next((sub for sub in MESSAGE_MODELS if "+" in sub and topic_matches(sub, topic)), None)
 
 
 def parse_message(topic, payload):
-    message = MESSAGE_MODELS[topic].model_validate_json(payload, strict=True)
+    subscription = subscription_for(topic)
+    message = MESSAGE_MODELS[subscription].model_validate_json(payload, strict=True)
+    if subscription in (ORDER_STATUS, INQUIRY_ANSWER) and topic.rsplit("/", 1)[1] != message.no:
+        raise ValueError(f"topic number does not match no {message.no}")
     if not isinstance(message, (Event, Result)):
         return message, None
     started_at = datetime.strptime(message.run_id[:15], "%Y%m%d-%H%M%S")
     return message, started_at
+
+
+def message_label(message):
+    """Short identifier for log lines."""
+    for field in ("run_id", "no", "order_no", "inquiry_id", "product_id", "reading_id", "event_id"):
+        value = getattr(message, field, None)
+        if value:
+            return f"{field} {value}"
+    return ""
 
 
 def insert_once(cursor, statement, parameters):
@@ -277,14 +414,165 @@ def insert_emergency_stop(cursor, event):
               event.source, event.kind, event.details, event.ts))
 
 
+def insert_order(cursor, order):
+    if not insert_once(cursor, """
+        INSERT INTO orders (
+            order_no, received_at, accepted_at, customer_name, customer_phone, shipping_address,
+            memo, total_amount, order_status, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'received', %s)
+        """, (order.no, order.ts, order.accepted_at, order.name, order.phone, order.addr,
+              order.memo or None, order.total, order.ts)):
+        return False  # the order number already exists
+    for item in order.items:
+        cursor.execute("""
+            INSERT INTO order_items (order_no, product_id, product_name, quantity, unit_price)
+            VALUES (%s, %s, %s, %s, %s)
+            """, (order.no, item.id, item.name, item.qty, item.price))
+    cursor.execute("""
+        INSERT INTO order_status_log (order_no, from_status, to_status, changed_at, changed_by)
+        VALUES (%s, NULL, 'received', %s, NULL)
+        """, (order.no, order.ts))
+    return True
+
+
+def change_stock(cursor, product_id, delta, reason, at, order_no=None, changed_by=None, source_event_id=None):
+    """Add delta packs to a product (creating its stock row) and log the change."""
+    cursor.execute("SELECT stock_packs FROM stock WHERE product_id = %s FOR UPDATE", (product_id,))
+    row = cursor.fetchone()
+    if row is None:
+        packs_after = delta
+        cursor.execute("INSERT INTO stock (product_id, stock_packs, updated_at) VALUES (%s, %s, %s)",
+                       (product_id, packs_after, at))
+    else:
+        packs_after = row[0] + delta
+        cursor.execute("UPDATE stock SET stock_packs = %s, updated_at = %s WHERE product_id = %s",
+                       (packs_after, at, product_id))
+    if packs_after < 0:
+        logging.warning("Stock of %s is now %d packs (more shipped than recorded)", product_id, packs_after)
+    cursor.execute("""
+        INSERT INTO stock_log (
+            source_event_id, product_id, delta_packs, packs_after, reason, order_no, changed_by, logged_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (source_event_id, product_id, delta, packs_after, reason, order_no, changed_by, at))
+
+
+def update_order_status(cursor, change):
+    cursor.execute("SELECT order_status, updated_at FROM orders WHERE order_no = %s FOR UPDATE",
+                   (change.no,))
+    row = cursor.fetchone()
+    if row is None:
+        raise Rejected(f"unknown order {change.no}")
+    current, updated_at = row
+
+    # A redelivered message hits the unique key here and is reported as a duplicate.
+    if not insert_once(cursor, """
+        INSERT INTO order_status_log (order_no, from_status, to_status, changed_at, changed_by)
+        VALUES (%s, %s, %s, %s, %s)
+        """, (change.no, current, change.status, change.ts, change.by)):
+        return False
+    if change.ts < updated_at:
+        raise Rejected(f"{change.no} changed at {updated_at}, after this message ({change.ts})")
+    if current in FINAL_ORDER_STATUSES and change.status != current:
+        raise Rejected(f"{change.no} is already {current}")
+
+    cursor.execute("""
+        UPDATE orders SET order_status = %s, courier = COALESCE(%s, courier),
+            tracking_no = COALESCE(%s, tracking_no), cert_no = COALESCE(%s, cert_no), updated_at = %s
+        WHERE order_no = %s
+        """, (change.status, change.courier or None, change.tracking or None, change.cert_no or None,
+              change.ts, change.no))
+
+    if change.status == "delivered" and current != "delivered":
+        cursor.execute("""
+            SELECT product_id, SUM(quantity) FROM order_items WHERE order_no = %s
+            GROUP BY product_id ORDER BY product_id
+            """, (change.no,))
+        for product_id, quantity in cursor.fetchall():
+            change_stock(cursor, product_id, -int(quantity), "delivered", change.ts,
+                         order_no=change.no, changed_by=change.by)
+    return True
+
+
+def insert_stock_change(cursor, change):
+    cursor.execute("SELECT 1 FROM stock_log WHERE source_event_id = %s", (change.event_id.lower(),))
+    if cursor.fetchone() is not None:
+        return False
+    if change.kind == "restock":
+        delta = change.packs
+    else:
+        cursor.execute("SELECT stock_packs FROM stock WHERE product_id = %s FOR UPDATE", (change.product_id,))
+        row = cursor.fetchone()
+        delta = change.packs - (row[0] if row else 0)
+    change_stock(cursor, change.product_id, delta, change.kind, change.ts,
+                 changed_by=change.by, source_event_id=change.event_id.lower())
+    return True
+
+
+def require_order(cursor, order_no):
+    cursor.execute("SELECT 1 FROM orders WHERE order_no = %s", (order_no,))
+    if cursor.fetchone() is None:
+        raise Rejected(f"unknown order {order_no}")
+
+
+def upsert_order_run(cursor, link):
+    require_order(cursor, link.no)
+    # A later message for the same order and run replaces the battery count.
+    cursor.execute("""
+        INSERT INTO order_runs (order_no, source_run_id, battery_count, linked_at)
+        VALUES (%s, %s, %s, %s) AS new
+        ON DUPLICATE KEY UPDATE battery_count = new.battery_count, linked_at = new.linked_at
+        """, (link.no, link.run_id.lower(), link.battery_count, link.ts))
+    return True
+
+
+def insert_inquiry(cursor, inquiry):
+    return insert_once(cursor, """
+        INSERT INTO inquiries (
+            inquiry_id, asked_at, customer_name, customer_phone, inquiry_type, order_no, question
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (inquiry.no, inquiry.ts, inquiry.name, inquiry.phone, inquiry.type,
+              inquiry.order_no, inquiry.question))
+
+
+def answer_inquiry(cursor, answer):
+    cursor.execute("SELECT answered_at FROM inquiries WHERE inquiry_id = %s FOR UPDATE", (answer.no,))
+    row = cursor.fetchone()
+    if row is None:
+        raise Rejected(f"unknown inquiry {answer.no}")
+    if row[0] is not None and answer.ts <= row[0]:
+        return False  # the retained answer redelivered after a reconnect, or an older one
+    # A corrected answer is published again and replaces the previous one.
+    cursor.execute("""
+        UPDATE inquiries SET answer = %s, answered_at = %s, answered_by = %s WHERE inquiry_id = %s
+        """, (answer.answer, answer.ts, answer.by, answer.no))
+    return True
+
+
+ORDER_WRITERS = {
+    OrderAccepted: insert_order,
+    OrderStatusChange: update_order_status,
+    StockChange: insert_stock_change,
+    OrderRun: upsert_order_run,
+    InquiryAccepted: insert_inquiry,
+    InquiryAnswer: answer_inquiry,
+}
+
+
 def save_message(connection, message, started_at, has_camera=False):
-    with connection.cursor() as cursor:
-        if isinstance(message, EnvironmentSample):
-            inserted = insert_environment_readings(cursor, message)
-        elif isinstance(message, EmergencyStopEvent):
-            inserted = insert_emergency_stop(cursor, message)
-        else:
-            inserted = insert_line_message(cursor, message, started_at, has_camera)
+    try:
+        # Buffered so a SELECT read with fetchone() never leaves unread rows behind.
+        with connection.cursor(buffered=True) as cursor:
+            if isinstance(message, EnvironmentSample):
+                inserted = insert_environment_readings(cursor, message)
+            elif isinstance(message, EmergencyStopEvent):
+                inserted = insert_emergency_stop(cursor, message)
+            elif type(message) in ORDER_WRITERS:
+                inserted = ORDER_WRITERS[type(message)](cursor, message)
+            else:
+                inserted = insert_line_message(cursor, message, started_at, has_camera)
+    except Rejected:
+        connection.rollback()
+        raise
 
     if inserted:
         connection.commit()
@@ -354,6 +642,8 @@ class Database:
         self.connection = None
         self.has_camera = False
         self.has_event_kind = False
+        # Assume the order tables exist until a connection shows otherwise.
+        self.has_orders = True
 
     def connect(self):
         if self.connection is not None and self.connection.is_connected():
@@ -374,7 +664,19 @@ class Database:
                 """, (self.options["database"],))
             rows = [tuple(value.decode() if isinstance(value, (bytes, bytearray)) else value for value in row)
                     for row in cursor.fetchall()]
+            # Order tables added on 2026-11-17.
+            cursor.execute(f"""
+                SELECT TABLE_NAME FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN ({", ".join(["%s"] * len(ORDER_TABLES))})
+                """, (self.options["database"], *ORDER_TABLES))
+            order_tables = {value.decode() if isinstance(value, (bytes, bytearray)) else value
+                            for value, in cursor.fetchall()}
         self.connection.commit()
+        missing_orders = [table for table in ORDER_TABLES if table not in order_tables]
+        self.has_orders = not missing_orders
+        if missing_orders:
+            logging.warning("Order tables missing (%s); order and inquiry topics will not be subscribed",
+                            ", ".join(missing_orders))
         self.has_camera = any(column == "camera" for _, column, _ in rows)
         self.has_event_kind = any(column == "message_kind" and "'EVENT'" in str(column_type)
                                   for _, column, column_type in rows)
@@ -393,29 +695,43 @@ class Database:
         self.connection = None
 
 
-def on_connect(client, userdata, flags, reason_code, properties):
+def subscribed_topics(db):
+    order_topics = tuple(ORDER_MODELS) if db.has_orders else ()
+    return (*LINE_MODELS, *order_topics, *COMMUNICATION_TOPICS)
+
+
+def on_connect(client, db, flags, reason_code, properties):
     if reason_code.is_failure:
         logging.error("MQTT connection refused: %s", reason_code)
         return
-    client.subscribe([(topic, 1) for topic in (*MESSAGE_MODELS, *COMMUNICATION_TOPICS)])
+    try:
+        db.connect()  # reads which optional tables exist before choosing topics
+    except mysql.connector.Error as error:
+        logging.warning("MySQL not reachable yet (%s); subscribing to every topic", error)
+    # A persistent session keeps old subscriptions, so drop the ones this version does not want.
+    client.unsubscribe(list(LEGACY_ORDER_TOPICS) if db.has_orders else [*LEGACY_ORDER_TOPICS, *ORDER_MODELS])
+    client.subscribe([(topic, 1) for topic in subscribed_topics(db)])
 
 
-def on_subscribe(client, userdata, mid, reason_codes, properties):
+def on_subscribe(client, db, mid, reason_codes, properties):
     if any(code.is_failure for code in reason_codes):
         logging.error("MQTT subscription rejected: %s", reason_codes)
     else:
-        logging.info("Subscribed to %s", ", ".join((*MESSAGE_MODELS, *COMMUNICATION_TOPICS)))
+        logging.info("Subscribed to %s", ", ".join(subscribed_topics(db)))
 
 
 def on_message(client, db, received):
-    is_structured_message = received.topic in MESSAGE_MODELS
+    is_structured_message = subscription_for(received.topic) is not None
     try:
         if is_structured_message:
             message, started_at = parse_message(received.topic, received.payload)
         connection = db.connect()
-        if is_structured_message:
+        if is_structured_message and type(message) in ORDER_WRITERS and not db.has_orders:
+            # Delivered before the unsubscribe took effect; the order tables are not there to hold it.
+            logging.warning("Dropped %s: order tables are missing", received.topic)
+        elif is_structured_message:
             inserted = save_message(connection, message, started_at, db.has_camera)
-            logging.info("%s %s for run %s", "Saved" if inserted else "Duplicate", received.topic, message.run_id)
+            logging.info("%s %s (%s)", "Saved" if inserted else "Duplicate", received.topic, message_label(message))
         elif received.topic in EVENT_LOG_TOPICS and not db.has_event_kind:
             pass  # The DB cannot store EVENT rows yet; detect_schema has already warned.
         else:
@@ -423,6 +739,8 @@ def on_message(client, db, received):
             logging.info("Logged MQTT %s", received.topic)
     except ValidationError as error:
         logging.error("Rejected malformed %s: %s", received.topic, error.errors(include_input=False))
+    except Rejected as error:
+        logging.error("Rejected %s: %s", received.topic, error)
     except (KeyError, ValueError) as error:
         logging.error("Rejected malformed %s: %s", received.topic, error)
     except mysql.connector.Error:
