@@ -8,7 +8,7 @@ public static class Topics
     public const string ServerEvents = "server/events";
     public const string ServerResults = "server/results";
 
-    /// <summary>환경 센서 (Mega → PC 중계 프로그램이 발행, 규약 v1.4 3-4)</summary>
+    /// <summary>환경 센서 (환경 Uno → PC 중계 env_relay.py가 발행, 규약 v1.5 3-4. v1.4까지는 Mega)</summary>
     public const string SensorEnv = "sensor/env";
 
     public const string UiCmd = "ui/cmd";

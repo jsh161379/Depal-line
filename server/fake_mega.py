@@ -48,7 +48,7 @@ POS_PICK = 14.0               # 측정 자리 → 로봇팔 2 자리 (약 8초)
 TIME_SEC = {"measure": 4.5, "arm2": 5.0, "reset": 2.0}   # --speed 1 기준
 NO_RESPONSE_SEC = 10.0        # 서버 응답을 이만큼 기다리면 NO_RESPONSE (속도 배율 적용 안 함)
 SERVER_TIMEOUT_SEC = 3.0      # 서버 하트비트가 이만큼 없으면 벨트 정지
-ENV_INTERVAL_SEC = 5.0
+ENV_INTERVAL_SEC = 0.0          # 규약 v1.5부터 환경 센서는 Mega가 아니라 환경 Uno(env_relay.py --fake) → 기본은 끔. 옛 방식 시험만 --env-interval 5
 GAS_ALARM_RAW = 400           # MQ-9 원시값 경고 기준 🟡
 # 환경 센서 (센서, 측정 종류, 단위, 기준값, 흔들림). DHT11은 1도·1% 단위
 ENV_SENSORS = [("gas_1", "GAS", "raw", 180.0, 20.0),
