@@ -38,8 +38,10 @@ public sealed class ReportData
         }
     }
 
+    /// <summary>불량·재분류 사유 많은 순 5개 (B는 정상 등급이라 뺌)</summary>
     public IReadOnlyList<(string Reason, string Grade, int Count)> TopReasons =>
-        Rows.Where(r => !string.IsNullOrWhiteSpace(r.Reason))
+        Rows.Where(r => !string.IsNullOrWhiteSpace(r.Reason)
+                        && (Grades.IsNg(r.Grade) || r.Grade == Grades.Resort))
             .GroupBy(r => r.Reason!)
             .Select(g => (g.Key, g.First().Grade, g.Count()))
             .OrderByDescending(x => x.Item3)
