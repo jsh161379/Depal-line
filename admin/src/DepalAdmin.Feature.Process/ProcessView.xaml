@@ -23,7 +23,7 @@
                 <ColumnDefinition Width="300"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ── 공정 흐름: 지금 공정만 진하게 ── -->
+            <!-- ── 공정 흐름: 퍽이 있는 공정을 진하게 (여러 칸 동시 가능) ── -->
             <HeaderedContentControl Grid.ColumnSpan="5" Style="{StaticResource Section}" Margin="0,0,0,10">
                 <HeaderedContentControl.Header>
                     <DockPanel>
@@ -51,7 +51,13 @@
                                 <Border x:Name="Box" Height="70" BorderThickness="1" Padding="10,8"
                                         Background="{StaticResource Brush.Field}" BorderBrush="{StaticResource Brush.Rule}">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock x:Name="TitleText" Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"/>
+                                        <DockPanel>
+                                            <!-- 이 공정에 있는 퍽 번호 (검사·측정·분류만) -->
+                                            <TextBlock x:Name="PuckText" DockPanel.Dock="Right" Text="{Binding Pucks}" FontSize="13"
+                                                       FontFamily="{StaticResource Font.Readout}" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource Brush.SubText}"/>
+                                            <TextBlock x:Name="TitleText" Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"/>
+                                        </DockPanel>
                                         <TextBlock x:Name="Sub" Text="{Binding Sub}" FontSize="11.5"
                                                    Foreground="{StaticResource Brush.SubText}" Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -66,6 +72,7 @@
                                     <Setter TargetName="Box" Property="BorderBrush" Value="#15171A"/>
                                     <Setter TargetName="TitleText" Property="Foreground" Value="{StaticResource Brush.FrameText}"/>
                                     <Setter TargetName="Sub" Property="Foreground" Value="{StaticResource Brush.FrameSub}"/>
+                                    <Setter TargetName="PuckText" Property="Foreground" Value="{StaticResource Brush.FrameText}"/>
                                     <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource Brush.Frame}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsLast}" Value="True">
