@@ -25,7 +25,7 @@ public sealed class FakeLineClient : LineClientBase
     // ──────────────────────────────────────────────────────
 
     private static readonly string[] Steps = { "scan", "pick", "inspect", "measure", "home", "sort" };
-    private static readonly string[] DeviceNames = { "server", "controller", "pi", "mega", "yolo", "agv", "db_saver" };
+    private static readonly string[] DeviceNames = { "server", "controller", "arm1", "mega", "yolo", "agv", "db_saver" };
     private static readonly string[] AgvCycle = { "going", "going", "away", "away", "returning", "returning", "home" };
 
     private readonly Random _rnd = new();
@@ -127,7 +127,7 @@ public sealed class FakeLineClient : LineClientBase
         AdvanceEnv();
     }
 
-    // ── sensor/env 흉내 (아두이노 → 라파 → MQTT) ─────────────
+    // ── sensor/env 흉내 (Mega → PC 중계 → MQTT) ─────────────
     //   온습도: 30초마다 / 가스: 상태가 바뀌면 바로 + 60초마다 살아 있음 (value 0/1)
 
     private void AdvanceEnv()
@@ -158,7 +158,7 @@ public sealed class FakeLineClient : LineClientBase
 
     private EnvReading Env(params EnvValue[] values)
     {
-        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "pi" };
+        var env = new EnvReading { ReadingId = Guid.NewGuid().ToString("N"), RunId = _runId, Ts = Json.Now(), Device = "mega" };
         env.Readings.AddRange(values);
         return env;
     }
@@ -180,7 +180,7 @@ public sealed class FakeLineClient : LineClientBase
                     _mode = "paused";
                     _step = "wait_operator";
                     _message = $"건전지 {_batteryId} 집기 실패 — [재개]로 다시 시도하거나 [건너뛰기]";
-                    Event("ERROR", "pi", $"pick 실패 (grip_failed) 칸 [{_cell[0]},{_cell[1]}]");
+                    Event("ERROR", "arm1", $"pick 실패 (grip_failed) 칸 [{_cell[0]},{_cell[1]}]");
                 }
                 break;
             case "sort":
@@ -257,17 +257,29 @@ public sealed class FakeLineClient : LineClientBase
 
     // ── 가짜 메시지 만들기 ────────────────────────────────
 
-    private LineStatus MakeLine() => new()
+    private LineStatus MakeLine()
     {
-        RunId = _runId,
-        Mode = _mode,
-        Step = _mode is "running" or "paused" ? _step : null,
-        BatteryId = _batteryId == 0 ? null : _batteryId,
-        Counts = new Dictionary<string, int>(_counts),
-        Agv = new AgvInfo { Loaded = _agvLoaded, Batch = AgvBatch, State = AgvCycle[_agvCycleIndex] },
-        Message = _message,
-        Ts = Json.Now(),
-    };
+        // 실제 서버(v1.4.1)와 같은 모양: 팔레트 인식·집기만 step으로, 벨트 위 공정은 stations로 보냄
+        // (가짜는 건전지를 하나씩 처리하므로 공정에 퍽이 하나뿐)
+        var onBelt = _step is "inspect" or "measure" or "home" or "sort";
+        var station = _step == "home" ? "sort" : _step;
+        var step = _mode is "running" or "paused" ? (onBelt ? (_mode == "paused" ? "paused" : "running") : _step) : null;
+        return new LineStatus
+        {
+            RunId = _runId,
+            Mode = _mode,
+            Step = step,
+            BatteryId = _batteryId == 0 ? null : _batteryId,
+            OnBelt = onBelt && _batteryId > 0 ? new List<int> { _batteryId } : new List<int>(),
+            Stations = onBelt && _batteryId > 0 && station != null
+                ? new Dictionary<string, List<int>> { [station] = new List<int> { _batteryId } }
+                : new Dictionary<string, List<int>>(),
+            Counts = new Dictionary<string, int>(_counts),
+            Agv = new AgvInfo { Loaded = _agvLoaded, Batch = AgvBatch, State = AgvCycle[_agvCycleIndex] },
+            Message = _message,
+            Ts = Json.Now(),
+        };
+    }
 
     private Dictionary<string, DeviceInfo> MakeDevices()
     {
@@ -277,13 +289,11 @@ public sealed class FakeLineClient : LineClientBase
             var info = new DeviceInfo
             {
                 Name = name,
-                State = _delayLeft.ContainsKey(name) ? "delayed" : "ok",
+                State = _delayLeft.ContainsKey(name) ? "warn" : "ok",   // central_server.py와 같은 값 (ok / warn / offline)
             };
-            if (name == "pi")
+            if (name == "arm1")
             {
-                info.Extra["gripper"] = _batteryId >= 7 ? "weak" : "normal";   // 시험용: 뒤쪽에서 집게 약해짐
-                info.Extra["arm"] = _mode == "estop" ? "stopped" : "ok";
-                info.Extra["arduino"] = "ok";
+                info.Extra["arm"] = _mode == "estop" ? "stopped" : "ok";   // hb/arm1에는 arm만 있음 (규약 v1.4 3-1)
             }
             devices[name] = info;
         }

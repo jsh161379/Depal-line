@@ -10,7 +10,7 @@ namespace DepalAdmin.Feature.Process;
 
 /// <summary>
 /// 담당: 김초아 — 라인 현황: 공정 흐름도, 분류 개수·현재 상태, AGV.
-/// 받는 것: server/line (mode · step · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
+/// 받는 것: server/line (mode · step · stations · counts · agv), server/events 중 장치가 agv인 것(AGV 기록)
 /// 이 화면에 끼워 들어오는 남의 패널:
 ///   가운데 팔레트 맵 — 김하균 (PanelSlots.LinePallet)
 ///   오른쪽 조작 버튼 — 유동호 (PanelSlots.LineControls)
@@ -20,8 +20,10 @@ public partial class ProcessViewModel : ObservableObject
     private const int AgvLogMax = 30;
 
     /// <summary>
-    /// 공정 순서. Step은 server/line의 step 값 (통신 규약 5장).
-    /// TODO(김초아): 실제 라인 배치를 보고 이름·설명·순서를 맞추기
+    /// 공정 순서. Key가 켜지는 기준 (통신 규약 v1.4.1):
+    ///   scan · pick           → server/line의 step 값
+    ///   inspect · measure · sort → server/line의 stations (그 공정에 퍽이 있으면 켜짐, 퍽 번호 표시)
+    ///   agv                   → agv.state가 home이 아니면 켜짐 (운송 중)
     /// </summary>
     public ObservableCollection<Station> Stations { get; } = new()
     {
@@ -29,9 +31,8 @@ public partial class ProcessViewModel : ObservableObject
         new Station("로봇팔", "집기", "pick"),
         new Station("검사 부스", "외관·극 방향", "inspect"),
         new Station("측정", "전압·내부저항", "measure"),
-        new Station("컨베이어", "원점 복귀", "home"),
         new Station("분류", "분류함에 넣기", "sort"),
-        new Station("AGV", "A 운송 대기", "wait_agv", isLast: true),
+        new Station("AGV", "A 운송", "agv", isLast: true),
     };
 
     public ObservableCollection<LineEvent> AgvLog { get; } = new();
@@ -86,9 +87,27 @@ public partial class ProcessViewModel : ObservableObject
         RunId = s.RunId ?? "-";
         ServerMessage = s.Message;
 
-        // 일시정지·작업자 대기 중에도 멈춘 공정이 보이도록 running/paused 둘 다 표시
-        var activeStep = s.Mode is "running" or "paused" ? s.Step : null;
-        foreach (var st in Stations) st.IsActive = st.Step == activeStep;
+        // 일시정지·벨트 비우는 중에도 멈춘 공정이 보이도록 running/paused/draining 모두 표시
+        var activeStep = s.Mode is "running" or "paused" or "draining" ? s.Step : null;
+        foreach (var st in Stations)
+        {
+            switch (st.Key)
+            {
+                case "scan":
+                case "pick":
+                    st.IsActive = st.Key == activeStep;
+                    st.Pucks = "";
+                    break;
+                case "agv":
+                    st.IsActive = s.Agv != null && s.Agv.State != "home";
+                    st.Pucks = "";
+                    break;
+                default:   // inspect · measure · sort — 퍽이 있는 공정은 모두 켬 (여러 칸 동시에 켜질 수 있음)
+                    st.IsActive = s.HasStation(st.Key);
+                    st.Pucks = st.IsActive ? string.Join(" ", s.Stations[st.Key].Select(n => $"#{n}")) : "";
+                    break;
+            }
+        }
 
         CountA = s.Count("A");
         CountB = s.Count("B");
@@ -110,18 +129,23 @@ public partial class ProcessViewModel : ObservableObject
 /// <summary>공정 흐름도의 한 칸</summary>
 public partial class Station : ObservableObject
 {
-    public Station(string title, string sub, string step, bool isLast = false)
+    public Station(string title, string sub, string key, bool isLast = false)
     {
         Title = title;
         Sub = sub;
-        Step = step;
+        Key = key;
         IsLast = isLast;
     }
 
     public string Title { get; }
     public string Sub { get; }
-    public string Step { get; }
+
+    /// <summary>scan · pick · inspect · measure · sort · agv</summary>
+    public string Key { get; }
     public bool IsLast { get; }
 
     [ObservableProperty] private bool _isActive;
+
+    /// <summary>지금 이 공정에 있는 퍽 번호 (예: "#3 #4"). 없으면 빈 글자</summary>
+    [ObservableProperty] private string _pucks = "";
 }

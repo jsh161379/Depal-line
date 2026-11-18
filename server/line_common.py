@@ -1,7 +1,7 @@
 """
 공통 모듈 - 라인 컨트롤러·가짜 장치·명령 도구가 함께 씀
 =========================================================
-이 파일은 line_controller.py, fake_pi.py, fake_yolo.py, line_cmd.py 와 같은 폴더에 둘 것.
+이 파일은 line_controller.py, fake_arm1.py, fake_yolo.py, line_cmd.py 와 같은 폴더에 둘 것.
 직접 실행하는 파일이 아님.
 
 필요한 것: Python 3.11 이상,  pip install "aiomqtt>=2" pydantic

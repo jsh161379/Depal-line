@@ -2,8 +2,8 @@
 중앙 서버 1단계 - 하트비트 감시 (v2: DB 담당과 형식 맞춤)
 =========================================================
 하는 일
-  1) 장치(pi, yolo, agv)가 1초마다 보내는 하트비트(hb/<장치>)를 받아 정상/지연/끊김 판정
-  2) 서버도 1초마다 hb/server 를 보냄 (라파는 이게 끊기면 컨베이어를 멈춤 - 하드웨어 팀원과 약속)
+  1) 장치(arm1, mega, yolo, agv)가 1초마다 보내는 하트비트(hb/<장치>)를 받아 정상/지연/끊김 판정
+  2) 서버도 1초마다 hb/server 를 보냄 (Mega는 이게 끊기면 벨트를 멈춤 - 하드웨어 팀원과 약속)
   3) MQTT 유언 메시지(LWT, status/<장치>)로 연결 끊김을 바로 알아챔
   4) 상태가 바뀔 때만 server/events 로 이벤트 발행 (DB 저장 프로그램이 구독해 MySQL에 저장)
   5) 화면 프로그램(WPF)용으로 server/devices(현재 상태, retained) 발행
@@ -24,7 +24,7 @@ v2에서 바뀐 점
 BROKER_HOST = "127.0.0.1"        # 브로커(Mosquitto)가 서버와 같은 PC면 그대로
 BROKER_PORT = 1883
 SERVER_NAME = "server"
-EXPECTED_DEVICES = ["pi", "mega", "yolo", "agv"]   # 서버가 기다리는 장치 이름
+EXPECTED_DEVICES = ["arm1", "mega", "yolo", "agv"]   # 서버가 기다리는 장치 이름
 
 HB_INTERVAL_SEC = 1.0            # 서버 하트비트 보내는 간격
 WARN_AFTER_SEC = 3.0             # 이 시간 동안 하트비트 없으면 '지연'  (임시값)

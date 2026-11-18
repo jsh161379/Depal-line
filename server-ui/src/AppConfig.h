@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 namespace AppConfig {
 
@@ -27,5 +28,10 @@ inline const QString kMqttClientPrefix = QStringLiteral("server-ui-");   // 뒤�
 constexpr double kHbWarnSec = 3.0;
 constexpr double kHbOfflineSec = 5.0;
 constexpr int kMaxMessages = 5000;        // 메시지 탭이 기억하는 최대 개수 (넘으면 오래된 것부터 버림)
+
+// 남은 기록 탭: "예전 이름 고르기"가 고르는 토픽 (끝이 *이면 앞부분이 같은 것 모두)
+//  통신 규약 v1.4: 로봇팔 1 pi → arm1, 관리자 화면 ui-<PC이름> → admin-<번호>
+inline const QStringList kOldRetainedTopics = {QStringLiteral("status/pi"), QStringLiteral("status/ui"),
+                                               QStringLiteral("status/ui-*")};
 
 }  // namespace AppConfig

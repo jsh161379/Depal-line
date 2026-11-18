@@ -1,0 +1,15 @@
+﻿{
+  // true: 가짜 주문(30초마다)과 가짜 라인 메시지가 들어온다 (브로커 없이 화면 만들 때)
+  // false: 서버 PC Mosquitto에 붙어 홈페이지 주문과 라인 메시지(chat/messages)를 받는다
+  "UseFakeOrders": false,
+
+  "MqttHost": "127.0.0.1",
+  "MqttPort": 1883,
+  "MqttClientId": "order_admin",
+  "MqttUser": null,
+  "MqttPassword": null,
+
+  "Operator": "관리자",
+  "PlaySound": true,
+  "LowStockPacks": 5
+}

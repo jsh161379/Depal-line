@@ -88,9 +88,9 @@ def main():
 
     # 장면 3: 하트비트 1개 빠짐 감지 (seq)
     scene(3, "하트비트 1개 빠짐 감지")
-    p = run("fake_device.py", "pi", "--skip", str(SKIP_SEQ))
-    wait(SKIP_SEQ + 2, "pi 동작 중")
-    capture("final_03_hb_missing.png", "모니터에서 'pi 하트비트 1개 빠짐 (seq … → …)' 노란 줄이 보이게")
+    p = run("fake_device.py", "arm1", "--skip", str(SKIP_SEQ))
+    wait(SKIP_SEQ + 2, "arm1 동작 중")
+    capture("final_03_hb_missing.png", "모니터에서 'arm1 하트비트 1개 빠짐 (seq … → …)' 노란 줄이 보이게")
     stop(p)
 
     # 장면 4: 결과 7건

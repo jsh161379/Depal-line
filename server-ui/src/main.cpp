@@ -74,6 +74,11 @@ QLineEdit:focus { border-color: #007ACC; }
 QPushButton { background: #333337; border: 1px solid #3F3F46; padding: 2px 10px; }
 QPushButton:hover { background: #3E3E40; }
 QPushButton:checked { background: #264F78; border-color: #007ACC; }
+QPushButton:disabled { color: #7A7A7A; }
+QTableView::indicator { width: 12px; height: 12px; border: 1px solid #A0A0A0; background: #1E1E1E; }
+QTableView::indicator:checked { background: #007ACC; border-color: #4FA3E3; }
+QPushButton#danger:enabled { background: #5A1D1D; border-color: #8B3A3A; }
+QPushButton#danger:enabled:hover { background: #6E2424; }
 QStatusBar { background: #007ACC; color: #FFFFFF; }
 QStatusBar QLabel { color: #FFFFFF; padding: 0 8px; border-right: 1px solid rgba(255,255,255,70); }
 QStatusBar::item { border: none; }

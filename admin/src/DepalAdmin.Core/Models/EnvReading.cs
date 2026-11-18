@@ -1,6 +1,6 @@
 namespace DepalAdmin.Core.Models;
 
-/// <summary>sensor/env — 환경 센서 1묶음. 메시지_형식 v1.3.1 5장. 라파가 주기 발행 (기본 5초)</summary>
+/// <summary>sensor/env — 환경 센서 1묶음. 메시지_형식 v1.3.1 5장. Mega 중계 프로그램이 주기 발행 (기본 5초)</summary>
 public sealed class EnvReading
 {
     public string ReadingId { get; set; } = "";

@@ -6,6 +6,7 @@
 #include "MqttLite.h"
 #include "PortProbe.h"
 #include "ProgramsPage.h"
+#include "RetainedPage.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -44,6 +45,8 @@ MainWindow::MainWindow(QWidget *parent)
     m_tabs->addTab(m_programs, QStringLiteral("프로그램"));
     m_tabs->addTab(new DevicesPage(m_mqtt, this), QStringLiteral("장치 접속"));
     m_tabs->addTab(new MessagesPage(m_mqtt, this), QStringLiteral("메시지"));
+    auto *retained = new RetainedPage(m_mqtt, this);
+    m_tabs->addTab(retained, QStringLiteral("남은 기록"));
     setCentralWidget(m_tabs);
     buildToolBar();
     buildStatusBar();
@@ -51,6 +54,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_runner, &RunnerClient::statusChanged, this, &MainWindow::onStatus);
     connect(m_runner, &RunnerClient::message, this, &MainWindow::onMessage);
     connect(m_programs, &ProgramsPage::notice, this, &MainWindow::onMessage);
+    connect(retained, &RetainedPage::notice, this, &MainWindow::onMessage);
     connect(m_programs, &ProgramsPage::selectionChanged, this, &MainWindow::updateActions);
     connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::updateActions);
     connect(m_mqtt, &MqttLite::connectedChanged, this, [this](bool on, const QString &reason) {
@@ -95,7 +99,7 @@ void MainWindow::buildToolBar()
     bar->addWidget(spacer);
     m_withFake = new QCheckBox(QStringLiteral("가짜 장치 포함  "), bar);
     m_withFake->setChecked(true);
-    m_withFake->setToolTip(QStringLiteral("끄면 가짜 라파·가짜 YOLO 없이 켭니다 (실제 장치를 붙일 때)"));
+    m_withFake->setToolTip(QStringLiteral("끄면 가짜 로봇팔·가짜 YOLO 없이 켭니다 (실제 장치를 붙일 때)"));
     bar->addWidget(m_withFake);
 
     connect(m_startAll, &QAction::triggered, this, &MainWindow::startAll);

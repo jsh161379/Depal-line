@@ -1,16 +1,16 @@
 """
-가짜 장치 - 라즈베리파이·YOLO·AGV 중계 프로그램 대신 하트비트를 보내는 시험용 프로그램
+가짜 장치 - 로봇팔 1·YOLO·AGV 중계 프로그램 대신 하트비트를 보내는 시험용 프로그램
 =================================================================================
 실제 장치 없이 중앙 서버의 하트비트 감시를 시험할 때 사용합니다.
-라파 담당 팀원에게는 "하트비트를 이렇게 보내고, 서버 하트비트가 끊기면 이렇게 반응하면 된다"는 예제가 됩니다.
+로봇팔 담당 팀원에게는 "하트비트를 이렇게 보내고, 서버 하트비트가 끊기면 이렇게 반응하면 된다"는 예제가 됩니다.
 
 필요한 것: Python 3.11 이상,  pip install "aiomqtt>=2"
 
 사용법 (터미널을 장치마다 하나씩 열어서 실행)
-  python fake_device.py pi                  정상 동작
+  python fake_device.py arm1                 정상 동작
   python fake_device.py yolo --freeze 10    10초 뒤 하트비트만 멈춤 (연결은 유지)  → 서버: 지연 → 끊김
   python fake_device.py agv --crash 10      10초 뒤 강제 종료                       → 서버: LWT로 바로 끊김
-  python fake_device.py pi --skip 15        15번째 하트비트를 일부러 빼먹음        → 서버: "1개 빠짐" 경고
+  python fake_device.py arm1 --skip 15       15번째 하트비트를 일부러 빼먹음        → 서버: "1개 빠짐" 경고
   Ctrl+C                                    정상 종료 (offline을 직접 알리고 끝냄)
 """
 
@@ -50,14 +50,14 @@ async def send_heartbeat(client: aiomqtt.Client, args):
             print(f"[{args.name}] seq {seq} 일부러 건너뜀", flush=True)
         else:
             body = {"device": args.name, "seq": seq, "ts": time.time(), "state": "run"}
-            if args.name == "pi":
+            if args.name == "arm1":
                 body["gripper"] = "normal"     # 추가 정보 예시 (집게 상태)
             await client.publish(f"hb/{args.name}", json.dumps(body), qos=0)
         await asyncio.sleep(HB_INTERVAL_SEC)
 
 
 async def watch_server(client: aiomqtt.Client, name: str):
-    """서버 하트비트 감시. 실제 라파라면 끊겼을 때 컨베이어를 멈춰야 함."""
+    """서버 하트비트 감시. 실제 장치라면 끊겼을 때 컨베이어를 멈춰야 함."""
     last = time.monotonic()
     server_ok = None
 
@@ -74,7 +74,7 @@ async def watch_server(client: aiomqtt.Client, name: str):
                 if ok:
                     print(f"[{name}] 서버 하트비트 정상", flush=True)
                 else:
-                    print(f"[{name}] 서버 하트비트 끊김! → (실제 라파라면 여기서 컨베이어 정지)", flush=True)
+                    print(f"[{name}] 서버 하트비트 끊김! → (실제 장치라면 여기서 컨베이어 정지)", flush=True)
                 server_ok = ok
             await asyncio.sleep(0.5)
 
@@ -103,7 +103,7 @@ async def main(args):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="하트비트 시험용 가짜 장치")
-    p.add_argument("name", help="장치 이름 (pi, yolo, agv 등)")
+    p.add_argument("name", help="장치 이름 (arm1, yolo, agv 등)")
     p.add_argument("--freeze", type=float, default=0, help="N초 뒤 하트비트만 멈춤")
     p.add_argument("--crash", type=float, default=0, help="N초 뒤 강제 종료")
     p.add_argument("--skip", type=int, default=0, help="N번째 하트비트를 건너뜀")

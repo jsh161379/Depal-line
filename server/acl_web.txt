@@ -1,0 +1,9 @@
+# 9001(홈페이지) 포트에만 적용. 주문 통신 규약 1-2
+user web
+topic write order/new
+topic read  order/ack
+topic read  order/status/#
+topic write order/cancel
+topic write inquiry/new
+topic read  inquiry/ack
+topic read  inquiry/answer/#

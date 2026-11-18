@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using DepalAdmin.Core.Auth;
 using DepalAdmin.Core.Messaging;
 using DepalAdmin.Core.Models;
 using DepalAdmin.Core.Settings;
@@ -34,7 +35,7 @@ public sealed class MqttLineClient : LineClientBase
     };
 
     private readonly AppSettings _settings;
-    private readonly string _name;          // 접속 이름 = 하트비트·status 토픽 이름 (예: ui, ui-desktop-abc)
+    private readonly string _name;          // 접속 이름 = 하트비트·status 토픽 이름 (예: admin-01 — 규약 v1.4)
     private readonly string _statusTopic;
     private readonly MqttFactory _factory = new();
     private readonly IMqttClient _client;
@@ -42,10 +43,12 @@ public sealed class MqttLineClient : LineClientBase
     private Task? _loop;
     private Task? _heartbeat;
     private long _hbSeq;
+    private readonly Session? _session;     // 하트비트에 로그인한 사람 이름을 싣기 위해
 
-    public MqttLineClient(AppSettings settings)
+    public MqttLineClient(AppSettings settings, Session? session = null)
     {
         _settings = settings;
+        _session = session;
         _name = settings.EffectiveClientId;
         _statusTopic = Topics.StatusPrefix + _name;
         _client = _factory.CreateMqttClient();
@@ -128,7 +131,9 @@ public sealed class MqttLineClient : LineClientBase
     }
 
     /// <summary>
-    /// hb/<접속 이름> 발행: {"device":"ui","seq":1,"ts":1794191234.5,"state":"run"}
+    /// hb/<접속 이름> 발행: {"device":"admin-01","seq":1,"ts":1794191234.5,"state":"run","user":"조시현"}
+    /// user = 로그인한 사람 이름 (로그인 전 null). 서버가 server/devices의 info에 실어 주므로
+    /// 모니터·서버 UI·다른 관리자 화면에 "관리자 화면 1 (조시현)"처럼 보인다 (규약 v1.4).
     /// ts는 유닉스 시각(초, 소수) — 다른 장치 하트비트와 같은 형식. seq는 프로그램을 켤 때마다 1부터.
     /// </summary>
     private async Task HeartbeatLoopAsync(CancellationToken ct)
@@ -145,6 +150,7 @@ public sealed class MqttLineClient : LineClientBase
                         seq = ++_hbSeq,
                         ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
                         state = "run",
+                        user = _session is { IsLoggedIn: true } ? _session.UserName : null,
                     });
                     var message = new MqttApplicationMessageBuilder()
                         .WithTopic(Topics.HeartbeatPrefix + _name)

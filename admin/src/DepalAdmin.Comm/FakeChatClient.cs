@@ -7,7 +7,7 @@ namespace DepalAdmin.Comm;
 /// <summary>
 /// 브로커 없이 채팅 화면을 만들 수 있게 하는 가짜.
 ///   - 내가 보낸 메시지는 바로 되돌려 준다 (실제 MQTT처럼)
-///   - 가끔 '현장 작업자(가짜)'가 말을 건다
+///   - 가끔 '현장 작업자(가짜)'가 말을 건다. 절반은 마지막으로 말한 사람을 @로 부른다 (멘션 시험용)
 /// </summary>
 public sealed class FakeChatClient : IChatClient
 {
@@ -26,19 +26,29 @@ public sealed class FakeChatClient : IChatClient
 
     private readonly Random _rnd = new();
     private readonly DispatcherTimer _timer = new();
+    private ChatMention? _lastSpeaker;   // 가짜 작업자가 부를 사람
 
     public event EventHandler<ChatMessage>? MessageReceived;
 
     public FakeChatClient()
     {
         _timer.Interval = BotEvery;
-        _timer.Tick += (_, _) => Raise(new ChatMessage
+        _timer.Tick += (_, _) =>
         {
-            FromId = "worker",
-            FromName = "현장 작업자 (가짜)",
-            Station = "MAIN-01",
-            Text = BotLines[_rnd.Next(BotLines.Length)],
-        });
+            var msg = new ChatMessage
+            {
+                FromId = "worker",
+                FromName = "현장작업자",
+                Station = "MAIN-01",
+                Text = BotLines[_rnd.Next(BotLines.Length)],
+            };
+            if (_lastSpeaker != null && _rnd.Next(2) == 0)
+            {
+                msg.Text = $"@{_lastSpeaker.Name} {msg.Text}";
+                msg.Mentions.Add(_lastSpeaker);
+            }
+            Raise(msg);
+        };
     }
 
     public Task StartAsync(CancellationToken ct = default)
@@ -55,6 +65,7 @@ public sealed class FakeChatClient : IChatClient
 
     public Task SendAsync(ChatMessage message, CancellationToken ct = default)
     {
+        _lastSpeaker = new ChatMention { Id = message.FromId, Name = message.FromName };
         Raise(message);
         return Task.CompletedTask;
     }

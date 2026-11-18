@@ -124,16 +124,7 @@ void MqttLite::handlePacket(quint8 header, const QByteArray &body)
             onSocketClosed(QStringLiteral("브로커가 연결을 거부함 (코드 %1)").arg(code));
             return;
         }
-        // 구독: 패킷 ID + (토픽, 원하는 QoS) 목록. QoS 1로 받으면 브로커가 보낸 QoS가 그대로 보임
-        QByteArray sub;
-        const quint16 id = m_nextPacketId++;
-        sub += char(id >> 8);
-        sub += char(id & 0xFF);
-        for (const auto &t : m_topics) {
-            sub += encodeString(t);
-            sub += char(1);
-        }
-        send(SUBSCRIBE, sub);
+        sendSubscribe();
         m_pingTimer->start();
         m_connected = true;
         emit connectedChanged(true, QString());
@@ -166,12 +157,61 @@ void MqttLite::handlePacket(quint8 header, const QByteArray &body)
         emit messageReceived(msg);
         break;
     }
+    case PUBACK:
+        if (body.size() >= 2)
+            emit published(quint16((quint8(body[0]) << 8) | quint8(body[1])));
+        break;
     case SUBACK:
     case PINGRESP:
         break;
     default:
         break;
     }
+}
+
+void MqttLite::sendSubscribe()
+{
+    // 구독: 패킷 ID + (토픽, 원하는 QoS) 목록. QoS 1로 받으면 브로커가 보낸 QoS가 그대로 보임
+    QByteArray sub;
+    const quint16 id = nextPacketId();
+    sub += char(id >> 8);
+    sub += char(id & 0xFF);
+    for (const auto &t : m_topics) {
+        sub += encodeString(t);
+        sub += char(1);
+    }
+    send(SUBSCRIBE, sub);
+}
+
+void MqttLite::resubscribe()
+{
+    if (m_connected)
+        sendSubscribe();
+}
+
+quint16 MqttLite::publish(const QString &topic, const QByteArray &payload, int qos, bool retain)
+{
+    if (!m_connected)
+        return 0;
+    // 첫 바이트: PUBLISH(0x30) + QoS(bit1~2) + RETAIN(bit0)
+    const quint8 header = PUBLISH | quint8((qos & 0x03) << 1) | (retain ? 0x01 : 0x00);
+    QByteArray body = encodeString(topic);
+    quint16 id = 0;
+    if (qos > 0) {
+        id = nextPacketId();
+        body += char(id >> 8);
+        body += char(id & 0xFF);
+    }
+    body += payload;
+    send(header, body);
+    return qos > 0 ? id : 0;
+}
+
+quint16 MqttLite::nextPacketId()
+{
+    if (m_nextPacketId == 0)      // 패킷 ID 0은 쓰면 안 됨 (규칙)
+        m_nextPacketId = 1;
+    return m_nextPacketId++;
 }
 
 void MqttLite::send(quint8 header, const QByteArray &body)

@@ -15,7 +15,7 @@
   sensor/env   MQ-9 가스(원시값), DHT11 온도·습도 (5초마다)
 
 벨트 흉내
-  - 로봇팔 1이 퍽을 올리면(cmd/pi pick → res/pi done) 벨트 시작점에 퍽이 생김. 퍽에는 번호가 없음 (실제와 같음)
+  - 로봇팔 1이 퍽을 올리면(cmd/arm1 pick → res/arm1 done) 벨트 시작점에 퍽이 생김. 퍽에는 번호가 없음 (실제와 같음)
   - 측정 자리에 오면 계획 줄 맨 앞 계획을 가져감. 계획이 없으면 벨트를 멈추고 WAIT_PLAN
   - MEASURE: 벨트를 멈추고 측정 → MEASURED → route를 기다림 (접촉 불량·측정 실패면 1번 다시 측정)
   - 재분류함(RESORT_BOX)으로 갈 퍽은 측정 자리 바로 뒤 서보가 쳐냄 → DIVERTED
@@ -89,7 +89,7 @@ class FakeMega:
         self.drain: asyncio.Future | None = None
         self.route_wait: dict | None = None  # {"no", "fut"}
         self.plan_arrived = asyncio.Event()
-        self.pick_cmds: dict[str, int] = {}  # cmd/pi pick의 cmd_id → battery_id (로봇팔 1이 올리는 순간을 알기 위함)
+        self.pick_cmds: dict[str, int] = {}  # cmd/arm1 pick의 cmd_id → battery_id (로봇팔 1이 올리는 순간을 알기 위함)
         self.arm2_busy = False
 
     # ---------- 발행 ----------
@@ -297,9 +297,9 @@ class FakeMega:
 
     def on_pi(self, topic, msg):
         """로봇팔 1이 퍽을 올린 순간 → 벨트 시작점에 퍽 생김"""
-        if topic == "cmd/pi" and msg.get("action") == "pick":
+        if topic == "cmd/arm1" and msg.get("action") == "pick":
             self.pick_cmds[msg.get("cmd_id")] = msg.get("battery_id")
-        elif topic == "res/pi" and msg.get("status") == "done" and msg.get("cmd_id") in self.pick_cmds:
+        elif topic == "res/arm1" and msg.get("status") == "done" and msg.get("cmd_id") in self.pick_cmds:
             self.pick_cmds.pop(msg["cmd_id"])
             if not self.estop:
                 self.pucks.append({"pos": 0.0, "stage": "before", "no": None, "to": None})
@@ -354,7 +354,7 @@ class FakeMega:
                 continue
             if topic == f"cmd/{NAME}":
                 asyncio.create_task(self.on_cmd(msg))
-            elif topic in ("cmd/pi", "res/pi"):
+            elif topic in ("cmd/arm1", "res/arm1"):
                 self.on_pi(topic, msg)
 
     async def run(self):
@@ -363,7 +363,7 @@ class FakeMega:
         async with aiomqtt.Client(BROKER_HOST, BROKER_PORT, identifier=NAME, keepalive=5, will=will) as c:
             self.client = c
             await c.publish(status_topic, "online", qos=1, retain=True)
-            for t, q in ((f"cmd/{NAME}", 1), ("cmd/pi", 1), ("res/pi", 1), ("hb/server", 0)):
+            for t, q in ((f"cmd/{NAME}", 1), ("cmd/arm1", 1), ("res/arm1", 1), ("hb/server", 0)):
                 await c.subscribe(t, qos=q)
             log(f"브로커 연결됨 ({BROKER_HOST}:{BROKER_PORT}), 명령 기다리는 중")
             seen = {"t": time.monotonic()}

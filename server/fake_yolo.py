@@ -2,7 +2,7 @@
 가짜 YOLO - 라인 컨트롤러 시험용 (통신 규약 v1.2, 3-2)
 ======================================================
 실제 YOLO 프로그램 대신 아래 두 가지를 합니다. YOLO 담당은 "이 형식으로 보내면 된다"는 예제로 보면 됩니다.
-  - cmd/yolo scan_pallet: 건전지가 있는 칸 목록. 로봇팔 1이 집어 간 칸(cmd/pi pick)은 목록에서 빠짐
+  - cmd/yolo scan_pallet: 건전지가 있는 칸 목록. 로봇팔 1이 집어 간 칸(cmd/arm1 pick)은 목록에서 빠짐
     회차가 끝나 팔레트가 빈 뒤 start가 오면 새 팔레트를 올린 것처럼 다시 채움
   - vision/result: 퍽이 촬영 부스를 지나면 결과를 스스로 보냄 (명령 없음)
       외관 normal / defect(+ defects 목록: scratch, dent, sticker, leak), 카메라 front·back·top
@@ -44,7 +44,7 @@ async def amain(args):
     rnd = random.Random(args.seed)
     all_cells = [(r, c) for r in range(PALLET_ROWS) for c in range(PALLET_COLS)]
     pallet = set()
-    pick_cmds: dict[str, int] = {}          # cmd/pi pick의 cmd_id → battery_id
+    pick_cmds: dict[str, int] = {}          # cmd/arm1 pick의 cmd_id → battery_id
     out = {"client": None, "seq": 0}
 
     def refill():
@@ -90,13 +90,13 @@ async def amain(args):
             return
         if not isinstance(msg, dict):
             return
-        if topic == "cmd/pi" and msg.get("action") == "pick":
+        if topic == "cmd/arm1" and msg.get("action") == "pick":
             pallet.discard(tuple((msg.get("params") or {}).get("cell", ())))
             pick_cmds[msg.get("cmd_id")] = msg.get("battery_id")
-        elif topic == "res/pi" and msg.get("status") == "done" and msg.get("cmd_id") in pick_cmds:
+        elif topic == "res/arm1" and msg.get("status") == "done" and msg.get("cmd_id") in pick_cmds:
             pick_cmds.pop(msg["cmd_id"])
             asyncio.get_running_loop().create_task(send_later())     # 퍽이 벨트에 올라감 → 곧 부스 통과
-        elif topic == "res/pi" and msg.get("status") in ("failed", "rejected"):
+        elif topic == "res/arm1" and msg.get("status") in ("failed", "rejected"):
             pick_cmds.pop(msg.get("cmd_id"), None)
         elif topic == "ui/cmd" and msg.get("action") == "start" and not pallet:
             refill()
@@ -114,7 +114,7 @@ async def amain(args):
         return "rejected", {}, f"unknown action {action}"
 
     await run_device("yolo", handler, host=BROKER_HOST, port=BROKER_PORT,
-                     extra_topics=("cmd/pi", "res/pi", "ui/cmd"), on_extra=on_extra,
+                     extra_topics=("cmd/arm1", "res/arm1", "ui/cmd"), on_extra=on_extra,
                      extra_tasks=(keep_client,), log=lambda s: print(s, flush=True))
 
 

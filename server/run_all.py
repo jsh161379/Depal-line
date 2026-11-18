@@ -5,13 +5,17 @@ run_all.py - 서버 쪽 프로그램을 한 번에 켜고 끄는 실행기
   창 없이 켜기  : start_all.vbs 더블클릭   (상태는 관리자 프로그램에서 확인)
   끄기          : stop_all.bat 더블클릭    (어느 쪽으로 켰든 끔)
 
-켜는 순서: 브로커 → 중앙 서버 → 라인 컨트롤러 → DB 저장 → 가짜 라파·가짜 Mega·가짜 YOLO
+켜는 순서: 브로커 → 중앙 서버 → 라인 컨트롤러 → DB 저장 → 가짜 로봇팔·가짜 Mega·가짜 YOLO·가짜 AGV
 각 프로그램의 출력은 창 대신 logs\<이름>.log 에 저장된다 (지난번 것은 <이름>.prev.log).
 
 옵션
-  --no-fake     가짜 라파·가짜 Mega·가짜 YOLO를 켜지 않음 (실제 장치를 붙일 때)
+  --no-fake     가짜 로봇팔·가짜 Mega·가짜 YOLO·가짜 AGV를 켜지 않음 (실제 장치를 붙일 때)
+  --no-fake-agv 가짜 AGV만 켜지 않음 (실제 AGV 중계를 붙일 때는 --agv와 함께)
+  --agv         컨트롤러가 AGV에 go/return 명령을 보냄 (가짜 AGV를 켜면 자동으로 붙음)
   --no-db       DB 저장 프로그램을 켜지 않음 (MySQL 없이 라인만 볼 때)
   --estop-test  가짜 Mega가 40초 뒤 비상정지 버튼을 누름
+  --yolo        가짜 YOLO 대신 실제 YOLO 프로그램(..\yolo\yolo_vision.py)을 켬. 카메라·모델은 그 파일 맨 위 CAMERAS
+  --yolo-fake   가짜 YOLO 대신 yolo_vision.py --fake (카메라 없이 실제 프로그램의 합치기·전송을 시험)
   --hidden      창 없이 실행 (start_all.vbs가 붙임)
   --stop        실행 중인 실행기를 끔 (stop_all.bat가 붙임)
 
@@ -297,9 +301,13 @@ def handle_request(progs):
 def main():
     global _main_log, _hidden
     ap = argparse.ArgumentParser(description="서버 쪽 프로그램을 한 번에 켜고 끄는 실행기")
-    ap.add_argument("--no-fake", action="store_true", help="가짜 라파·가짜 Mega·가짜 YOLO를 켜지 않음")
+    ap.add_argument("--no-fake", action="store_true", help="가짜 로봇팔·가짜 Mega·가짜 YOLO·가짜 AGV를 켜지 않음")
+    ap.add_argument("--no-fake-agv", action="store_true", help="가짜 AGV만 켜지 않음")
+    ap.add_argument("--agv", action="store_true", help="컨트롤러가 AGV에 명령을 보냄 (실제 AGV 중계용)")
     ap.add_argument("--no-db", action="store_true", help="DB 저장 프로그램을 켜지 않음")
     ap.add_argument("--estop-test", action="store_true", help=f"가짜 Mega가 {ESTOP_TEST_AT_SEC}초 뒤 비상정지")
+    ap.add_argument("--yolo", action="store_true", help="가짜 YOLO 대신 yolo_vision.py (실제 카메라·모델)")
+    ap.add_argument("--yolo-fake", action="store_true", help="가짜 YOLO 대신 yolo_vision.py --fake")
     ap.add_argument("--hidden", action="store_true", help="창 없이 실행")
     ap.add_argument("--stop", action="store_true", help="실행 중인 실행기를 끔")
     a = ap.parse_args()
@@ -345,7 +353,9 @@ def main():
     started = time.strftime("%Y-%m-%d %H:%M:%S")
     broker_external = False
     last_request = None
-    options = {"no_fake": a.no_fake, "no_db": a.no_db, "estop_test": a.estop_test}
+    fake_agv = not a.no_fake and not a.no_fake_agv
+    options = {"no_fake": a.no_fake, "no_db": a.no_db, "estop_test": a.estop_test,
+               "yolo": a.yolo, "yolo_fake": a.yolo_fake, "fake_agv": fake_agv, "agv": a.agv or fake_agv}
 
     def write_status(running=True):
         write_json_atomic(STATUS_FILE, {
@@ -375,13 +385,19 @@ def main():
 
         # 2) 서버 쪽 프로그램
         plan = [("server", ["central_server.py"], HERE),
-                ("controller", ["line_controller.py"], HERE)]
+                ("controller", ["line_controller.py"] + (["--agv"] if (a.agv or fake_agv) else []), HERE)]
         if not a.no_db:
             plan.append(("db_writer", ["mqtt_db_writer.py"], HERE / "db"))
         if not a.no_fake:
             mega_args = ["fake_mega.py"] + (["--estop-at", str(ESTOP_TEST_AT_SEC)] if a.estop_test else [])
-            plan += [("fake_pi", ["fake_pi.py"], HERE), ("fake_mega", mega_args, HERE),
-                     ("fake_yolo", ["fake_yolo.py"], HERE)]
+            plan += [("fake_arm1", ["fake_arm1.py"], HERE), ("fake_mega", mega_args, HERE)]
+            if not (a.yolo or a.yolo_fake):
+                plan.append(("fake_yolo", ["fake_yolo.py"], HERE))
+            if fake_agv:
+                plan.append(("fake_agv", ["fake_agv.py"], HERE))
+        if a.yolo or a.yolo_fake:
+            yolo_dir = HERE.parent / "yolo"
+            plan.append(("yolo", ["yolo_vision.py"] + (["--fake"] if a.yolo_fake else []), yolo_dir))
         for i, (name, args, cwd) in enumerate(plan):
             g = Prog(name, [py, *args], cwd, env)
             progs.append(g)

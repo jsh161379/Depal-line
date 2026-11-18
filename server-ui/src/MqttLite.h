@@ -1,7 +1,8 @@
-// MqttLite.h - 받기 전용 간단한 MQTT 3.1.1 클라이언트 (QTcpSocket으로 직접 구현)
+// MqttLite.h - 간단한 MQTT 3.1.1 클라이언트 (QTcpSocket으로 직접 구현)
 //  Qt 무료 버전에는 MQTT 모듈이 없어서, 서버 UI에 필요한 만큼만 만든다.
 //  하는 일: 연결(CONNECT) → 구독(SUBSCRIBE) → 메시지 받기(PUBLISH, QoS 1이면 PUBACK) → 연결 유지(PINGREQ)
-//  보내기(PUBLISH)는 하지 않는다. 연결이 끊기면 kReconnectMs 뒤 다시 연결한다.
+//  보내기: publish() — 남은 기록(retained) 지우기에 씀 (빈 내용 + retain = 브로커가 보관 기록을 지움)
+//  연결이 끊기면 kReconnectMs 뒤 다시 연결한다.
 //
 //  MQTT 패킷 모양 (모든 패킷 공통)
 //    [첫 바이트: 종류(위 4비트) + 플래그(아래 4비트)] [남은 길이: 1~4바이트 가변 길이] [나머지]
@@ -34,9 +35,16 @@ public:
     void start();
     bool isConnected() const { return m_connected; }
 
+    // 보내기 (QoS 0 또는 1). QoS 1이면 브로커가 받았을 때 published(packetId)가 옴. 연결이 없으면 0을 돌려줌
+    quint16 publish(const QString &topic, const QByteArray &payload, int qos, bool retain);
+
+    // 같은 구독을 다시 보냄 → 브로커가 남은 기록(retained)을 처음부터 다시 보내 줌 (MQTT 3.1.1 규칙)
+    void resubscribe();
+
 signals:
     void connectedChanged(bool connected, const QString &reason);
     void messageReceived(const MqttMessage &msg);
+    void published(quint16 packetId);
 
 private:
     void openSocket();
@@ -46,6 +54,8 @@ private:
     bool takePacket(quint8 &header, QByteArray &body);   // 버퍼에서 패킷 하나를 꺼냄 (덜 왔으면 false)
     void handlePacket(quint8 header, const QByteArray &body);
     void send(quint8 header, const QByteArray &body);
+    void sendSubscribe();
+    quint16 nextPacketId();
 
     static QByteArray encodeLength(int length);
     static QByteArray encodeString(const QString &text);

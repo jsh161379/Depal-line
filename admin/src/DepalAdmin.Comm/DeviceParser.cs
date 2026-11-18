@@ -7,11 +7,11 @@ namespace DepalAdmin.Comm;
 /// server/devices 해석.
 /// central_server.py가 실제로 보내는 형식 (2026-11-09 확인):
 ///   {"run_id": "...", "ts": "...",
-///    "devices": [{"name": "pi", "status": "ok", "age_sec": 0.4, "last_seq": 120,
-///                 "info": {"gripper": "normal", "arm": "ok", "arduino": "ok"}}, ...]}
+///    "devices": [{"name": "arm1", "status": "ok", "age_sec": 0.4, "last_seq": 120,
+///                 "info": {"arm": "ok"}}, ...]}
 ///   status 값: ok / warn / offline / unknown
 /// 장치 하트비트의 추가 정보(info 안의 값)는 Extra에 바로 넣는다 → Extra["gripper"] 처럼 꺼내 쓴다.
-/// 예전 형식 {"pi": {"state": "ok"}, "yolo": "ok"} 도 계속 받는다 (가짜 데이터·시험용).
+/// 예전 형식 {"arm1": {"state": "ok"}, "yolo": "ok"} 도 계속 받는다 (가짜 데이터·시험용).
 /// </summary>
 internal static class DeviceParser
 {

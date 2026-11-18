@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 담당: (미정) — F1 주문 (다른 탭을 만들 때 참고할 예시) -->
+  <ItemGroup>
+    <ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
+  </ItemGroup>
+</Project>

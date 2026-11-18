@@ -8,7 +8,7 @@ public static class Topics
     public const string ServerEvents = "server/events";
     public const string ServerResults = "server/results";
 
-    /// <summary>환경 센서 (아두이노 → 라파가 발행, 규약 v1.0 3-4)</summary>
+    /// <summary>환경 센서 (Mega → PC 중계 프로그램이 발행, 규약 v1.4 3-4)</summary>
     public const string SensorEnv = "sensor/env";
 
     public const string UiCmd = "ui/cmd";
@@ -18,7 +18,7 @@ public static class Topics
     /// <summary>하트비트 토픽 앞부분. 관리자 화면은 hb/<접속 이름> (통신 규약 1장)</summary>
     public const string HeartbeatPrefix = "hb/";
 
-    /// <summary>⚠ 통신 규약에 아직 없음 (채팅 상대 확정 후 추가)</summary>
+    /// <summary>채팅 — 관리자 프로그램끼리 단톡방 (통신 규약 v1.3 5-1)</summary>
     public const string ChatMessages = "chat/messages";
 }
 

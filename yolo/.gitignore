@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+## 판정 때 찍은 사진 (각자 PC에만)
+captures/
+## 학습 사진 원본
+raw/
+eval_결과/
