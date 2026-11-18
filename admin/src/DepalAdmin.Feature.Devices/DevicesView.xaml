@@ -60,8 +60,8 @@
             </ScrollViewer>
         </HeaderedContentControl>
 
-        <!-- 라즈베리파이 세부: 노원종 패널이 들어오는 자리 -->
-        <HeaderedContentControl Grid.Column="2" Header="라즈베리파이 세부" Style="{StaticResource Section}">
+        <!-- 로봇팔 1 세부: 노원종 패널이 들어오는 자리 -->
+        <HeaderedContentControl Grid.Column="2" Header="로봇팔 1 세부" Style="{StaticResource Section}">
             <ContentControl Content="{Binding PiPanel}" Focusable="False"/>
         </HeaderedContentControl>
     </Grid>
