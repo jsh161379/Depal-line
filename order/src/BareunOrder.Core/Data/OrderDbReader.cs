@@ -45,7 +45,7 @@ public static class OrderDbReader
         {
             cmd.CommandText =
                 "SELECT o.order_no, o.received_at, o.accepted_at, o.customer_name, o.customer_phone, " +
-                "o.shipping_address, o.memo, o.total_amount, o.order_status, o.courier, o.tracking_no " +
+                "o.shipping_address, o.memo, o.total_amount, o.order_status, o.courier, o.tracking_no, o.cert_no " +
                 $"FROM orders o WHERE {OrderWhere} ORDER BY o.received_at DESC";
             cmd.Parameters.AddWithValue("@days", days);
             await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -65,6 +65,7 @@ public static class OrderDbReader
                     Status = OrderStatusText.FromWire(r.GetString(8)),
                     Courier = r.IsDBNull(9) ? null : r.GetString(9),
                     Tracking = r.IsDBNull(10) ? null : r.GetString(10),
+                    CertNo = r.IsDBNull(11) ? null : r.GetString(11),
                     Items = items.TryGetValue(no, out var list) ? list : Array.Empty<OrderItem>(),
                 });
             }

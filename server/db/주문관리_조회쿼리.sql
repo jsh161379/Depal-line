@@ -55,17 +55,57 @@ FROM battery_cycles
 WHERE final_grade = 'A'
   AND finished_at >= CURDATE() AND finished_at < CURDATE() + INTERVAL 1 DAY;
 
--- [검사 성적서] 주문에 나간 회차들의 A 등급 측정 평균
--- (전압을 측정한 A 등급만 들어간다. 조인 칸 run_id, cycle_id는 지금 DB 구조와 맞는 것을 확인함)
-SELECT COUNT(*) AS cnt,
-       AVG(e.no_load_voltage_v) AS v_open,
-       AVG(e.loaded_voltage_v) AS v_load,
-       AVG(e.estimated_internal_resistance_ohm) AS r_int
+-- [검사 성적서] 주문 정보와 성적서 번호
+SELECT order_no, received_at, order_status, courier, tracking_no, cert_no
+FROM orders WHERE order_no = ?;
+
+-- [검사 성적서] 주문에 나간 회차들의 A 등급 요약 (전기 측정 + 외관·극 방향 검사)
+-- cnt는 A 등급 전체 수. 측정·검사 기록이 없는 건전지는 평균에서 빠지고 *_missing으로 따로 센다.
+-- visual_polarity는 카메라가 본 극 방향(minus_up / plus_up / unknown), electrical polarity는 측정으로 본 극성이다.
+SELECT COUNT(*)                                          AS cnt,
+       COUNT(e.cycle_id)                                 AS measured,
+       AVG(e.no_load_voltage_v)                          AS v_open,
+       MIN(e.no_load_voltage_v)                          AS v_open_min,
+       MAX(e.no_load_voltage_v)                          AS v_open_max,
+       AVG(e.loaded_voltage_v)                           AS v_load,
+       AVG(e.estimated_internal_resistance_ohm)          AS r_int,
+       MAX(e.estimated_internal_resistance_ohm)          AS r_int_max,
+       SUM(e.polarity = 'normal')                        AS elec_polarity_normal,
+       COUNT(v.cycle_id)                                 AS visual_inspected,
+       SUM(v.visual_result = 'PASS')                     AS visual_pass,
+       SUM(v.visual_result = 'FAIL')                     AS visual_fail,
+       SUM(v.visual_result = 'ERROR')                    AS visual_error,
+       AVG(v.confidence)                                 AS visual_confidence,
+       SUM(v.polarity = 'minus_up')                      AS visual_minus_up,
+       SUM(v.polarity = 'plus_up')                       AS visual_plus_up,
+       SUM(v.cycle_id IS NOT NULL AND (v.polarity = 'unknown' OR v.polarity IS NULL)) AS visual_polarity_unknown,
+       COUNT(*) - COUNT(e.cycle_id)                      AS electrical_missing,
+       COUNT(*) - COUNT(v.cycle_id)                      AS visual_missing
 FROM order_runs r
-JOIN runs ru ON ru.source_run_id = r.source_run_id
-JOIN battery_cycles b ON b.run_id = ru.run_id AND b.final_grade = 'A'
-JOIN electrical_tests e ON e.cycle_id = b.cycle_id
+JOIN runs ru            ON ru.source_run_id = r.source_run_id
+JOIN battery_cycles b   ON b.run_id = ru.run_id AND b.final_grade = 'A'
+LEFT JOIN electrical_tests e   ON e.cycle_id = b.cycle_id
+LEFT JOIN visual_inspections v ON v.cycle_id = b.cycle_id
 WHERE r.order_no = ?;
+
+-- [검사 성적서] 회차별로 나눠 보기 (위와 같은 값을 회차마다)
+SELECT r.source_run_id, r.battery_count, ru.started_at,
+       COUNT(b.cycle_id)                        AS a_grade,
+       AVG(e.no_load_voltage_v)                 AS v_open,
+       AVG(e.loaded_voltage_v)                  AS v_load,
+       AVG(e.estimated_internal_resistance_ohm) AS r_int,
+       SUM(v.visual_result = 'PASS')            AS visual_pass,
+       AVG(v.confidence)                        AS visual_confidence,
+       SUM(v.polarity = 'minus_up')             AS visual_minus_up,
+       SUM(v.polarity = 'plus_up')              AS visual_plus_up
+FROM order_runs r
+JOIN runs ru            ON ru.source_run_id = r.source_run_id
+LEFT JOIN battery_cycles b     ON b.run_id = ru.run_id AND b.final_grade = 'A'
+LEFT JOIN electrical_tests e   ON e.cycle_id = b.cycle_id
+LEFT JOIN visual_inspections v ON v.cycle_id = b.cycle_id
+WHERE r.order_no = ?
+GROUP BY r.source_run_id, r.battery_count, ru.started_at
+ORDER BY ru.started_at;
 
 -- [검사 성적서] 주문에 연결된 회차 목록
 SELECT r.source_run_id, r.battery_count, ru.started_at, ru.ended_at

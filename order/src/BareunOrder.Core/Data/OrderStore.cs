@@ -89,8 +89,11 @@ public sealed partial class OrderStore : ObservableObject
     }
 
     /// <summary>검사 성적서 번호 붙이기 (F6) → 상태 메시지에 실려 홈페이지 주문 조회에 보임</summary>
+    /// <summary>검사 성적서 번호 저장·알림. 형식은 CERT-YYYYMMDD-XXXX (OrderJson.CertNoFor(order.No)로 만들면 됨)</summary>
     public async Task SetCertNoAsync(Order order, string certNo)
     {
+        if (!OrderJson.CertNo.IsMatch(certNo))
+            throw new ArgumentException($"성적서 번호 형식이 아닙니다: {certNo} (예: {OrderJson.CertNoFor(order.No)})", nameof(certNo));
         order.CertNo = certNo;
         Write($"{order.No} 성적서 {certNo}");
         await _client.PublishAsync(OrderTopics.Status(order.No), OrderJson.Status(order, _settings.Operator), retain: true);

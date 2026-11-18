@@ -14,3 +14,6 @@ GRANT SELECT ON `aa_battery_inspection`.`order_runs`       TO 'ui_reader'@'%';
 GRANT SELECT ON `aa_battery_inspection`.`stock`            TO 'ui_reader'@'%';
 GRANT SELECT ON `aa_battery_inspection`.`stock_log`        TO 'ui_reader'@'%';
 GRANT SELECT ON `aa_battery_inspection`.`inquiries`        TO 'ui_reader'@'%';
+-- 11-18: 검사 성적서 탭이 외관·극 방향 결과를 읽음 (DB 담당 수정본)
+GRANT SELECT ON `aa_battery_inspection`.`visual_inspections` TO 'ui_reader'@'localhost';
+GRANT SELECT ON `aa_battery_inspection`.`visual_inspections` TO 'ui_reader'@'%';

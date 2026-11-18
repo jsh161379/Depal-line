@@ -1,4 +1,4 @@
--- 주문 테이블 적용 전 정리 (2026-11-17, 조시현)
+-- 주문 테이블 적용 전 정리 (2026-11-17, 11-18 cert_no 추가, 조시현)
 -- 오늘 오전 DB 담당 첫 버전 스크립트를 이미 실행한 DB만 손본다. 처음 적용하는 DB에서는 아무것도 바꾸지 않는다.
 --  ① orders에 accepted_at이 없으면 추가
 --  ② inquiries가 첫 버전 모양(inquiry_type 없음)이고 비어 있으면 지움 → 다음 스크립트(2_order_tables.sql)가 새 모양으로 다시 만듦
@@ -25,4 +25,12 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SET @sql := IF(@old_inq AND @n = 0, 'DROP TABLE `inquiries`',
             IF(@old_inq, 'SELECT ''prep 2: 첫 버전 inquiries에 데이터가 있어 지우지 않음 — 직접 확인 필요'' AS warning',
                          'SELECT ''prep 2: inquiries 손볼 것 없음'' AS info'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- ③ orders.cert_no (11/18, DB 담당 수정본: 검사 성적서 번호 칸 + 인덱스)
+SET @has_orders := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'orders');
+SET @has_cert := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'cert_no');
+SET @sql := IF(@has_orders = 1 AND @has_cert = 0,
+  'ALTER TABLE `orders` ADD COLUMN `cert_no` varchar(40) DEFAULT NULL COMMENT ''검사 성적서 번호 (order/status의 cert_no, 형식 CERT-YYYYMMDD-XXXX)'' AFTER `tracking_no`, ADD KEY `idx_orders_cert` (`cert_no`)',
+  'SELECT ''prep 3: orders.cert_no 손볼 것 없음'' AS info');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

@@ -20,6 +20,13 @@ public static class OrderJson
     /// <summary>문의번호: Q-YYYYMMDD-XXXX</summary>
     public static readonly Regex InquiryNo = new(@"^Q-\d{8}-[A-HJ-NP-Z2-9]{4}$", RegexOptions.Compiled);
 
+    /// <summary>검사 성적서 번호: CERT-YYYYMMDD-XXXX (주문번호의 날짜·4자 그대로, 11/18 F6 담당 결정)</summary>
+    public static readonly Regex CertNo = new(@"^CERT-\d{8}-[A-HJ-NP-Z2-9]{4}$", RegexOptions.Compiled);
+
+    /// <summary>주문번호로 성적서 번호 만들기: BR-20261117-7K3Q → CERT-20261117-7K3Q (형식이 틀린 주문번호면 null)</summary>
+    public static string? CertNoFor(string orderNo) =>
+        OrderNo.IsMatch(orderNo) ? "CERT-" + orderNo["BR-".Length..] : null;
+
     private static readonly JsonSerializerOptions Out = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static string Ts(DateTime t) => t.ToString(TimeFormat, CultureInfo.InvariantCulture);

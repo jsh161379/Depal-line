@@ -188,13 +188,13 @@ class OrderAccepted(BaseModel):
 
 class OrderStatusChange(BaseModel):
     # Published retained, so it is delivered again after every reconnect (stored once by the unique key).
-    # cert_no (inspection certificate number) is also sent; its format is not decided yet, so it is not stored.
     no: OrderNo
     ts: Timestamp
     status: OrderStatusName
-    # Omitted, null or "" keeps the stored courier / tracking number.
+    # Omitted, null or "" keeps the stored courier / tracking number / certificate number.
     courier: Annotated[str, StringConstraints(max_length=30)] | None = None
     tracking: Annotated[str, StringConstraints(max_length=30)] | None = None
+    cert_no: Annotated[str, StringConstraints(max_length=40)] | None = None  # inspection certificate (format by F6)
     by: Operator = None  # who changed the status
 
 
@@ -477,9 +477,10 @@ def update_order_status(cursor, change):
 
     cursor.execute("""
         UPDATE orders SET order_status = %s, courier = COALESCE(%s, courier),
-            tracking_no = COALESCE(%s, tracking_no), updated_at = %s
+            tracking_no = COALESCE(%s, tracking_no), cert_no = COALESCE(%s, cert_no), updated_at = %s
         WHERE order_no = %s
-        """, (change.status, change.courier or None, change.tracking or None, change.ts, change.no))
+        """, (change.status, change.courier or None, change.tracking or None, change.cert_no or None,
+              change.ts, change.no))
 
     if change.status == "delivered" and current != "delivered":
         cursor.execute("""

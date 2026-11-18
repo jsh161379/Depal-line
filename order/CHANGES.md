@@ -34,3 +34,9 @@
 - 라인 메시지 알림: 다른 탭을 보고 있을 때 오른쪽 아래(주문 알림 위)에 8초 동안 표시, [메시지 보기]로 탭 이동
 - 가짜 모드에 주문 관리를 부르는 라인 메시지 1종 추가 (시험용)
 - 메인 창: 윈도우 기본 흰 제목 줄 대신 위쪽 상태줄을 제목 줄로 (최소화·최대화·닫기 직접 그림)
+
+## v4.4 (11/18, 조시현) — 성적서 번호 형식
+- 성적서 번호 `CERT-YYYYMMDD-XXXX` (주문번호의 날짜·4자 그대로, F6 담당 결정 → 주문 통신 규약 v1.0.1)
+- `OrderJson.CertNo`(형식 검사), `OrderJson.CertNoFor(주문번호)`(만들기) 추가. F6에서는 `store.SetCertNoAsync(order, OrderJson.CertNoFor(order.No)!)`
+- `SetCertNoAsync`는 형식이 틀리면 ArgumentException
+- 켤 때 DB에서 `orders.cert_no`도 불러옴 (DB 담당 수정본으로 칸 추가됨)

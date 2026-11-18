@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS `orders` (
   `order_status` enum('received','inspect','shipping','delivered','canceled') NOT NULL DEFAULT 'received',
   `courier` varchar(30) DEFAULT NULL,
   `tracking_no` varchar(30) DEFAULT NULL,
+  `cert_no` varchar(40) DEFAULT NULL COMMENT '검사 성적서 번호 (order/status의 cert_no, 형식은 F6 담당과 정함)',
   `updated_at` datetime(3) NOT NULL COMMENT '마지막 상태 변경 시각',
   PRIMARY KEY (`order_no`),
   KEY `idx_orders_received` (`received_at`),
   KEY `idx_orders_status` (`order_status`,`received_at`),
-  KEY `idx_orders_phone` (`customer_phone`)
+  KEY `idx_orders_phone` (`customer_phone`),
+  KEY `idx_orders_cert` (`cert_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS `order_items` (
@@ -106,6 +108,9 @@ CREATE TABLE IF NOT EXISTS `inquiries` (
 -- DROP TABLE IF EXISTS `inquiries`;   -- 지운 뒤 이 스크립트를 처음부터 다시 실행하면 새 형식으로 만들어짐
 -- ALTER TABLE `orders` ADD COLUMN `accepted_at` datetime(3) DEFAULT NULL COMMENT '주문 관리 프로그램이 검사를 통과시킨 시각' AFTER `received_at`;
 
+-- 11-17 오전·오후 스크립트를 이미 실행한 DB만: 성적서 번호 칸 추가 (주석을 풀고 실행. 이미 있으면 Duplicate column 오류 → 건너뜀)
+-- ALTER TABLE `orders` ADD COLUMN `cert_no` varchar(40) DEFAULT NULL COMMENT '검사 성적서 번호 (order/status의 cert_no, 형식은 F6 담당과 정함)' AFTER `tracking_no`, ADD KEY `idx_orders_cert` (`cert_no`);
+
 -- (선택) 주문 관리 프로그램이 조회할 계정에 읽기 권한 주기.
 -- 계정 이름과 접속 위치('localhost')가 다르면 맞게 바꿔서 실행하세요.
 -- GRANT SELECT ON `aa_battery_inspection`.`orders`           TO 'ui_reader'@'localhost';
@@ -115,4 +120,5 @@ CREATE TABLE IF NOT EXISTS `inquiries` (
 -- GRANT SELECT ON `aa_battery_inspection`.`stock`            TO 'ui_reader'@'localhost';
 -- GRANT SELECT ON `aa_battery_inspection`.`stock_log`        TO 'ui_reader'@'localhost';
 -- GRANT SELECT ON `aa_battery_inspection`.`inquiries`        TO 'ui_reader'@'localhost';
--- 검사 성적서 탭은 라인 테이블도 읽습니다 (runs, battery_cycles, electrical_tests는 이미 권한 있음).
+-- 검사 성적서 탭은 라인 테이블도 읽습니다. runs, battery_cycles, electrical_tests는 이미 권한이 있고, 외관·극 방향 결과용으로 아래 한 줄을 더합니다.
+-- GRANT SELECT ON `aa_battery_inspection`.`visual_inspections` TO 'ui_reader'@'localhost';
