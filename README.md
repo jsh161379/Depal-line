@@ -41,6 +41,7 @@ A / B / 불량 / 재분류로 나눈다.
 - 옵션은 cmd에서 붙인다: `start_all.bat --no-fake`(실제 장치를 붙일 때), `--no-db`(MySQL 없이), `--estop-test`(40초 뒤 가짜 Mega가 비상정지 버튼을 누름)
 - `start_all.vbs`는 비밀번호를 물을 창이 없으므로 MySQL 비밀번호를 한 번 저장해 둬야 한다: cmd에서 `setx AA_DB_PASSWORD <비밀번호>` (이 PC 사용자 계정에만 저장됨).
 - 이미 켜져 있으면 다시 켜지지 않는다. 다시 켜려면 `stop_all.bat` 먼저
+- 서버 폴더가 `C:\depal\server`가 아니어도(바탕화면 등) `start_all.bat`으로 그대로 켜진다. 브로커 설정(`mosquitto.conf`)의 파일 경로는 서버 폴더 기준이라, 브로커를 손으로 켤 때는 먼저 서버 폴더로 `cd`한 뒤 `mosquitto.exe -c mosquitto.conf`
 
 **가짜 장치로 라인 전체를 돌려 볼 때**
 1. `server/start_all.bat` 더블클릭 → MySQL 비밀번호 입력 (DB 없이 보려면 cmd에서 `start_all.bat --no-db`)
