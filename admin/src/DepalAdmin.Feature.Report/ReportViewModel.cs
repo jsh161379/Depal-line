@@ -12,13 +12,14 @@ namespace DepalAdmin.Feature.Report;
 
 /// <summary>
 /// 담당: 조시현 — 보고서.
-///   일일: 고른 날짜 하루 전체 / 회차: 그날의 회차 하나
+///   일일: 고른 날짜 하루 전체 / 주간: 고른 날짜까지 7일 / 회차: 그날의 회차 하나
 ///   데이터: IHistoryRepository(장성찬, 결과·이벤트 수) + IHandoverStore(유동호, 인수인계 메모)
 ///   인쇄: 작업자 이상 (PDF는 인쇄 대화상자에서 "Microsoft Print to PDF")
 /// </summary>
 public partial class ReportViewModel : ObservableObject
 {
     private const string Daily = "일일";
+    private const string Weekly = "주간";
     private const string PerRun = "회차";
 
     private readonly IHistoryRepository _repo;
@@ -28,7 +29,7 @@ public partial class ReportViewModel : ObservableObject
     private readonly AppSettings _settings;
     private ReportData? _data;
 
-    public string[] Kinds { get; } = { Daily, PerRun };
+    public string[] Kinds { get; } = { Daily, Weekly, PerRun };
     public ObservableCollection<string> RunIds { get; } = new();
 
     [ObservableProperty]
@@ -80,8 +81,8 @@ public partial class ReportViewModel : ObservableObject
         Status = "만드는 중…";
         try
         {
-            var from = Date.Date;
-            var to = from.AddDays(1);
+            var from = Kind == Weekly ? Date.Date.AddDays(-6) : Date.Date;
+            var to = Date.Date.AddDays(1);
             var rows = await _repo.GetResultsAsync(from, to, null);
             string title, period;
 
@@ -99,6 +100,11 @@ public partial class ReportViewModel : ObservableObject
                 title = "회차 보고서";
                 period = $"회차 {RunId}  ({from:yyyy-MM-dd HH:mm} ~ {to:HH:mm})";
             }
+            else if (Kind == Weekly)
+            {
+                title = "주간 보고서";
+                period = $"{from:yyyy-MM-dd (ddd)} ~ {to.AddDays(-1):yyyy-MM-dd (ddd)}  (7일)";
+            }
             else
             {
                 title = "일일 보고서";
@@ -114,7 +120,7 @@ public partial class ReportViewModel : ObservableObject
                 Station = _settings.StationName,
                 Period = period,
                 MadeBy = _session.UserName,
-                IsDaily = !IsPerRun,
+                Kind = Kind,
                 Rows = rows,
                 EventCounts = events,
                 Notes = notes,

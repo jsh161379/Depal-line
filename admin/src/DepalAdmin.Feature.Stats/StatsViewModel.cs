@@ -120,9 +120,10 @@ public partial class StatsViewModel : ObservableObject
                               Highlight: low + 1e-9 >= TempLimitA));   // A 기준 이상 구간은 진하게
         }
 
-        // 사유 순위
+        // 사유 순위 — 불량·재분류만 (B는 정상 등급이라 뺌)
         Reasons.Clear();
-        var reasons = rows.Where(r => !string.IsNullOrWhiteSpace(r.Reason))
+        var reasons = rows.Where(r => !string.IsNullOrWhiteSpace(r.Reason)
+                                      && (DepalAdmin.Core.Grades.IsNg(r.Grade) || r.Grade == DepalAdmin.Core.Grades.Resort))
                           .GroupBy(r => r.Reason!)
                           .Select(g => (Reason: g.Key, Count: g.Count(), Grade: g.First().Grade))
                           .OrderByDescending(x => x.Count)

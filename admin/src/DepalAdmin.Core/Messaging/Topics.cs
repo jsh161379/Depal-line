@@ -18,7 +18,7 @@ public static class Topics
     /// <summary>하트비트 토픽 앞부분. 관리자 화면은 hb/<접속 이름> (통신 규약 1장)</summary>
     public const string HeartbeatPrefix = "hb/";
 
-    /// <summary>⚠ 통신 규약에 아직 없음 (채팅 상대 확정 후 추가)</summary>
+    /// <summary>채팅 — 관리자 프로그램끼리 단톡방 (통신 규약 v1.3 5-1)</summary>
     public const string ChatMessages = "chat/messages";
 }
 

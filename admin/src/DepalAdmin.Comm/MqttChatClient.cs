@@ -13,7 +13,7 @@ namespace DepalAdmin.Comm;
 /// <summary>
 /// 채팅용 MQTT 연결 (라인 연결과 따로 둔다 → 채팅이 문제가 생겨도 라인 감시는 그대로).
 /// client_id = settings.EffectiveClientId + "-chat", 토픽 chat/messages, QoS 1, retained 안 씀.
-/// ⚠ 통신 규약에 아직 없음. 채팅 상대가 정해지면 규약에 추가하고 이 파일을 맞춘다.
+/// 형식: 통신 규약 v1.3 5-1 (@부르기는 mentions 칸). 1:1 대화방은 없음 (팀 결정 11/11).
 /// </summary>
 public sealed class MqttChatClient : IChatClient
 {
