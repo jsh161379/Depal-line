@@ -289,13 +289,11 @@ public sealed class FakeLineClient : LineClientBase
             var info = new DeviceInfo
             {
                 Name = name,
-                State = _delayLeft.ContainsKey(name) ? "delayed" : "ok",
+                State = _delayLeft.ContainsKey(name) ? "warn" : "ok",   // central_server.py와 같은 값 (ok / warn / offline)
             };
             if (name == "arm1")
             {
-                info.Extra["gripper"] = _batteryId >= 7 ? "weak" : "normal";   // 시험용: 뒤쪽에서 집게 약해짐
-                info.Extra["arm"] = _mode == "estop" ? "stopped" : "ok";
-                info.Extra["arduino"] = "ok";
+                info.Extra["arm"] = _mode == "estop" ? "stopped" : "ok";   // hb/arm1에는 arm만 있음 (규약 v1.4 3-1)
             }
             devices[name] = info;
         }

@@ -13,6 +13,8 @@ v1.4에서 장치 이름이 바뀌었다:  pi → arm1,  ui-<PC이름> → admin
 실행 (서버 폴더에서):
   python tools\\clear_retained.py           지울 목록만 보기
   python tools\\clear_retained.py --yes     실제로 지우기
+  python tools\\clear_retained.py status/admin-desktop --yes
+                                            이 글자로 시작하는 기록도 같이 지우기 (여러 개 가능)
 """
 
 # ---------- 수정할 값 ----------
@@ -43,12 +45,12 @@ async def collect(client) -> list[str]:
     return sorted(set(found))
 
 
-async def amain(yes: bool):
+async def amain(yes: bool, extra: tuple[str, ...] = ()):
     async with aiomqtt.Client(BROKER_HOST, BROKER_PORT, identifier="clear_retained") as client:
         await client.subscribe("status/#", qos=1)
         await client.subscribe("hb/#", qos=0)
         topics = await collect(client)
-        old = [t for t in topics if t.startswith(OLD_PATTERNS)]
+        old = [t for t in topics if t.startswith(OLD_PATTERNS + extra)]
         keep = [t for t in topics if t not in old]
         print(f"retained 기록 {len(topics)}개 (status/·hb/)")
         for t in keep:
@@ -69,13 +71,14 @@ async def amain(yes: bool):
 def main():
     p = argparse.ArgumentParser(description="예전 장치 이름의 retained 기록 지우기 (규약 v1.4)")
     p.add_argument("--yes", action="store_true", help="실제로 지움 (없으면 목록만)")
+    p.add_argument("patterns", nargs="*", help="추가로 지울 토픽 앞부분 (예: status/admin-desktop)")
     a = p.parse_args()
     try:
         if sys.platform.startswith("win"):
             with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as r:
-                r.run(amain(a.yes))
+                r.run(amain(a.yes, tuple(a.patterns)))
         else:
-            asyncio.run(amain(a.yes))
+            asyncio.run(amain(a.yes, tuple(a.patterns)))
     except aiomqtt.MqttError as e:
         print(f"브로커에 연결할 수 없음: {e} → Mosquitto가 켜져 있는지 확인")
 
