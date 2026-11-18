@@ -6,7 +6,9 @@ namespace DepalAdmin.Feature.Report;
 
 /// <summary>
 /// 보고서 한 장에 들어갈 숫자를 모은다 (화면·인쇄 둘 다 이걸로 그림).
-/// TODO(조시현): 보고서에 넣을 항목은 팀과 확정 — 지금은 처리 개수·등급 비율·사유·이벤트 수·회차 표·인수인계 메모
+/// 항목 (11/18 확정): 요약 · 측정값 · 불량·재분류 사유 · 일별(주간) · 시간대별 · 회차별 · 배출 실패 목록 ·
+///   장치·라인 이벤트 · 인수인계 메모 · 확인란
+/// 모두 IHistoryRepository의 결과 행·이벤트 수와 인수인계 메모만으로 계산한다 (DB 조회 추가 없음).
 /// </summary>
 public sealed class ReportData
 {
@@ -15,7 +17,11 @@ public sealed class ReportData
     public required string Period { get; init; }
     public required string MadeBy { get; init; }
     public DateTime MadeAt { get; init; } = DateTime.Now;
-    public bool IsDaily { get; init; }
+    /// <summary>"일일" / "주간" / "회차"</summary>
+    public required string Kind { get; init; }
+    public bool IsDaily => Kind == "일일";
+    public bool IsWeekly => Kind == "주간";
+    public bool IsPerRun => Kind == "회차";
 
     public required IReadOnlyList<HistoryRow> Rows { get; init; }
     public required IReadOnlyDictionary<string, int> EventCounts { get; init; }
@@ -61,4 +67,53 @@ public sealed class ReportData
             .ToList();
 
     public int Events(string level) => EventCounts.TryGetValue(level, out var n) ? n : 0;
+
+    // ── 가동 시간 ──
+
+    public DateTime? FirstAt => Rows.Min(r => r.StartedAt ?? r.FinishedAt);
+    public DateTime? LastAt => Rows.Max(r => r.FinishedAt ?? r.StartedAt);
+
+    // ── 측정값 (측정 자리까지 간 건전지만. 외관 불량·거꾸로는 값이 없음) ──
+
+    public IReadOnlyList<double> VOpens => Rows.Where(r => r.VOpen != null).Select(r => r.VOpen!.Value).ToList();
+    public IReadOnlyList<double> RInts => Rows.Where(r => r.RInt != null).Select(r => r.RInt!.Value).ToList();
+
+    public static string Fmt(IReadOnlyList<double> v, Func<IReadOnlyList<double>, double> f, string fmt) =>
+        v.Count == 0 ? "-" : f(v).ToString(fmt);
+
+    // ── 시간대별 (처리한 시간만) ──
+
+    public IReadOnlyList<(int Hour, int Count, int A, int Ng, int Resort)> ByHour =>
+        Rows.Where(r => (r.FinishedAt ?? r.StartedAt) != null)
+            .GroupBy(r => (r.FinishedAt ?? r.StartedAt)!.Value.Hour)
+            .OrderBy(g => g.Key)
+            .Select(g => (g.Key, g.Count(), g.Count(r => r.Grade == Grades.A),
+                          g.Count(r => Grades.IsNg(r.Grade)), g.Count(r => r.Grade == Grades.Resort)))
+            .ToList();
+
+    // ── 일별 (주간 보고서) ──
+
+    public IReadOnlyList<(DateTime Day, int Count, int[] ByGrade)> ByDay =>
+        Rows.Where(r => (r.FinishedAt ?? r.StartedAt) != null)
+            .GroupBy(r => (r.FinishedAt ?? r.StartedAt)!.Value.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => (g.Key, g.Count(), GradeColumns.Select(grade => g.Count(r => r.Grade == grade)).ToArray()))
+            .ToList();
+
+    // ── 회차별 소요 시간 ──
+
+    public string RunDuration(string runId)
+    {
+        var g = Rows.Where(r => r.RunId == runId).ToList();
+        var a = g.Min(r => r.StartedAt ?? r.FinishedAt);
+        var b = g.Max(r => r.FinishedAt ?? r.StartedAt);
+        if (a == null || b == null) return "-";
+        var t = b.Value - a.Value;
+        return t.TotalMinutes < 1 ? $"{t.TotalSeconds:0}초" : $"{(int)t.TotalMinutes}분 {t.Seconds}초";
+    }
+
+    // ── 배출 실패 (등급은 정했지만 분류함에 못 넣음) ──
+
+    public IReadOnlyList<HistoryRow> SortFailedRows =>
+        Rows.Where(r => r.Dest == null).OrderBy(r => r.FinishedAt ?? r.StartedAt).ToList();
 }
