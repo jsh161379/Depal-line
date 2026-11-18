@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 담당: (미정) — F6 검사 성적서 -->
-  <ItemGroup>
-    <ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
-  </ItemGroup>
+	<!-- 담당: 유동호 — F6 검사 성적서 -->
+	<ItemGroup>
+		<ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
+	</ItemGroup>
 </Project>
