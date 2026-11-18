@@ -147,7 +147,7 @@ public static class Labels
         _ => level ?? "-",
     };
 
-    // TODO(조시현): central_server.py의 실제 상태 값으로 맞추기
+    // central_server.py 상태 값: unknown / ok / warn / offline (나머지는 예전 이름 호환)
     public static string DeviceState(string? state) => state?.ToLowerInvariant() switch
     {
         "ok" or "online" or "normal" => "정상",

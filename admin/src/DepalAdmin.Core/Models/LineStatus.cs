@@ -1,7 +1,7 @@
 namespace DepalAdmin.Core.Models;
 
 /// <summary>
-/// server/line (retained) — 라인 현재 상태. 통신 규약 v1.2 5장.
+/// server/line (retained) — 라인 현재 상태. 통신 규약 v1.4.1 5장.
 /// JSON 이름은 snake_case로 자동 변환된다 (RunId ↔ run_id).
 /// </summary>
 public sealed class LineStatus
