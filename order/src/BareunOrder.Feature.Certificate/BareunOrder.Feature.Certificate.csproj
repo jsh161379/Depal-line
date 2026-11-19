@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-	<!-- 담당: 유동호 — F6 검사 성적서 -->
+	<!-- 담당: 유동호 — F6 검사 성적서 및 주문 관리 기간 보고서 -->
 	<ItemGroup>
 		<ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
+		<ProjectReference Include="..\BareunOrder.Feature.Stats\BareunOrder.Feature.Stats.csproj" />
 	</ItemGroup>
 </Project>

@@ -65,7 +65,7 @@ public static class CertificatePrinter {
         hr.Cells.Add(titleCell);
 
         var stampBrush = data.AllPass ? Green : Red;
-        var stampCell = new TableCell(new Paragraph(new Run(data.AllPass ? "합 격" : "불합격")) {
+        var stampCell = new TableCell(new Paragraph(new Run(data.StampText)) {
             FontSize = 16,
             FontWeight = FontWeights.Bold,
             Foreground = stampBrush,
