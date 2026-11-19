@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using BareunOrder.Core.Data;
 using BareunOrder.Core.Models;
+using BareunOrder.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -18,7 +19,7 @@ public sealed record Bar(string Label, int Value, string ValueText, double Ratio
 /// 기간별 주문 수·매출·판매 팩·취소율, 상품별 매출, 시간대별 주문 수.
 ///
 /// ── 할 일 (TODO) ──
-/// - 지금은 프로그램이 켜진 뒤 메모리에 있는 주문만 센다 → 주문 DB가 생기면 DB에서 기간 조회 (서버 담당과 테이블 확인)
+/// - [완료] 기간을 고르면 DB에서 그 기간 주문을 불러온다 (StatsDbReader.cs). 가짜 모드·DB 없음이면 메모리 주문만
 /// - 날짜 직접 고르기 (DatePicker)
 /// - [완료] 엑셀(.xlsx) 내보내기 — 선택한 기간의 요약·상품별·시간대별·주문 목록 (StatsExcelReport.cs)
 /// - 마감 보고서 인쇄
@@ -27,10 +28,16 @@ public sealed record Bar(string Label, int Value, string ValueText, double Ratio
 public sealed partial class StatsViewModel : ObservableObject
 {
     private readonly OrderStore _store;
+    private readonly AppSettings _settings;
 
-    public StatsViewModel(OrderStore store)
+    /// <summary>마지막으로 DB에서 읽은 기간의 주문. 없으면 null (가짜 모드, DB 없음, 실패)</summary>
+    private List<Order>? _dbOrders;
+    private CancellationTokenSource? _loadCts;
+
+    public StatsViewModel(OrderStore store, AppSettings settings)
     {
         _store = store;
+        _settings = settings;
         Periods = new[]
         {
             new Period("오늘", () => DateTime.Today),
@@ -39,12 +46,70 @@ public sealed partial class StatsViewModel : ObservableObject
         };
         _period = Periods[0];
         _store.Changed += Recalc;
+        _ = LoadAsync();
     }
 
     public IReadOnlyList<Period> Periods { get; }
 
     [ObservableProperty] private Period _period;
-    partial void OnPeriodChanged(Period value) => Recalc();
+    partial void OnPeriodChanged(Period value)
+    {
+        _dbOrders = null;   // 다른 기간의 DB 결과가 섞이지 않게
+        Recalc();
+        _ = LoadAsync();
+    }
+
+    /// <summary>화면에 보일 데이터 출처: "DB 기준 · 15:02 불러옴" 등</summary>
+    [ObservableProperty] private string _sourceText = "";
+    [ObservableProperty] private bool _isLoading;
+
+    private bool UseDb => !_settings.UseFakeOrders && !string.IsNullOrWhiteSpace(_settings.MySqlConnection);
+
+    /// <summary>고른 기간의 주문을 DB에서 다시 읽는다 (새로고침 버튼)</summary>
+    [RelayCommand]
+    private Task Refresh() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loadCts?.Cancel();   // 앞에서 불러오던 것은 취소 (Dispose는 안 함: 돌고 있는 작업이 아직 토큰을 씀)
+        _loadCts = null;
+
+        if (!UseDb)
+        {
+            SourceText = _settings.UseFakeOrders ? "가짜 주문 (켠 뒤 들어온 주문만)" : "DB 연결 설정 없음 (켠 뒤 들어온 주문만)";
+            Recalc();
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _loadCts = cts;
+        var period = Period;
+        var (from, to) = (period.From(), DateTime.Today.AddDays(1));
+        IsLoading = true;
+        SourceText = "DB에서 불러오는 중…";
+        try
+        {
+            var orders = await Task.Run(() => StatsDbReader.LoadAsync(_settings.MySqlConnection!, from, to, cts.Token), cts.Token);
+            if (cts.IsCancellationRequested || !ReferenceEquals(period, Period)) return;
+            _dbOrders = orders;
+            SourceText = $"DB 기준 · {DateTime.Now:HH:mm} 불러옴";
+        }
+        catch (OperationCanceledException)
+        {
+            return;   // 다른 기간을 골라서 취소됨
+        }
+        catch (Exception ex)
+        {
+            if (cts.IsCancellationRequested || !ReferenceEquals(period, Period)) return;
+            _dbOrders = null;
+            SourceText = $"DB 조회 실패 — 켠 뒤 들어온 주문만 ({ex.Message})";
+        }
+        finally
+        {
+            if (ReferenceEquals(_loadCts, cts)) IsLoading = false;
+        }
+        Recalc();
+    }
 
     [ObservableProperty] private int _orderCount;
     [ObservableProperty] private int _sales;
@@ -89,11 +154,19 @@ public sealed partial class StatsViewModel : ObservableObject
         }
     }
 
-    /// <summary>고른 기간의 주문 (취소 포함, 접수 시각 순)</summary>
+    /// <summary>
+    /// 고른 기간의 주문 (취소 포함, 접수 시각 순).
+    /// DB에서 읽은 주문 + 프로그램에 있는 주문을 주문번호로 합친다.
+    /// 같은 번호면 프로그램 쪽(상태가 가장 최신)을 쓴다 → DB에 아직 저장 안 된 새 주문도 바로 들어간다.
+    /// </summary>
     private List<Order> OrdersInPeriod()
     {
         var from = Period.From();
-        return _store.Orders.Where(o => o.ReceivedAt >= from).OrderBy(o => o.ReceivedAt).ToList();
+        var to = DateTime.Today.AddDays(1);
+        var byNo = new Dictionary<string, Order>();
+        foreach (var o in _dbOrders ?? Enumerable.Empty<Order>()) byNo[o.No] = o;
+        foreach (var o in _store.Orders.Where(o => o.ReceivedAt >= from && o.ReceivedAt < to)) byNo[o.No] = o;
+        return byNo.Values.OrderBy(o => o.ReceivedAt).ToList();
     }
 
     private void Recalc()
