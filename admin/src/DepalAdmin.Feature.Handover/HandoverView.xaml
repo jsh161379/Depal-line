@@ -52,7 +52,7 @@
                         <DataGridTextColumn Header="쓴 시각" Binding="{Binding Time}" Width="90" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="쓴 사람" Binding="{Binding Author}" Width="90"/>
                         <DataGridTextColumn Header="내용" Binding="{Binding Preview}" Width="*"/>
-                        <DataGridTextColumn Header="읽음" Binding="{Binding ReadText}" Width="110"/>
+                        <DataGridTextColumn Header="읽음" Binding="{Binding ReadText}" Width="125"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
@@ -194,10 +194,11 @@
                                         <TextBlock Text="4. 팔레트 및 분류함 비우기 확인" FontWeight="SemiBold"/>
                                     </DockPanel>
                                     <UniformGrid Columns="2">
-                                        <CheckBox Content="B 분류함(B_BOX) 비움" IsChecked="{Binding BoxBCleared}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="불량함(NG_BOX) 비움" IsChecked="{Binding BoxNgCleared}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="재분류함(RESORT_BOX) 확인" IsChecked="{Binding BoxResortChecked}" Margin="0,0,0,2"/>
-                                        <CheckBox Content="컨베이어 퍽(Puck) 원점 확인" IsChecked="{Binding PuckHomeChecked}" Margin="0,0,0,2"/>
+                                        <CheckBox Content="B 분류함 비움" IsChecked="{Binding BoxBCleared}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="외관불량함 비움" IsChecked="{Binding BoxNgVisualCleared}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="전압불량함 비움" IsChecked="{Binding BoxNgVoltageCleared}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="재분류함 확인" IsChecked="{Binding BoxResortChecked}" Margin="0,0,0,2"/>
+                                        <CheckBox Content="컨베이어 퍽 원점 확인" IsChecked="{Binding PuckHomeChecked}" Margin="0,0,0,2"/>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>

@@ -81,7 +81,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     // ── 실시간 라인 수치 자동 표시 속성 ──
     [ObservableProperty] private string _liveLineStatusText = "라인 상태: 대기  |  미확인 알람: 0건";
     [ObservableProperty] private string _liveRunIdText = "현재 회차: -";
-    [ObservableProperty] private string _liveCountsText = "실시간 분류 — A: 0개   B: 0개   불량(NG): 0개   재분류(RESORT): 0개";
+    [ObservableProperty] private string _liveCountsText = "실시간 분류 — A: 0개  B: 0개  외관불량: 0개  전압불량: 0개  재분류: 0개";
     [ObservableProperty] private string _liveAgvText = "AGV 적재: 0 / 8개 (분류 위치)";
 
     // ── 1. 검사 회차(Run) 실적 및 진행 현황 ──
@@ -110,7 +110,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
 
     // ── 4. 팔레트 및 분류함 비우기 확인 ──
     [ObservableProperty] private bool _boxBCleared = true;
-    [ObservableProperty] private bool _boxNgCleared = true;
+    [ObservableProperty] private bool _boxNgVisualCleared = true;
+    [ObservableProperty] private bool _boxNgVoltageCleared = true;
     [ObservableProperty] private bool _boxResortChecked = true;
     [ObservableProperty] private bool _puckHomeChecked = true;
 
@@ -178,11 +179,16 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         LiveLineStatusText = $"라인 상태: {modeText}  |  미확인 알람: {unacked}건";
         LiveRunIdText = string.IsNullOrWhiteSpace(line?.RunId) ? "현재 회차: -" : $"현재 회차: {line.RunId}";
 
-        var a = line?.Count("A") ?? 0;
-        var b = line?.Count("B") ?? 0;
-        var ng = line?.Count("NG") ?? 0;
-        var resort = line?.Count("RESORT") ?? 0;
-        LiveCountsText = $"실시간 분류 — A: {a}개   B: {b}개   불량(NG): {ng}개   재분류(RESORT): {resort}개";
+        var a = line?.Count(Grades.A) ?? 0;
+        var b = line?.Count(Grades.B) ?? 0;
+        var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
+        var ngVoltage = line?.Count(Grades.NgVoltage) ?? 0;
+        var legacyNg = line?.Count(Grades.Ng) ?? 0;
+        var resort = line?.Count(Grades.Resort) ?? 0;
+
+        LiveCountsText = legacyNg > 0
+            ? $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개  (이전 NG합계: {legacyNg}개)"
+            : $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개";
 
         var agvLoaded = line?.Agv?.Loaded ?? 0;
         var agvBatch = line?.Agv?.Batch is > 0 ? line.Agv.Batch : 8;
@@ -274,11 +280,12 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
                      : RunStateAborted ? "비정상 중단"
                      : "회차 완료 후 대기";
         var pallets = string.IsNullOrWhiteSpace(RemainingPallets) ? "0" : RemainingPallets.Trim();
-        var a = line?.Count("A") ?? 0;
-        var b = line?.Count("B") ?? 0;
-        var ng = line?.Count("NG") ?? 0;
-        var resort = line?.Count("RESORT") ?? 0;
-        sb.AppendLine($"[1. 회차/실적] 상태: {runState} | 이월 팔레트: {pallets}판 | 실적(A:{a}, B:{b}, NG:{ng}, 재분류:{resort})");
+        var a = line?.Count(Grades.A) ?? 0;
+        var b = line?.Count(Grades.B) ?? 0;
+        var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
+        var ngVoltage = line?.Count(Grades.NgVoltage) ?? 0;
+        var resort = line?.Count(Grades.Resort) ?? 0;
+        sb.AppendLine($"[1. 회차/실적] 상태: {runState} | 이월 팔레트: {pallets}판 | 실적(A:{a}, B:{b}, 외관불량:{ngVisual}, 전압불량:{ngVoltage}, 재분류:{resort})");
 
         // 2. 설비 · 비전 · 측정 · AGV 상태
         var equipChecks = new List<string>();
@@ -305,7 +312,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         // 4. 팔레트 및 분류함 비우기 확인
         var boxChecks = new List<string>();
         if (BoxBCleared) boxChecks.Add("B 분류함 비움");
-        if (BoxNgCleared) boxChecks.Add("불량함 비움");
+        if (BoxNgVisualCleared) boxChecks.Add("외관불량함 비움");
+        if (BoxNgVoltageCleared) boxChecks.Add("전압불량함 비움");
         if (BoxResortChecked) boxChecks.Add("재분류함 확인");
         if (PuckHomeChecked) boxChecks.Add("컨베이어 퍽 원점 확인");
         var boxText = boxChecks.Count == 0 ? "미체크" : string.Join(", ", boxChecks);
@@ -375,9 +383,17 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
                     ResortCleared = !ResortPending;
                     ResortRemainingCount = ExtractBetween(line, "보관 중(", "개)") ?? "0";
                 } else if (line.StartsWith("[4. 분류함/퍽]")) {
-                    BoxBCleared = line.Contains("B 분류함 비움");
-                    BoxNgCleared = line.Contains("불량함 비움");
-                    BoxResortChecked = line.Contains("재분류함 확인");
+                    BoxBCleared = line.Contains("B 분류함");
+                    if (line.Contains("외관불량함") || line.Contains("전압불량함")) {
+                        BoxNgVisualCleared = line.Contains("외관불량함");
+                        BoxNgVoltageCleared = line.Contains("전압불량함");
+                    } else {
+                        // 예전 "불량함 비움" 포맷 호환
+                        var legacyCleared = line.Contains("불량함 비움");
+                        BoxNgVisualCleared = legacyCleared;
+                        BoxNgVoltageCleared = legacyCleared;
+                    }
+                    BoxResortChecked = line.Contains("재분류함");
                     PuckHomeChecked = line.Contains("컨베이어 퍽 원점 확인");
                 } else if (line.StartsWith("[5. 안전/환경]")) {
                     EstopRecovered = line.Contains("발생 후 원점 복귀 완료");
@@ -441,7 +457,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         ResortRemainingCount = "0";
 
         BoxBCleared = true;
-        BoxNgCleared = true;
+        BoxNgVisualCleared = true;
+        BoxNgVoltageCleared = true;
         BoxResortChecked = true;
         PuckHomeChecked = true;
 
@@ -476,7 +493,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         ResortPending = ResortPending,
         ResortRemainingCount = ResortRemainingCount,
         BoxBCleared = BoxBCleared,
-        BoxNgCleared = BoxNgCleared,
+        BoxNgVisualCleared = BoxNgVisualCleared,
+        BoxNgVoltageCleared = BoxNgVoltageCleared,
         BoxResortChecked = BoxResortChecked,
         PuckHomeChecked = PuckHomeChecked,
         EstopNone = EstopNone,
@@ -512,7 +530,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
             ResortPending = s.ResortPending;
             ResortRemainingCount = s.ResortRemainingCount;
             BoxBCleared = s.BoxBCleared;
-            BoxNgCleared = s.BoxNgCleared;
+            BoxNgVisualCleared = s.BoxNgVisualCleared;
+            BoxNgVoltageCleared = s.BoxNgVoltageCleared;
             BoxResortChecked = s.BoxResortChecked;
             PuckHomeChecked = s.PuckHomeChecked;
             EstopNone = s.EstopNone;
@@ -548,7 +567,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         public bool ResortPending { get; init; }
         public string ResortRemainingCount { get; init; } = "0";
         public bool BoxBCleared { get; init; } = true;
-        public bool BoxNgCleared { get; init; } = true;
+        public bool BoxNgVisualCleared { get; init; } = true;
+        public bool BoxNgVoltageCleared { get; init; } = true;
         public bool BoxResortChecked { get; init; } = true;
         public bool PuckHomeChecked { get; init; } = true;
         public bool EstopNone { get; init; } = true;
@@ -559,6 +579,13 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         public bool SafeEnvSensor { get; init; } = true;
         public string SelectedWriteCategory { get; init; } = "일반 인계";
         public string Draft { get; init; } = "";
+    }
+
+    // HandoverViewModel 클래스 내부에 추가 (BadgeCount 변경 시 상단 Notice 배너도 자동 동기화)
+    partial void OnBadgeCountChanged(int value) {
+        Notice = value > 0
+            ? $"안 읽은 인수인계 메모가 {value}건 있습니다. 읽고 [읽음]을 눌러 주세요."
+            : "";
     }
 }
 
@@ -585,3 +612,4 @@ public sealed class NoteRow {
     public string ReadText => Raw.ReadBy.Count <= 1 ? "아직 아무도 안 읽음" : $"{Raw.ReadBy.Count - 1}명 읽음";
     public string StateKey => IsUnreadForMe ? "warn" : "neutral";
 }
+
