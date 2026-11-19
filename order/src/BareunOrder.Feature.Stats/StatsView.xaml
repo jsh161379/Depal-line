@@ -35,8 +35,13 @@
         <Grid>
             <ListBox Style="{StaticResource FilterBar}" ItemsSource="{Binding Periods}" SelectedItem="{Binding Period}"
                      HorizontalAlignment="Left" DisplayMemberPath="Label" />
-            <Button Content="엑셀 내보내기" Style="{StaticResource Btn.Small}" HorizontalAlignment="Right"
-                    Command="{Binding ExportCommand}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <!-- 데이터 출처: DB 기준 · 15:02 불러옴 / 가짜 주문 / DB 조회 실패 -->
+                <TextBlock Text="{Binding SourceText}" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                           MaxWidth="420" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceText}" Margin="0,0,12,0" />
+                <Button Content="새로고침" Style="{StaticResource Btn.Small}" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
+                <Button Content="엑셀 내보내기" Style="{StaticResource Btn.Small}" Command="{Binding ExportCommand}" />
+            </StackPanel>
         </Grid>
 
         <!-- ═══ 숫자 4칸 ═══ -->
