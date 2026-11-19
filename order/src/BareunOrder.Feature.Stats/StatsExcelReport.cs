@@ -13,13 +13,17 @@ namespace BareunOrder.Feature.Stats;
 /// 값은 모두 StatsCalculator 결과(StatsResult)를 그대로 쓴다 → 화면·보고서와 숫자가 같다.
 ///
 /// 시트 3개
-///   - 요약: 기간, 핵심 지표(이번 기간 / 이전 기간 / 증감), 주문 상태별 건수(출고·배송), 상품별 매출, 시간대별 주문 수
+///   - 요약: 두 묶음으로 나란히 (아래로 덜 내려가게)
+///           왼쪽 A~D: 기간, 핵심 지표(이번 / 이전 / 증감), 주문 상태별 건수, 상품별 매출
+///           오른쪽 F~J: 자주 주문한 고객 TOP 5(최근 주문 시각), 문의 유형별 건수(답변 대기), 시간대별 주문 수(두 칸)
 ///   - 일별: 날짜마다 주문 수·매출·판매 팩·취소 (일일 1줄, 주간 7줄, 월간 28~31줄)
 ///   - 주문 목록: 주문 한 건이 한 줄. 취소 주문은 회색, 합계에서 뺀다. 연락처는 가린 번호, 주소는 넣지 않는다.
 /// </summary>
 internal static class StatsExcelReport
 {
-    public static void Save(string path, PeriodKind kind, StatsResult now, StatsResult before)
+    public static void Save(string path, PeriodKind kind, StatsResult now, StatsResult before,
+                            IReadOnlyList<CustomerRow> topCustomers, IReadOnlyList<InquiryRow> inquiries,
+                            string? inquiryNote = null)
     {
         var valid = now.Orders.Where(o => o.Status != OrderStatus.Canceled).ToList();
         var kindName = StatsPeriod.KindName(kind);
@@ -29,9 +33,11 @@ internal static class StatsExcelReport
         var written = $"{DateTime.Now:yyyy-MM-dd HH:mm}";
 
         // ═══ 시트 1: 요약 ═══
-        var sum = new Sheet("요약", 32, 16, 16, 16) { Selected = true };
+        // 왼쪽(A~D): 핵심 지표, 상태별, 상품별 / 오른쪽(F~J): TOP 5 고객, 문의 유형별, 시간대별 → 아래로 덜 내려가게 두 줄로 나눔
+        const int R = 6;   // 오른쪽 묶음 시작 열 (F)
+        var sum = new Sheet("요약", 30, 15, 15, 15, 3, 22, 16, 12, 16, 18) { Selected = true };
         sum.Text(1, 1, $"바른전지 주문 통계 보고서 ({kindName})", St.Title);
-        sum.Merge(1, 1, 1, 4);
+        sum.Merge(1, 1, 1, 10);
         sum.Height(1, 32);
         sum.Text(3, 1, "기간", St.InfoLabel);
         sum.Text(3, 2, period, St.InfoValue);
@@ -39,12 +45,13 @@ internal static class StatsExcelReport
         sum.Text(4, 1, $"비교 기간 ({prevName})", St.InfoLabel);
         sum.Text(4, 2, prevPeriod, St.InfoValue);
         sum.Merge(4, 2, 4, 4);
-        sum.Text(5, 1, "작성 시각", St.InfoLabel);
-        sum.Text(5, 2, written, St.InfoValue);
-        sum.Merge(5, 2, 5, 4);
+        sum.Text(3, R, "작성 시각", St.InfoLabel);
+        sum.Text(3, R + 1, written, St.InfoValue);
+        sum.Merge(3, R + 1, 3, R + 4);
 
+        // ─── 왼쪽 ───
         // 핵심 지표: 이번 기간 / 이전 기간 / 증감
-        var r = 7;
+        var r = 6;
         sum.Section(r++, "핵심 지표", 4);
         sum.Header(r++, "항목", "이번 기간", prevName, "증감");
         void Kpi(string label, double a, double b, int style, int diffStyle)
@@ -62,7 +69,8 @@ internal static class StatsExcelReport
         Kpi("판매 건전지 수", now.BatteryCount, before.BatteryCount, St.Int, St.DiffInt);
         Kpi("취소 건수", now.CancelCount, before.CancelCount, St.Count, St.DiffInt);
         Kpi("취소율", Math.Round(now.CancelRate, 1), Math.Round(before.CancelRate, 1), St.Pct, St.DiffPct);
-        Kpi("출고·배송 건수 (배송 중 + 배송 완료)", now.ShippedCount, before.ShippedCount, St.Count, St.DiffInt);
+        Kpi("출고·배송 (배송 중 + 배송 완료)", now.ShippedCount, before.ShippedCount, St.Count, St.DiffInt);
+        Kpi("처리 대기 (접수 + 출고 검사)", now.PendingCount, before.PendingCount, St.Count, St.DiffInt);
 
         // 주문 상태별 건수
         r++;
@@ -95,20 +103,91 @@ internal static class StatsExcelReport
         sum.Number(r, 2, now.PackCount, St.TotalPack);
         sum.Number(r, 3, now.Sales, St.TotalWon);
         sum.Number(r, 4, now.Sales == 0 ? 0 : 100, St.TotalPct);
-        r++;
 
-        // 시간대별 주문 수
-        r++;
-        sum.Section(r++, "시간대별 주문 수 (취소 제외)", 2);
-        sum.Header(r++, "시간", "주문 수");
-        foreach (var h in now.ByHour)
+        // ─── 오른쪽 ───
+        // 자주 주문한 고객 TOP 5
+        var q = 6;
+        sum.Section(q++, "자주 주문한 고객 TOP 5 (취소 제외)", 5, R);
+        sum.HeaderAt(q++, R, "고객", "연락처", "주문 수", "금액", "최근 주문");
+        if (topCustomers.Count == 0)
         {
-            sum.Text(r, 1, $"{h.Hour}시", St.Center);
-            sum.Number(r, 2, h.Orders, St.Count);
-            r++;
+            sum.Text(q, R, "이 기간에 주문 없음", St.Text);
+            for (var c = R + 1; c <= R + 4; c++) sum.Blank(q, c, St.Text);
+            q++;
         }
-        sum.Text(r, 1, "합계", St.TotalText);
-        sum.Number(r, 2, now.ByHour.Sum(h => h.Orders), St.TotalCount);
+        var rank = 1;
+        foreach (var cu in topCustomers)
+        {
+            sum.Text(q, R, $"{rank++}. {cu.Name}", St.Text);
+            sum.Text(q, R + 1, cu.MaskedPhone, St.Center);
+            sum.Number(q, R + 2, cu.Orders, St.Count);
+            sum.Number(q, R + 3, cu.Sales, St.Won);
+            sum.Text(q, R + 4, $"{cu.LastOrder:yyyy-MM-dd HH:mm}", St.Center);
+            q++;
+        }
+        if (topCustomers.Count > 0)
+        {
+            sum.Text(q, R, "TOP 5 합계", St.TotalText);
+            sum.Blank(q, R + 1, St.TotalText);
+            sum.Number(q, R + 2, topCustomers.Sum(c => c.Orders), St.TotalCount);
+            sum.Number(q, R + 3, topCustomers.Sum(c => c.Sales), St.TotalWon);
+            sum.Blank(q, R + 4, St.TotalText);
+            q++;
+        }
+
+        // 문의 유형별 건수
+        q++;
+        sum.Section(q++, "문의 유형별 건수", 3, R);
+        sum.HeaderAt(q++, R, "유형", "문의 수", "답변 대기");
+        if (inquiries.Count == 0)
+        {
+            sum.Text(q, R, "이 기간에 문의 없음", St.Text);
+            sum.Blank(q, R + 1, St.Text);
+            sum.Blank(q, R + 2, St.Text);
+            q++;
+        }
+        foreach (var iq in inquiries)
+        {
+            sum.Text(q, R, iq.Name, St.Text);
+            sum.Number(q, R + 1, iq.Count, St.Count);
+            sum.Number(q, R + 2, iq.Unanswered, St.Count);
+            q++;
+        }
+        sum.Text(q, R, "합계", St.TotalText);
+        sum.Number(q, R + 1, inquiries.Sum(x => x.Count), St.TotalCount);
+        sum.Number(q, R + 2, inquiries.Sum(x => x.Unanswered), St.TotalCount);
+        q++;
+        if (!string.IsNullOrWhiteSpace(inquiryNote))
+            sum.Text(q++, R, inquiryNote, St.Note);
+
+        // 시간대별 주문 수 — 반씩 나눠 두 칸으로 (8~14시 | 15~21시)
+        q++;
+        sum.Section(q++, "시간대별 주문 수 (취소 제외)", 4, R);
+        sum.HeaderAt(q++, R, "시간", "주문 수", "시간", "주문 수");
+        var half = (now.ByHour.Count + 1) / 2;
+        for (var i = 0; i < half; i++)
+        {
+            var h1 = now.ByHour[i];
+            sum.Text(q, R, $"{h1.Hour}시", St.Center);
+            sum.Number(q, R + 1, h1.Orders, St.Count);
+            if (i + half < now.ByHour.Count)
+            {
+                var h2 = now.ByHour[i + half];
+                sum.Text(q, R + 2, $"{h2.Hour}시", St.Center);
+                sum.Number(q, R + 3, h2.Orders, St.Count);
+            }
+            else
+            {
+                sum.Blank(q, R + 2, St.Center);
+                sum.Blank(q, R + 3, St.Count);
+            }
+            q++;
+        }
+        sum.Text(q, R, "합계", St.TotalText);
+        sum.Blank(q, R + 1, St.TotalText);
+        sum.Blank(q, R + 2, St.TotalText);
+        sum.Merge(q, R, q, R + 2);
+        sum.Number(q, R + 3, now.ByHour.Sum(h => h.Orders), St.TotalCount);
 
         // ═══ 시트 2: 일별 ═══
         var day = new Sheet("일별", 16, 8, 13, 16, 12, 10) { FreezeRows = 4 };
@@ -368,18 +447,21 @@ internal static class StatsExcelReport
         public void Height(int row, double height) => _heights[row] = height;
 
         /// <summary>남색 띠 구역 제목. cols칸을 합친다.</summary>
-        public void Section(int row, string title, int cols)
+        public void Section(int row, string title, int cols, int startCol = 1)
         {
-            Text(row, 1, title, St.Section);
-            for (var c = 2; c <= cols; c++) Blank(row, c, St.Section);
-            if (cols > 1) Merge(row, 1, row, cols);
+            Text(row, startCol, title, St.Section);
+            for (var c = startCol + 1; c < startCol + cols; c++) Blank(row, c, St.Section);
+            if (cols > 1) Merge(row, startCol, row, startCol + cols - 1);
             Height(row, 22);
         }
 
         /// <summary>표 머리글 한 줄 (1열부터)</summary>
-        public void Header(int row, params string[] labels)
+        public void Header(int row, params string[] labels) => HeaderAt(row, 1, labels);
+
+        /// <summary>표 머리글 한 줄 (startCol열부터)</summary>
+        public void HeaderAt(int row, int startCol, params string[] labels)
         {
-            for (var i = 0; i < labels.Length; i++) Text(row, i + 1, labels[i], St.Header);
+            for (var i = 0; i < labels.Length; i++) Text(row, startCol + i, labels[i], St.Header);
             Height(row, 22);
         }
 
