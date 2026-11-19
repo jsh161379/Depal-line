@@ -23,6 +23,9 @@ public partial class CertificateView : UserControl {
         }
         if (!vm.IsReportTab) return;
 
-        ReportPreviewViewer.Document = OrderPeriodReportPrinter.BuildDocument(vm.ReportBundle, vm.OperatorName);
+        var doc = OrderPeriodReportPrinter.BuildDocument(vm.ReportBundle, vm.OperatorName);
+        doc.PageWidth = double.NaN;
+        doc.ColumnWidth = double.NaN;
+        ReportPreviewViewer.Document = doc;
     }
 }
