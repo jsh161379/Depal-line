@@ -1,0 +1,14 @@
+# 위(top) 카메라 모델 학습 설정 — YOLO11n
+# 클래스 순서·이름은 통신 규약 3-2 약속. 라벨링을 시작한 뒤에는 바꾸지 않는다.
+# 박스: 위에서 보이는 건전지 윗면 하나 (퍽 테두리는 넣지 않음). 빈 퍽 사진은 라벨 없이 그대로 둔다.
+#
+# 학습:  yolo detect train data=train\top.yaml model=yolo11n.pt imgsz=640 epochs=100
+# 결과:  runs\detect\train\weights\best.pt → models\top_best.pt 로 복사
+
+path: C:/depal/yolo_data/top      # 학습 PC에 맞게 바꾸기
+train: images/train
+val: images/val
+
+names:
+  0: minus_up    # −극(평평한 면)이 위 = 정상 방향
+  1: plus_up     # +극(볼록한 꼭지)이 위 = 거꾸로 → 재분류
