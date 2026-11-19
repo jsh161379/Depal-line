@@ -14,9 +14,14 @@
             <DockPanel>
                 <Grid DockPanel.Dock="Top" Margin="16,14,16,10">
                     <TextBlock Text="상품별 재고" Style="{StaticResource SectionTitle}" Margin="0" />
-                    <TextBlock HorizontalAlignment="Right" Style="{StaticResource Caption}" VerticalAlignment="Center">
-                        <Run Text="남은 팩이" /><Run Text="{Binding LowLimit, Mode=OneWay}" /><Run Text="팩 이하면 빨간색" />
-                    </TextBlock>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center">
+                            <Run Text="남은 팩이" /><Run Text="{Binding LowLimit, Mode=OneWay}" /><Run Text="팩 이하면 빨간색" />
+                        </TextBlock>
+                        <Button Content="새로 고침" Style="{StaticResource Btn.Small}" Margin="12,0,0,0"
+                                ToolTip="창고 팩 수를 DB에서 다시 읽기 (배송 완료 차감 반영)"
+                                Command="{Binding LoadFromDbCommand}" />
+                    </StackPanel>
                 </Grid>
                 <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceAlt}" BorderBrush="{StaticResource Line}"
                         BorderThickness="0,1" Padding="20,9,16,9">
@@ -100,12 +105,12 @@
 
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <TextBlock Text="오늘 라인 A 등급 (포장 전)" Style="{StaticResource Caption}" />
+                    <TextBlock Text="라인 A 등급 남음 (아직 주문에 안 나감)" Style="{StaticResource Caption}" />
                     <TextBlock Style="{StaticResource BigNumber}">
                         <Run Text="{Binding LineReadyA, Mode=OneWay}" /><Run Text="개" FontSize="16" />
                     </TextBlock>
                     <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="검사를 통과한 건전지만 팩으로 포장해 입고합니다. (라인 연동 준비 중)" />
+                               Text="검사를 통과한 건전지만 팩으로 포장해 입고합니다." />
                 </StackPanel>
             </Border>
 

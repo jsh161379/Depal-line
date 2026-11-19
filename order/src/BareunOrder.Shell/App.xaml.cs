@@ -43,6 +43,7 @@ public partial class App : Application
             ? new FakeChatClient()
             : new MqttChatClient(settings));
         services.AddSingleton<ChatStore>();
+        services.AddSingleton<LineSupplyReader>();   // 라인 A 등급 남은 수 (F2·F3 공통, 규약 v1.0.2 6장)
 
         // ── 탭 (순서는 각 페이지의 Order) ──
         services.AddOrdersFeature();      // F1 주문
@@ -65,6 +66,7 @@ public partial class App : Application
 
         await _services.GetRequiredService<OrderStore>().StartAsync();
         await _services.GetRequiredService<ChatStore>().StartAsync();
+        await _services.GetRequiredService<LineSupplyReader>().StartAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -73,6 +75,7 @@ public partial class App : Application
         {
             var store = _services.GetRequiredService<OrderStore>();
             var chat = _services.GetRequiredService<ChatStore>();
+            _services.GetRequiredService<LineSupplyReader>().Stop();
             Task.Run(async () =>
             {
                 await chat.StopAsync();

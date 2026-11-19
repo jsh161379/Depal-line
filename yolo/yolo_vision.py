@@ -17,11 +17,13 @@ vision/result를 퍽 하나당 1건 보낸다. 서버 PC에서 돈다. client_id
 모델 자리
   - 카메라마다 모델 파일(best.pt) 또는 "fake"(가짜 판정)를 CAMERAS에 적는다.
   - 상단 모델이 학습되면 top의 "model"에 파일 경로만 넣으면 된다. 앞·뒤 모델도 같은 방식.
-  - 학습 클래스 이름 약속 (아래 "클래스 이름" 설정)
+  - 학습 클래스 이름 약속 (아래 "클래스 이름" 설정, 학습 설정은 train\top.yaml · train\side.yaml)
       위(top): minus_up, plus_up  (박스 = 위에서 보이는 건전지 윗면)
-      앞·뒤  : 정상 건전지 클래스(NORMAL_CLASSES, 예: battery)
-               불량 클래스는 그 이름 그대로 defects[].type 이 됨 (scratch, dent, sticker ...)
-               극 방향 클래스(minus_up, plus_up)가 있으면 극 방향으로도 씀
+      앞·뒤  : 건전지 몸통 박스 = minus_up / plus_up (극 방향을 함께 앎) 또는 battery (방향 모름)
+               불량 부위 박스 = scratch, dent, sticker → 이름 그대로 defects[].type
+      모델을 열 때 약속에 없는 클래스 이름이 있으면 경고를 띄운다 (대문자·띄어쓰기는 자동으로 맞춤)
+      학습 도구가 처음 넣어 두는 object 클래스는 무시한다
+  - 실제 모드에서 모델이 아직 없는 카메라: 위 = 판정 없음(앞·뒤 값으로), 앞·뒤 = 정상·방향 모름 (무작위 가짜 판정 안 씀)
 
 필요한 것: Python 3.11 이상
   python -m pip install "aiomqtt>=2" pydantic opencv-python
@@ -57,8 +59,9 @@ CAMERAS = {
 FRAME_WIDTH, FRAME_HEIGHT = 1280, 720
 USE_DSHOW = True                 # Windows에서 카메라 번호로 열 때 DirectShow 사용
 
-# 기준선 (🟡 실물 시험 후 정함) — 규약은 앞 카메라 기준. 측면 모델이 오기 전에는 top으로 둔다
-TRIGGER_CAM = "top"
+# 기준선 (🟡 실물 시험 후 정함) — 규약 3-2: 앞 카메라 기준
+TRIGGER_CAM = "front"
+TRIGGER_FALLBACK = "top"         # 앞 카메라에 모델·카메라가 없으면 이 카메라로 기준선을 봄 (측면 모델 전)
 LINE_AXIS = "x"                  # "x" = 세로선(벨트가 좌우로 흐를 때), "y" = 가로선
 LINE_POS = 0.5                   # 화면 폭(또는 높이)의 비율. 0.5 = 가운데
 LINE_DIR = +1                    # +1 = 왼쪽→오른쪽(위→아래)으로 지날 때, -1 = 반대
@@ -76,9 +79,11 @@ TRIGGER_CONF = 0.40              # 기준선 통과를 볼 때 쓰는 최소 신
 IMGSZ = 640                      # 학습 때 이미지 크기와 같게
 CAM_TIMEOUT_SEC = 1.0            # 이 시간 넘게 새 화면이 없으면 카메라 오류
 
-# 클래스 이름
+# 클래스 이름 (규약 3-2. 라벨링을 시작한 뒤에는 순서·이름을 바꾸지 않는다)
 POLARITY_CLASSES = {"minus_up", "plus_up"}
-NORMAL_CLASSES = {"battery", "normal"}   # 앞·뒤 모델의 "정상 건전지" 클래스. 나머지(극 방향 제외)는 모두 불량 종류
+NORMAL_CLASSES = {"battery", "normal"}   # 앞·뒤 모델의 "방향 모르는 건전지 몸통" 클래스
+DEFECT_CLASSES = {"scratch", "dent", "sticker"}
+IGNORE_CLASSES = {"object"}      # 학습 도구가 처음 넣어 두는 클래스. 박스를 안 그렸으면 나오지 않지만, 나와도 버림   # 알려진 불량 종류. 그 밖 이름도 불량으로 보내되 모델을 열 때 경고
 
 # 판정 사진 저장 (확인·추가 학습용). captures\날짜\seq번호_카메라.jpg
 SAVE_FRAMES = True
@@ -86,7 +91,7 @@ SAVE_DIR = HERE / "captures"
 
 # --fake 모드
 BOOTH_SEC = 3.0                  # 퍽이 벨트에 올라간 뒤 부스 기준선까지 (--speed 1 기준, 가짜 Mega와 같은 값)
-FAKE_DEFECT_TYPES = ["scratch", "dent", "sticker"]
+FAKE_DEFECT_TYPES = sorted(DEFECT_CLASSES)
 
 # 팔레트 (팔레트 카메라 미정 ❓ — 정해지기 전까지 가득 찬 팔레트로 가정)
 PALLET_ROWS, PALLET_COLS = 2, 5
@@ -113,6 +118,11 @@ SIDE_CAMS = ("front", "back")
 
 def log(msg):
     print(f"{datetime.now():%H:%M:%S} {msg}", flush=True)
+
+
+def class_name(name) -> str:
+    """학습 클래스 이름 → 규약 값 (영문 소문자, 띄어쓰기·- 는 _, 64자 이하). 예: Plus-Up → plus_up"""
+    return str(name).strip().lower().replace(" ", "_").replace("-", "_")[:64]
 
 
 # ---------------------------------------------------------------- 카메라
@@ -198,7 +208,12 @@ class Model:
         self.path = p
         self.yolo = YOLO(str(p))
         self.lock = threading.Lock()
-        self.names = self.yolo.names
+        self.names = {i: class_name(n) for i, n in self.yolo.names.items()}
+        unknown = [n for n in self.names.values()
+                   if n not in POLARITY_CLASSES | NORMAL_CLASSES | DEFECT_CLASSES | IGNORE_CLASSES]
+        if unknown:
+            log(f"[yolo] ⚠ {p.name}: 약속에 없는 클래스 {unknown} → 불량 종류로 그대로 보냄. "
+                f"오타라면 학습 설정(train\\*.yaml)과 맞춰 다시 학습")
 
     def detect(self, frame, conf):
         """[(클래스 이름, 신뢰도, (x1, y1, x2, y2)), ...]"""
@@ -208,7 +223,9 @@ class Model:
         if r.boxes is None:
             return out
         for c, p, b in zip(r.boxes.cls.tolist(), r.boxes.conf.tolist(), r.boxes.xyxy.tolist()):
-            out.append((r.names[int(c)], float(p), tuple(b)))
+            if self.names[int(c)] in IGNORE_CLASSES:
+                continue
+            out.append((self.names[int(c)], float(p), tuple(b)))
         return out
 
 
@@ -228,12 +245,15 @@ def judge_top(dets_per_frame):
 
 def judge_side(cam, dets_per_frame):
     """앞·뒤 카메라: dict(found, result, conf, defects, polarity, pol_conf)"""
-    found_conf = 0.0
+    found_conf = 0.0        # 어떤 클래스든 건전지를 찾음 (불량 부위만 보여도 찾은 것)
+    body_conf = 0.0         # 건전지 몸통 박스(battery·minus_up·plus_up)의 신뢰도 → 정상일 때 conf
     defects: dict[str, float] = {}
     pol = None
     for dets in dets_per_frame:
         for name, conf, _ in dets:
-            found_conf = max(found_conf, conf)          # 어떤 클래스든 건전지를 찾음
+            found_conf = max(found_conf, conf)
+            if name in POLARITY_CLASSES or name in NORMAL_CLASSES:
+                body_conf = max(body_conf, conf)
             if name in POLARITY_CLASSES:
                 if pol is None or conf > pol[1]:
                     pol = (name, conf)
@@ -243,7 +263,7 @@ def judge_side(cam, dets_per_frame):
     d_list = [{"type": t, "conf": round(c, 3), "cam": cam} for t, c in sorted(defects.items(), key=lambda x: -x[1])]
     return {"found": found,
             "result": "defect" if d_list else "normal",
-            "conf": round(max(defects.values()) if d_list else found_conf, 3),
+            "conf": round(max(defects.values()) if d_list else (body_conf or found_conf), 3),
             "defects": d_list,
             "polarity": pol[0] if pol else None,
             "pol_conf": round(pol[1], 3) if pol else 0.0}
@@ -281,6 +301,12 @@ class FakeJudge:
         return {"found": True, "result": "defect" if d else "normal",
                 "conf": d[0]["conf"] if d else round(r.uniform(0.85, 0.98), 3), "defects": d,
                 "polarity": c["polarity"] if r.random() < 0.9 else None, "pol_conf": round(r.uniform(0.6, 0.9), 3)}
+
+
+def neutral_side():
+    """실제 모드에서 모델이 아직 없는 앞·뒤 카메라: 정상·방향 모름으로 둔다.
+    무작위 가짜 판정을 섞으면 실제 건전지가 불량·재분류로 잘못 갈 수 있어서다 (가짜 판정은 --fake 때만)"""
+    return {"found": True, "result": "normal", "conf": 1.0, "defects": [], "polarity": None, "pol_conf": 0.0}
 
 
 # ---------------------------------------------------------------- 합치기 (규약 3-2)
@@ -343,10 +369,15 @@ class LineWatcher(threading.Thread):
             h, w = frame.shape[:2]
             line = (w if LINE_AXIS == "x" else h) * LINE_POS
             dets = self.model.detect(frame, TRIGGER_CONF)
+            # 건전지 몸통 박스만 센다 (앞·뒤 모델은 몸통 + 불량 부위 박스가 같이 나오므로 한 퍽이 두 번 세지지 않게)
+            bodies = [d for d in dets if d[0] in POLARITY_CLASSES | NORMAL_CLASSES] or dets
             cur = []
-            for _, _, (x1, y1, x2, y2) in dets:
+            for _, _, (x1, y1, x2, y2) in bodies:
                 cur.append((x1 + x2) / 2 if LINE_AXIS == "x" else (y1 + y2) / 2)
+            fired = False
             for c in cur:
+                if fired:
+                    break
                 if not prev:
                     break
                 p = min(prev, key=lambda v: abs(v - c))           # 이전 화면의 같은 물체 (가장 가까운 것)
@@ -354,6 +385,7 @@ class LineWatcher(threading.Thread):
                     continue
                 if LINE_DIR * (p - line) < 0 <= LINE_DIR * (c - line):   # 이번 화면에서 기준선을 넘음
                     now = time.monotonic()
+                    fired = True
                     if now - self.last_fire >= MIN_GAP_SEC:
                         self.last_fire = now
                         self.on_cross()
@@ -412,9 +444,13 @@ class Vision:
                 self.cams[name].start()
             elif self.models[name] is not None:
                 raise SystemExit(f"[yolo] {name}: 모델은 있는데 카메라(source)가 없음 → CAMERAS 확인")
-        if self.models.get(TRIGGER_CAM) is None or TRIGGER_CAM not in self.cams:
-            raise SystemExit(f"[yolo] 기준 카메라 {TRIGGER_CAM}에 카메라와 모델이 있어야 기준선 통과를 볼 수 있음\n"
-                             f"       → TRIGGER_CAM을 모델이 있는 카메라로 바꾸거나, 시험만 하려면 --fake")
+        self.trigger = next((c for c in (TRIGGER_CAM, TRIGGER_FALLBACK)
+                             if self.models.get(c) is not None and c in self.cams), None)
+        if self.trigger is None:
+            raise SystemExit(f"[yolo] 기준 카메라 {TRIGGER_CAM}(없으면 {TRIGGER_FALLBACK})에 카메라와 모델이 있어야 "
+                             f"기준선 통과를 볼 수 있음\n       → CAMERAS를 확인하거나, 시험만 하려면 --fake")
+        if self.trigger != TRIGGER_CAM:
+            log(f"[yolo] 기준 카메라 {TRIGGER_CAM}에 모델이 없어 {self.trigger}로 기준선을 봄")
         fakes = [n for n in CAM_NAMES if self.models[n] is None]
         if fakes:
             log(f"[yolo] 가짜 판정 카메라: {fakes} (모델이 생기면 CAMERAS에 경로를 넣으세요)")
@@ -473,12 +509,12 @@ class Vision:
         for th in threads.values():
             th.join()
 
-        top = self.fake.top()
+        top = (None, 0.0)            # 위 모델 없음 → 극 방향은 앞·뒤 값 또는 unknown(측정으로 확인)
         sides = {}
         for n in CAM_NAMES:
             if self.models[n] is None:
                 if n != "top":
-                    sides[n] = self.fake.side(n)
+                    sides[n] = neutral_side()
                 continue
             if shots.get(n) is None:
                 cam_error.append(n)
@@ -512,9 +548,9 @@ class Vision:
         self.loop = asyncio.get_running_loop()
         self.queue = asyncio.Queue()
         if not self.a.fake and self.watcher is None:
-            self.watcher = LineWatcher(self.cams[TRIGGER_CAM], self.models[TRIGGER_CAM], self.on_cross, self.a.show)
+            self.watcher = LineWatcher(self.cams[self.trigger], self.models[self.trigger], self.on_cross, self.a.show)
             self.watcher.start()
-            log(f"[yolo] 기준선 감시 시작: {TRIGGER_CAM} 카메라, {LINE_AXIS}={LINE_POS}, 방향 {LINE_DIR:+d}")
+            log(f"[yolo] 기준선 감시 시작: {self.trigger} 카메라, {LINE_AXIS}={LINE_POS}, 방향 {LINE_DIR:+d}")
         while True:
             await self.queue.get()               # 퍽 하나 → 순서대로 처리 (서버는 결과 순서로 퍽을 짝지음)
             self.seq += 1

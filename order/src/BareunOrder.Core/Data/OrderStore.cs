@@ -123,7 +123,11 @@ public sealed partial class OrderStore : ObservableObject
     {
         Write($"{order.No} 회차 연결 {runId} ({batteryCount}개)");
         await _client.PublishAsync(OrderTopics.Run, OrderJson.Run(order.No, runId, batteryCount), retain: false);
+        RunLinked?.Invoke(order, runId, batteryCount);
     }
+
+    /// <summary>PublishRunAsync로 주문에 회차를 연결했을 때 (LineSupplyReader가 남은 A 수를 다시 셈)</summary>
+    public event Action<Order, string, int>? RunLinked;
 
     public void Write(string what, string? who = null)
     {

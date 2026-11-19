@@ -40,3 +40,24 @@
 - `OrderJson.CertNo`(형식 검사), `OrderJson.CertNoFor(주문번호)`(만들기) 추가. F6에서는 `store.SetCertNoAsync(order, OrderJson.CertNoFor(order.No)!)`
 - `SetCertNoAsync`는 형식이 틀리면 ArgumentException
 - 켤 때 DB에서 `orders.cert_no`도 불러옴 (DB 담당 수정본으로 칸 추가됨)
+
+## v4.5 (11/19, 조시현) — 라인 A 등급 남은 수 (F2·F3 공통)
+- `Core/Data/LineSupply.cs` 추가: `LineSupplyReader` (DI 싱글톤, App 시작 때 StartAsync)
+  - 출고 가능 A = Σ 회차별 (A 등급 수 − order_runs로 이미 연결된 수). 주문 통신 규약 v1.0.2 6장 안 A
+  - 실제 모드: ui_reader로 DB 조회, 켤 때 + 1분마다 + `RefreshAsync()`. 최근 DbLoadDays일, run_type 'LINE'만
+  - 가짜 모드(또는 MySqlConnection 없음): 예시 회차 3개 (남은 A 43개, 오늘 A 37개)
+  - 화면용: `Available`, `TodayA`, `Runs`, `StatusText`, `Changed` 이벤트
+  - 출고용: `Plan(개수)` → 오래된 회차부터 나눈 `RunTake` 목록 (모자라면 null). 각각 `store.PublishRunAsync(order, t.RunId, t.Count)`
+  - 재고용: `PacksFor(product)` = 남은 A로 포장할 수 있는 팩 수
+- `OrderStore.RunLinked` 이벤트: PublishRunAsync 뒤에 알림 → 가짜 모드는 바로 빼고, 실제 모드는 2초 뒤 DB 다시 읽음
+- 메인 창 아래 줄 왼쪽에 "라인 A 남음 N개 · 오늘 A N개 · 시각" 항상 표시 (읽기 실패면 빨간 글씨로 이유). 작업 기록에도 값이 바뀔 때 한 줄
+- 확인 (11/19 서버 PC): 가짜 모드 43개(예시), 실제 DB 40개 (시험 데이터 3 + 그동안 돌린 실제 회차 37)
+
+## v4.6 (11/19, 조시현) — F2·F3 라인 연동 (담당자 대신 먼저 반영)
+- F2 출고·배송: "라인 A 등급 남음 (출고 가능)" = LineSupplyReader.Available (예시 값 60 삭제)
+  - [출고 처리]: 회차 연결(order/run, 오래된 회차부터) → 송장 저장 → 배송 중. A가 모자라면 "회차 연결 없이 출고할까요? (성적서 발급 불가)" 확인
+  - 버튼 글자 "출고 처리 (배송 중으로)" → "출고 처리"
+- F3 재고: 실제 모드는 켤 때 DB stock 표에서 창고 팩 수 읽기 + [새로 고침], 입고는 order/stock(restock)으로 DB 저장
+  - "주문에 묶임"에 배송 중 포함 (재고는 배송 완료 때 빠지므로)
+  - 라인 A 숫자 = LineSupplyReader.Available
+- 남은 것: 포장 입고와 "남은 A"를 어떻게 맞출지 (주문 통신 규약 7장 결정 ⑦)

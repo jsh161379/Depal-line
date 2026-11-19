@@ -305,8 +305,20 @@
         <!-- ═══ 아래 줄 ═══ -->
         <Border Grid.Row="3" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
             <Grid Margin="16,0">
-                <TextBlock Text="F1~F7 탭 이동   ·   새 주문은 오른쪽 아래에 알림이 뜹니다" FontSize="12"
-                           Foreground="{StaticResource Ink2}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding LineText}" FontSize="12" FontFamily="{StaticResource Mono}"
+                           HorizontalAlignment="Left" VerticalAlignment="Center"
+                           ToolTip="출고 가능한 A 등급 = 회차별 A 등급 − 이미 주문에 연결된 수 (1분마다 DB에서 다시 읽음)">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource Ink2}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding LineFailed}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Red}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <TextBlock Text="{Binding LastLog}" FontSize="12" Foreground="{StaticResource Ink2}"
                            FontFamily="{StaticResource Mono}" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>

@@ -14,8 +14,7 @@ namespace BareunOrder.Feature.Shipping;
 /// 출고 검사 상태인 주문을 골라 택배사·송장번호를 넣고 출고 처리(→ 배송 중)한다.
 ///
 /// ── 할 일 (TODO) ──
-/// - 라인 A 등급 준비 수: 지금은 예시 숫자. 라인 MQTT server/results에서 오늘 A 등급 개수를 세서 넣기
-///   (서버 담당과 방법 확인. 관리자 프로그램 Results 탭이 같은 데이터를 씀)
+/// - (완료 11/19, 조시현) 라인 A 등급 남은 수: Core LineSupplyReader (DB, 1분마다). 출고 때 회차 연결(order/run)
 /// - 여러 주문 한꺼번에 출고 처리 (체크박스)
 /// - 출고 지시서·거래명세서 인쇄 (PrintDialog 또는 PDF)
 /// - 송장번호 형식 검사 (택배사마다 자릿수)
@@ -25,11 +24,14 @@ public sealed partial class ShippingViewModel : ObservableObject, IHasBadge
 {
     private readonly OrderStore _store;
     private readonly ChatStore _chat;
+    private readonly LineSupplyReader _supply;
 
-    public ShippingViewModel(OrderStore store, ChatStore chat)
+    public ShippingViewModel(OrderStore store, ChatStore chat, LineSupplyReader supply)
     {
         _store = store;
         _chat = chat;
+        _supply = supply;
+        supply.Changed += () => { OnPropertyChanged(nameof(LineReadyA)); OnPropertyChanged(nameof(IsShort)); };
 
         Pending = new ListCollectionView(store.Orders) { Filter = o => ((Order)o).Status == OrderStatus.Inspect };
         Pending.SortDescriptions.Add(new SortDescription(nameof(Order.ReceivedAt), ListSortDirection.Ascending));   // 오래된 것부터
@@ -53,12 +55,11 @@ public sealed partial class ShippingViewModel : ObservableObject, IHasBadge
     public int PendingCount => Pending.Count;
     public int NeededBatteries => _store.Orders.Where(o => o.Status == OrderStatus.Inspect).Sum(o => o.BatteryCount);
 
-    /// <summary>TODO: 라인에서 오늘 검사 통과한 A 등급 개수 (지금은 예시 값)</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsShort))]
-    private int _lineReadyA = 60;
+    /// <summary>라인 A 등급 남은 수 = 회차별 A − 이미 주문에 연결된 수 (Core LineSupplyReader, 아래 줄 왼쪽과 같은 값)</summary>
+    public int LineReadyA => _supply.Available;
 
     public bool IsShort => LineReadyA < NeededBatteries;
+
 
     // ── 오른쪽 입력 ──
     [ObservableProperty]
@@ -75,11 +76,30 @@ public sealed partial class ShippingViewModel : ObservableObject, IHasBadge
 
     private bool CanShip() => Selected != null && Tracking.Trim().Length >= 10;
 
-    /// <summary>출고 처리: 송장 저장 → 배송 중으로</summary>
+    /// <summary>
+    /// 출고 처리: 라인 회차 연결(order/run) → 송장 저장 → 배송 중으로.
+    /// 회차 연결이 있어야 F6 검사 성적서를 발급할 수 있다. A 등급이 모자라면 연결 없이 출고할지 묻는다.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanShip))]
     private async Task Ship()
     {
         if (Selected is not { } o) return;
+
+        var takes = _supply.Plan(o.BatteryCount);
+        if (takes == null)
+        {
+            var answer = MessageBox.Show(
+                $"라인 A 등급이 모자랍니다 (필요 {o.BatteryCount}개, 남음 {_supply.Available}개).\n" +
+                "회차 연결 없이 출고할까요? 이 주문은 검사 성적서를 발급할 수 없습니다.",
+                "출고", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.Yes) return;
+        }
+        else
+        {
+            foreach (var t in takes)
+                await _store.PublishRunAsync(o, t.RunId, t.Count);
+        }
+
         await _store.SetShippingInfoAsync(o, Courier, Tracking.Trim());
         await _store.ChangeStatusAsync(o, OrderStatus.Shipping);
         Selected = null;

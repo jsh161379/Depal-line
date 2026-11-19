@@ -43,10 +43,14 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _clock;
     private readonly DispatcherTimer _toastTimer;
     private readonly DispatcherTimer _chatToastTimer;
+    private readonly LineSupplyReader _supply;
 
-    public MainViewModel(IEnumerable<IPage> pages, OrderStore store, ChatStore chat, Navigator navigator, AppSettings settings)
+    public MainViewModel(IEnumerable<IPage> pages, OrderStore store, ChatStore chat, Navigator navigator, AppSettings settings,
+        LineSupplyReader supply)
     {
         _store = store;
+        _supply = supply;
+        supply.Changed += () => { OnPropertyChanged(nameof(LineText)); OnPropertyChanged(nameof(LineFailed)); };
         _settings = settings;
         _navigator = navigator;
 
@@ -102,6 +106,14 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _todayCount;
     [ObservableProperty] private int _waitingCount;     // 주문 접수 + 출고 검사
     [ObservableProperty] private int _todaySales;
+
+    /// <summary>아래 줄 가운데: 라인 A 등급 남은 수 (LineSupplyReader, 1분마다 갱신)</summary>
+    public string LineText =>
+        _supply.Error != null ? "라인 A 읽기 실패 — " + _supply.Error
+        : _supply.ReadAt == null ? "라인 A 읽는 중…"
+        : $"라인 A 남음 {_supply.Available}개 · 오늘 A {_supply.TodayA}개 · {_supply.ReadAt:HH:mm}{(_supply.IsExample ? " (예시)" : "")}";
+
+    public bool LineFailed => _supply.Error != null;
 
     public string LastLog => _store.Log.Count == 0 ? "" : $"{_store.Log[0].Time:HH:mm:ss}  {_store.Log[0].What}";
 
