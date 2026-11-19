@@ -8,21 +8,21 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace BareunOrder.Feature.Stats;
 
-/// <summary>기간 하나 (오늘 / 최근 7일 / 이번 달)</summary>
-public sealed record Period(string Label, Func<DateTime> From);
-
-/// <summary>막대 한 줄 (상품별, 시간대별). Width는 화면에 그릴 막대 길이(0~1).</summary>
-public sealed record Bar(string Label, int Value, string ValueText, double Ratio);
+/// <summary>막대 한 줄 (상품별, 시간대별, 일별). Ratio는 화면에 그릴 막대 길이(0~1).</summary>
+public sealed record Bar(string Label, int Value, string ValueText, double Ratio, string Tip = "", string SubLabel = "");
 
 /// <summary>
-/// 담당: (미정) — F4 통계.
-/// 기간별 주문 수·매출·판매 팩·취소율, 상품별 매출, 시간대별 주문 수.
+/// 담당: 장성찬 — F4 통계.
+/// 기간(일일/주간/월간/직접)별 주문 수·매출·판매 팩·취소율, 이전 기간 대비 증감,
+/// 일별 주문·매출, 상품별 매출, 시간대별 주문 수, 주문 상태별 건수(출고·배송), 엑셀 내보내기.
+///
+/// - 기간 계산: StatsPeriod.cs (주간 = 월~일, 월간 = 1일~말일)
+/// - 계산: StatsCalculator.cs (화면·엑셀·보고서가 같은 값을 씀)
+/// - DB 조회: StatsDbReader.cs (가짜 모드·DB 설정 없음이면 프로그램에 있는 주문만)
+/// - 엑셀: StatsExcelReport.cs
 ///
 /// ── 할 일 (TODO) ──
-/// - [완료] 기간을 고르면 DB에서 그 기간 주문을 불러온다 (StatsDbReader.cs). 가짜 모드·DB 없음이면 메모리 주문만
-/// - 날짜 직접 고르기 (DatePicker)
-/// - [완료] 엑셀(.xlsx) 내보내기 — 선택한 기간의 요약·상품별·시간대별·주문 목록 (StatsExcelReport.cs)
-/// - 마감 보고서 인쇄
+/// - 마감 보고서 인쇄·PDF는 주문 관리 보고서(유동호)에서 CurrentResult / PreviousResult를 그대로 쓰도록 맞춤
 /// - 자주 주문하는 고객 TOP 5
 /// </summary>
 public sealed partial class StatsViewModel : ObservableObject
@@ -30,34 +30,115 @@ public sealed partial class StatsViewModel : ObservableObject
     private readonly OrderStore _store;
     private readonly AppSettings _settings;
 
-    /// <summary>마지막으로 DB에서 읽은 기간의 주문. 없으면 null (가짜 모드, DB 없음, 실패)</summary>
+    /// <summary>DB에서 읽은 주문과 그 범위 (시작일 포함 ~ 끝 다음 날 미포함). 없으면 null.</summary>
     private List<Order>? _dbOrders;
+    private DateTime _dbFrom, _dbTo;
     private CancellationTokenSource? _loadCts;
+
+    /// <summary>코드에서 기간을 바꾸는 동안 날짜 변경 알림으로 "직접"이 되지 않게</summary>
+    private bool _settingRange;
 
     public StatsViewModel(OrderStore store, AppSettings settings)
     {
         _store = store;
         _settings = settings;
-        Periods = new[]
+        PeriodOptions = new[]
         {
-            new Period("오늘", () => DateTime.Today),
-            new Period("최근 7일", () => DateTime.Today.AddDays(-6)),
-            new Period("이번 달", () => new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1)),
+            new PeriodOption("일일", PeriodKind.Day),
+            new PeriodOption("주간", PeriodKind.Week),
+            new PeriodOption("월간", PeriodKind.Month),
         };
-        _period = Periods[0];
+        _selectedOption = PeriodOptions[0];
+        (_startDate, _endDate) = StatsPeriod.For(PeriodKind.Day, DateTime.Today);
         _store.Changed += Recalc;
-        _ = LoadAsync();
-    }
-
-    public IReadOnlyList<Period> Periods { get; }
-
-    [ObservableProperty] private Period _period;
-    partial void OnPeriodChanged(Period value)
-    {
-        _dbOrders = null;   // 다른 기간의 DB 결과가 섞이지 않게
+        UpdatePeriodText();
         Recalc();
         _ = LoadAsync();
     }
+
+    // ───────────────────────── 기간 ─────────────────────────
+
+    public IReadOnlyList<PeriodOption> PeriodOptions { get; }
+
+    /// <summary>지금 기간 종류. 날짜를 직접 고치면 Custom.</summary>
+    public PeriodKind Kind { get; private set; } = PeriodKind.Day;
+
+    /// <summary>[일일/주간/월간] 중 고른 것. 직접 고른 기간이면 null.</summary>
+    [ObservableProperty] private PeriodOption? _selectedOption;
+
+    /// <summary>시작일 (DatePicker)</summary>
+    [ObservableProperty] private DateTime _startDate;
+
+    /// <summary>종료일 (DatePicker, 그날 포함)</summary>
+    [ObservableProperty] private DateTime _endDate;
+
+    /// <summary>"주간 · 2026-11-16(월) ~ 2026-11-22(일) · 7일"</summary>
+    [ObservableProperty] private string _periodText = "";
+
+    /// <summary>"전주 대비" 같은 비교 이름</summary>
+    [ObservableProperty] private string _previousName = "전일";
+
+    partial void OnSelectedOptionChanged(PeriodOption? value)
+    {
+        if (value == null || _settingRange) return;
+        // 지금 시작일이 들어 있는 일/주/월로 맞춤
+        SetRange(value.Kind, StatsPeriod.For(value.Kind, StartDate));
+    }
+
+    partial void OnStartDateChanged(DateTime value) => OnDatePicked();
+    partial void OnEndDateChanged(DateTime value) => OnDatePicked();
+
+    private void OnDatePicked()
+    {
+        if (_settingRange) return;
+        var (s, e) = StartDate <= EndDate ? (StartDate, EndDate) : (EndDate, StartDate);
+        SetRange(PeriodKind.Custom, (s, e));
+    }
+
+    /// <summary>◀ 이전 기간</summary>
+    [RelayCommand]
+    private void Prev() => SetRange(Kind, StatsPeriod.Shift(Kind, StartDate, EndDate, -1));
+
+    /// <summary>▶ 다음 기간</summary>
+    [RelayCommand]
+    private void Next() => SetRange(Kind, StatsPeriod.Shift(Kind, StartDate, EndDate, +1));
+
+    /// <summary>[오늘] 오늘이 들어 있는 기간 (직접 고른 기간이면 오늘 하루)</summary>
+    [RelayCommand]
+    private void Today()
+    {
+        var kind = Kind == PeriodKind.Custom ? PeriodKind.Day : Kind;
+        SetRange(kind, StatsPeriod.For(kind, DateTime.Today));
+    }
+
+    private void SetRange(PeriodKind kind, (DateTime Start, DateTime End) range)
+    {
+        _settingRange = true;
+        try
+        {
+            Kind = kind;
+            StartDate = range.Start.Date;
+            EndDate = range.End.Date;
+            SelectedOption = PeriodOptions.FirstOrDefault(o => o.Kind == kind);   // 직접이면 null
+        }
+        finally
+        {
+            _settingRange = false;
+        }
+        UpdatePeriodText();
+        Recalc();          // 프로그램에 있는 주문으로 먼저 보여 주고
+        _ = LoadAsync();   // DB 결과가 오면 다시 계산
+    }
+
+    private void UpdatePeriodText()
+    {
+        PeriodText = $"{StatsPeriod.KindName(Kind)} · {StatsPeriod.RangeText(StartDate, EndDate)}";
+        PreviousName = StatsPeriod.PreviousName(Kind);
+    }
+
+    private (DateTime Start, DateTime End) PreviousRange => StatsPeriod.Previous(Kind, StartDate, EndDate);
+
+    // ───────────────────────── DB 조회 ─────────────────────────
 
     /// <summary>화면에 보일 데이터 출처: "DB 기준 · 15:02 불러옴" 등</summary>
     [ObservableProperty] private string _sourceText = "";
@@ -65,7 +146,7 @@ public sealed partial class StatsViewModel : ObservableObject
 
     private bool UseDb => !_settings.UseFakeOrders && !string.IsNullOrWhiteSpace(_settings.MySqlConnection);
 
-    /// <summary>고른 기간의 주문을 DB에서 다시 읽는다 (새로고침 버튼)</summary>
+    /// <summary>고른 기간(+비교할 이전 기간)의 주문을 DB에서 다시 읽는다</summary>
     [RelayCommand]
     private Task Refresh() => LoadAsync();
 
@@ -83,15 +164,16 @@ public sealed partial class StatsViewModel : ObservableObject
 
         var cts = new CancellationTokenSource();
         _loadCts = cts;
-        var period = Period;
-        var (from, to) = (period.From(), DateTime.Today.AddDays(1));
+        // 이전 기간 비교까지 한 번에 읽음
+        var from = PreviousRange.Start.Date;
+        var to = EndDate.Date.AddDays(1);
         IsLoading = true;
         SourceText = "DB에서 불러오는 중…";
         try
         {
             var orders = await Task.Run(() => StatsDbReader.LoadAsync(_settings.MySqlConnection!, from, to, cts.Token), cts.Token);
-            if (cts.IsCancellationRequested || !ReferenceEquals(period, Period)) return;
-            _dbOrders = orders;
+            if (cts.IsCancellationRequested) return;
+            (_dbOrders, _dbFrom, _dbTo) = (orders, from, to);
             SourceText = $"DB 기준 · {DateTime.Now:HH:mm} 불러옴";
         }
         catch (OperationCanceledException)
@@ -100,7 +182,7 @@ public sealed partial class StatsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (cts.IsCancellationRequested || !ReferenceEquals(period, Period)) return;
+            if (cts.IsCancellationRequested) return;
             _dbOrders = null;
             SourceText = $"DB 조회 실패 — 켠 뒤 들어온 주문만 ({ex.Message})";
         }
@@ -111,40 +193,118 @@ public sealed partial class StatsViewModel : ObservableObject
         Recalc();
     }
 
+    /// <summary>
+    /// 계산에 쓸 주문: DB에서 읽은 주문 + 프로그램에 있는 주문을 주문번호로 합친다.
+    /// 같은 번호면 프로그램 쪽(상태가 가장 최신)을 쓴다 → DB에 아직 저장 안 된 새 주문도 바로 들어간다.
+    /// DB 결과가 지금 기간을 다 덮지 못하면(기간을 바꾼 직후) DB 결과는 쓰지 않는다.
+    /// </summary>
+    private List<Order> SourceOrders(DateTime from, DateTime to)
+    {
+        var byNo = new Dictionary<string, Order>();
+        if (_dbOrders != null && _dbFrom <= from && to <= _dbTo)
+            foreach (var o in _dbOrders) byNo[o.No] = o;
+        foreach (var o in _store.Orders.Where(o => o.ReceivedAt >= from && o.ReceivedAt < to)) byNo[o.No] = o;
+        return byNo.Values.ToList();
+    }
+
+    // ───────────────────────── 결과 ─────────────────────────
+
+    /// <summary>지금 기간 결과 (보고서·엑셀이 그대로 씀)</summary>
+    public StatsResult? CurrentResult { get; private set; }
+
+    /// <summary>이전 기간 결과 (전일·전주·지난달 비교)</summary>
+    public StatsResult? PreviousResult { get; private set; }
+
     [ObservableProperty] private int _orderCount;
     [ObservableProperty] private int _sales;
     [ObservableProperty] private int _packCount;
     [ObservableProperty] private double _cancelRate;     // 0~100
     [ObservableProperty] private int _averageOrder;
+    [ObservableProperty] private int _shippedCount;      // 배송 중 + 배송 완료
+    [ObservableProperty] private int _pendingCount;      // 주문 접수 + 출고 검사
+
+    // 이전 기간 대비: "전주 대비 +3건 (▲25.0%)"
+    [ObservableProperty] private string _orderDiffText = "";
+    [ObservableProperty] private string _salesDiffText = "";
+    [ObservableProperty] private string _packDiffText = "";
+    [ObservableProperty] private string _cancelDiffText = "";
 
     [ObservableProperty] private IReadOnlyList<Bar> _byProduct = Array.Empty<Bar>();
     [ObservableProperty] private IReadOnlyList<Bar> _byHour = Array.Empty<Bar>();
+    [ObservableProperty] private IReadOnlyList<Bar> _byDay = Array.Empty<Bar>();
+    [ObservableProperty] private IReadOnlyList<StatusRow> _byStatus = Array.Empty<StatusRow>();
+
+    private void Recalc()
+    {
+        var (ps, pe) = PreviousRange;
+        var source = SourceOrders(ps.Date, EndDate.Date.AddDays(1));
+        var now = StatsCalculator.Compute(source, StartDate, EndDate);
+        var before = StatsCalculator.Compute(source, ps, pe);
+        CurrentResult = now;
+        PreviousResult = before;
+
+        OrderCount = now.OrderCount;
+        Sales = now.Sales;
+        PackCount = now.PackCount;
+        CancelRate = now.CancelRate;
+        AverageOrder = now.AverageOrder;
+        ShippedCount = now.ShippedCount;
+        PendingCount = now.PendingCount;
+
+        var p = PreviousName;
+        OrderDiffText = $"{p} 대비 {StatsCalculator.DiffText(now.OrderCount, before.OrderCount, "건")}";
+        SalesDiffText = $"{p} 대비 {StatsCalculator.DiffText(now.Sales, before.Sales, "원")}";
+        PackDiffText = $"{p} 대비 {StatsCalculator.DiffText(now.PackCount, before.PackCount, "팩")}";
+        var pt = now.CancelRate - before.CancelRate;
+        CancelDiffText = $"{p} 대비 {(pt > 0 ? "+" : pt < 0 ? "−" : "±")}{Math.Abs(pt):0.0}%p";
+
+        // 상품별 매출
+        var maxP = Math.Max(1, now.ByProduct.Max(x => x.Sales));
+        ByProduct = now.ByProduct
+            .Select(x => new Bar(x.Name, x.Sales, $"{x.Sales:N0}원", (double)x.Sales / maxP, $"{x.Name}: {x.Packs}팩 · {x.Sales:N0}원"))
+            .ToList();
+
+        // 시간대별 주문 수
+        var maxH = Math.Max(1, now.ByHour.Max(x => x.Orders));
+        ByHour = now.ByHour
+            .Select(x => new Bar($"{x.Hour}시", x.Orders, x.Orders.ToString(), (double)x.Orders / maxH, $"{x.Hour}시: {x.Orders}건"))
+            .ToList();
+
+        // 일별 주문·매출 (막대 길이 = 매출, 위 숫자 = 주문 수)
+        var maxD = Math.Max(1, now.ByDay.Max(x => x.Sales));
+        ByDay = now.ByDay
+            .Select(x => new Bar(
+                x.Date.Day.ToString(), x.Sales, x.Orders.ToString(), (double)x.Sales / maxD,
+                $"{StatsPeriod.DayText(x.Date)}: 주문 {x.Orders}건 · {x.Sales:N0}원 · {x.Packs}팩 · 취소 {x.Canceled}건",
+                StatsPeriod.Weekday(x.Date)))
+            .ToList();
+
+        ByStatus = now.ByStatus;
+    }
+
+    // ───────────────────────── 엑셀 ─────────────────────────
 
     /// <summary>
-    /// 지금 고른 기간의 통계를 서식 있는 엑셀 파일(.xlsx)로 저장한다 (시트: 요약, 주문 목록).
+    /// 지금 기간의 통계를 서식 있는 엑셀 파일(.xlsx)로 저장한다 (시트: 요약, 일별, 주문 목록).
     /// 만드는 방법은 StatsExcelReport.cs. 연락처는 가린 번호만, 주소는 넣지 않는다.
     /// </summary>
     [RelayCommand]
     private void Export()
     {
+        if (CurrentResult == null || PreviousResult == null) Recalc();
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Title = "통계 엑셀로 내보내기",
             Filter = "Excel 통합 문서 (*.xlsx)|*.xlsx",
             DefaultExt = ".xlsx",
             AddExtension = true,
-            FileName = $"바른전지_통계_{Period.Label.Replace(" ", "")}_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
+            FileName = $"바른전지_통계_{StatsPeriod.KindName(Kind).Replace(" ", "")}_{StartDate:yyyyMMdd}-{EndDate:yyyyMMdd}.xlsx",
         };
         if (dialog.ShowDialog() != true) return;
 
-        var orders = OrdersInPeriod();
-        var summary = new StatsExcelReport.Summary(
-            Period.Label, Period.From(), DateTime.Today,
-            OrderCount, Sales, AverageOrder, PackCount,
-            orders.Count(o => o.Status == OrderStatus.Canceled), CancelRate);
         try
         {
-            StatsExcelReport.Save(dialog.FileName, summary, orders, ByHour);
+            StatsExcelReport.Save(dialog.FileName, Kind, CurrentResult!, PreviousResult!);
             MessageBox.Show($"저장했습니다.\n{dialog.FileName}", "내보내기", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -152,46 +312,5 @@ public sealed partial class StatsViewModel : ObservableObject
             MessageBox.Show($"저장하지 못했습니다. 같은 파일이 엑셀에 열려 있으면 닫고 다시 시도하세요.\n\n{ex.Message}",
                 "내보내기", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-    }
-
-    /// <summary>
-    /// 고른 기간의 주문 (취소 포함, 접수 시각 순).
-    /// DB에서 읽은 주문 + 프로그램에 있는 주문을 주문번호로 합친다.
-    /// 같은 번호면 프로그램 쪽(상태가 가장 최신)을 쓴다 → DB에 아직 저장 안 된 새 주문도 바로 들어간다.
-    /// </summary>
-    private List<Order> OrdersInPeriod()
-    {
-        var from = Period.From();
-        var to = DateTime.Today.AddDays(1);
-        var byNo = new Dictionary<string, Order>();
-        foreach (var o in _dbOrders ?? Enumerable.Empty<Order>()) byNo[o.No] = o;
-        foreach (var o in _store.Orders.Where(o => o.ReceivedAt >= from && o.ReceivedAt < to)) byNo[o.No] = o;
-        return byNo.Values.OrderBy(o => o.ReceivedAt).ToList();
-    }
-
-    private void Recalc()
-    {
-        var all = OrdersInPeriod();
-        var valid = all.Where(o => o.Status != OrderStatus.Canceled).ToList();
-
-        OrderCount = valid.Count;
-        Sales = valid.Sum(o => o.Total);
-        PackCount = valid.Sum(o => o.PackCount);
-        CancelRate = all.Count == 0 ? 0 : 100.0 * (all.Count - valid.Count) / all.Count;
-        AverageOrder = valid.Count == 0 ? 0 : Sales / valid.Count;
-
-        // 상품별 매출
-        var prod = Products.All
-            .Select(p => (p.Name, Amount: valid.SelectMany(o => o.Items).Where(i => i.Id == p.Id).Sum(i => i.Amount)))
-            .ToList();
-        var maxP = Math.Max(1, prod.Max(x => x.Amount));
-        ByProduct = prod.Select(x => new Bar(x.Name, x.Amount, $"{x.Amount:N0}원", (double)x.Amount / maxP)).ToList();
-
-        // 시간대별 주문 수 (8시~21시)
-        var hours = Enumerable.Range(8, 14)
-            .Select(h => (h, Count: valid.Count(o => o.ReceivedAt.Hour == h)))
-            .ToList();
-        var maxH = Math.Max(1, hours.Max(x => x.Count));
-        ByHour = hours.Select(x => new Bar($"{x.h}시", x.Count, x.Count.ToString(), (double)x.Count / maxH)).ToList();
     }
 }

@@ -10,88 +10,138 @@ namespace BareunOrder.Feature.Stats;
 /// <summary>
 /// 통계를 서식 있는 엑셀 파일(.xlsx)로 저장한다.
 /// 외부 패키지 없이 .xlsx(XML 파일 묶음)를 직접 만든다 → Directory.Packages.props(공통)를 고치지 않아도 된다.
+/// 값은 모두 StatsCalculator 결과(StatsResult)를 그대로 쓴다 → 화면·보고서와 숫자가 같다.
 ///
-/// 시트 2개
-///   - 요약: 기간, 핵심 지표, 상품별 매출, 시간대별 주문 수
+/// 시트 3개
+///   - 요약: 기간, 핵심 지표(이번 기간 / 이전 기간 / 증감), 주문 상태별 건수(출고·배송), 상품별 매출, 시간대별 주문 수
+///   - 일별: 날짜마다 주문 수·매출·판매 팩·취소 (일일 1줄, 주간 7줄, 월간 28~31줄)
 ///   - 주문 목록: 주문 한 건이 한 줄. 취소 주문은 회색, 합계에서 뺀다. 연락처는 가린 번호, 주소는 넣지 않는다.
 /// </summary>
 internal static class StatsExcelReport
 {
-    /// <summary>화면 위쪽 숫자 4칸과 같은 값</summary>
-    public sealed record Summary(
-        string PeriodLabel, DateTime From, DateTime To,
-        int OrderCount, int Sales, int AverageOrder, int PackCount, int CancelCount, double CancelRate);
-
-    public static void Save(string path, Summary s, IReadOnlyList<Order> orders, IReadOnlyList<Bar> byHour)
+    public static void Save(string path, PeriodKind kind, StatsResult now, StatsResult before)
     {
-        var valid = orders.Where(o => o.Status != OrderStatus.Canceled).ToList();
-        var period = $"{s.PeriodLabel}  ({s.From:yyyy-MM-dd} ~ {s.To:yyyy-MM-dd})";
+        var valid = now.Orders.Where(o => o.Status != OrderStatus.Canceled).ToList();
+        var kindName = StatsPeriod.KindName(kind);
+        var prevName = StatsPeriod.PreviousName(kind);
+        var period = StatsPeriod.RangeText(now.Start, now.End);
+        var prevPeriod = StatsPeriod.RangeText(before.Start, before.End);
         var written = $"{DateTime.Now:yyyy-MM-dd HH:mm}";
 
         // ═══ 시트 1: 요약 ═══
-        var sum = new Sheet("요약", 26, 14, 16, 12) { Selected = true };
-        sum.Text(1, 1, "바른전지 주문 통계 보고서", St.Title);
+        var sum = new Sheet("요약", 32, 16, 16, 16) { Selected = true };
+        sum.Text(1, 1, $"바른전지 주문 통계 보고서 ({kindName})", St.Title);
         sum.Merge(1, 1, 1, 4);
         sum.Height(1, 32);
         sum.Text(3, 1, "기간", St.InfoLabel);
         sum.Text(3, 2, period, St.InfoValue);
         sum.Merge(3, 2, 3, 4);
-        sum.Text(4, 1, "작성 시각", St.InfoLabel);
-        sum.Text(4, 2, written, St.InfoValue);
+        sum.Text(4, 1, $"비교 기간 ({prevName})", St.InfoLabel);
+        sum.Text(4, 2, prevPeriod, St.InfoValue);
         sum.Merge(4, 2, 4, 4);
+        sum.Text(5, 1, "작성 시각", St.InfoLabel);
+        sum.Text(5, 2, written, St.InfoValue);
+        sum.Merge(5, 2, 5, 4);
 
-        // 핵심 지표
-        var r = 6;
-        sum.Section(r++, "핵심 지표", 2);
-        sum.Header(r++, "항목", "값");
-        void Kpi(string label, double value, int style)
+        // 핵심 지표: 이번 기간 / 이전 기간 / 증감
+        var r = 7;
+        sum.Section(r++, "핵심 지표", 4);
+        sum.Header(r++, "항목", "이번 기간", prevName, "증감");
+        void Kpi(string label, double a, double b, int style, int diffStyle)
         {
             sum.Text(r, 1, label, St.Text);
-            sum.Number(r, 2, value, style);
+            sum.Number(r, 2, a, style);
+            sum.Number(r, 3, b, style);
+            sum.Number(r, 4, Math.Round(a - b, 1), diffStyle);
             r++;
         }
-        Kpi("주문 수 (취소 제외)", s.OrderCount, St.Count);
-        Kpi("매출", s.Sales, St.Won);
-        Kpi("주문당 평균", s.AverageOrder, St.Won);
-        Kpi("판매 팩 수", s.PackCount, St.Pack);
-        Kpi("취소 건수", s.CancelCount, St.Count);
-        Kpi("취소율", Math.Round(s.CancelRate, 1), St.Pct);
+        Kpi("주문 수 (취소 제외)", now.OrderCount, before.OrderCount, St.Count, St.DiffInt);
+        Kpi("매출", now.Sales, before.Sales, St.Won, St.DiffWon);
+        Kpi("주문당 평균", now.AverageOrder, before.AverageOrder, St.Won, St.DiffWon);
+        Kpi("판매 팩 수", now.PackCount, before.PackCount, St.Pack, St.DiffInt);
+        Kpi("판매 건전지 수", now.BatteryCount, before.BatteryCount, St.Int, St.DiffInt);
+        Kpi("취소 건수", now.CancelCount, before.CancelCount, St.Count, St.DiffInt);
+        Kpi("취소율", Math.Round(now.CancelRate, 1), Math.Round(before.CancelRate, 1), St.Pct, St.DiffPct);
+        Kpi("출고·배송 건수 (배송 중 + 배송 완료)", now.ShippedCount, before.ShippedCount, St.Count, St.DiffInt);
+
+        // 주문 상태별 건수
+        r++;
+        sum.Section(r++, "주문 상태별 건수 (취소 포함)", 2);
+        sum.Header(r++, "상태", "건수");
+        foreach (var st in now.ByStatus)
+        {
+            sum.Text(r, 1, st.Name, St.Text);
+            sum.Number(r, 2, st.Count, St.Count);
+            r++;
+        }
+        sum.Text(r, 1, "합계", St.TotalText);
+        sum.Number(r, 2, now.Orders.Count, St.TotalCount);
+        r++;
 
         // 상품별 매출
         r++;
         sum.Section(r++, "상품별 매출 (취소 제외)", 4);
         sum.Header(r++, "상품", "판매 팩", "매출", "비중");
-        var totalSales = Math.Max(1, valid.Sum(o => o.Total));
-        foreach (var p in Products.All)
+        var totalSales = Math.Max(1, now.Sales);
+        foreach (var p in now.ByProduct)
         {
-            var items = valid.SelectMany(o => o.Items).Where(i => i.Id == p.Id).ToList();
-            var amount = items.Sum(i => i.Amount);
             sum.Text(r, 1, p.Name, St.Text);
-            sum.Number(r, 2, items.Sum(i => i.Qty), St.Pack);
-            sum.Number(r, 3, amount, St.Won);
-            sum.Number(r, 4, Math.Round(100.0 * amount / totalSales, 1), St.Pct);
+            sum.Number(r, 2, p.Packs, St.Pack);
+            sum.Number(r, 3, p.Sales, St.Won);
+            sum.Number(r, 4, Math.Round(100.0 * p.Sales / totalSales, 1), St.Pct);
             r++;
         }
         sum.Text(r, 1, "합계", St.TotalText);
-        sum.Number(r, 2, valid.Sum(o => o.PackCount), St.TotalPack);
-        sum.Number(r, 3, valid.Sum(o => o.Total), St.TotalWon);
-        sum.Number(r, 4, valid.Count == 0 ? 0 : 100, St.TotalPct);
+        sum.Number(r, 2, now.PackCount, St.TotalPack);
+        sum.Number(r, 3, now.Sales, St.TotalWon);
+        sum.Number(r, 4, now.Sales == 0 ? 0 : 100, St.TotalPct);
         r++;
 
         // 시간대별 주문 수
         r++;
         sum.Section(r++, "시간대별 주문 수 (취소 제외)", 2);
         sum.Header(r++, "시간", "주문 수");
-        foreach (var bar in byHour)
+        foreach (var h in now.ByHour)
         {
-            sum.Text(r, 1, bar.Label, St.Center);
-            sum.Number(r, 2, bar.Value, St.Count);
+            sum.Text(r, 1, $"{h.Hour}시", St.Center);
+            sum.Number(r, 2, h.Orders, St.Count);
             r++;
         }
         sum.Text(r, 1, "합계", St.TotalText);
-        sum.Number(r, 2, byHour.Sum(b => b.Value), St.TotalCount);
+        sum.Number(r, 2, now.ByHour.Sum(h => h.Orders), St.TotalCount);
 
-        // ═══ 시트 2: 주문 목록 ═══
+        // ═══ 시트 2: 일별 ═══
+        var day = new Sheet("일별", 16, 8, 13, 16, 12, 10) { FreezeRows = 4 };
+        day.Text(1, 1, $"일별 주문·매출 ({kindName})", St.Title);
+        day.Merge(1, 1, 1, 6);
+        day.Height(1, 32);
+        day.Text(2, 1, "기간", St.InfoLabel);
+        day.Text(2, 2, period, St.InfoValue);
+        day.Merge(2, 2, 2, 6);
+        day.Header(4, "날짜", "요일", "주문 수", "매출", "판매 팩", "취소");
+        r = 5;
+        foreach (var d in now.ByDay)
+        {
+            var weekend = d.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            day.Text(r, 1, $"{d.Date:yyyy-MM-dd}", weekend ? St.OffCenter : St.Center);
+            day.Text(r, 2, StatsPeriod.Weekday(d.Date), weekend ? St.OffCenter : St.Center);
+            day.Number(r, 3, d.Orders, St.Count);
+            day.Number(r, 4, d.Sales, St.Won);
+            day.Number(r, 5, d.Packs, St.Pack);
+            day.Number(r, 6, d.Canceled, St.Count);
+            r++;
+        }
+        day.Text(r, 1, "합계", St.TotalText);
+        day.Blank(r, 2, St.TotalText);
+        day.Merge(r, 1, r, 2);
+        day.Number(r, 3, now.OrderCount, St.TotalCount);
+        day.Number(r, 4, now.Sales, St.TotalWon);
+        day.Number(r, 5, now.PackCount, St.TotalPack);
+        day.Number(r, 6, now.CancelCount, St.TotalCount);
+        r += 2;
+        day.Text(r, 1, "주문 수·매출·판매 팩은 취소 제외. 토·일은 회색 글자.", St.Note);
+
+        // ═══ 시트 3: 주문 목록 ═══
         var list = new Sheet("주문 목록", 19, 17, 11, 10, 15, 44, 9, 11, 13, 13, 16) { Landscape = true, FreezeRows = 4 };
         const int lastCol = 11;
         list.Text(1, 1, "주문 목록", St.Title);
@@ -103,7 +153,7 @@ internal static class StatsExcelReport
         list.Header(4, "주문번호", "접수 시각", "상태", "고객", "연락처", "상품", "팩 수", "건전지 수", "금액", "택배사", "송장번호");
 
         r = 5;
-        foreach (var o in orders)
+        foreach (var o in now.Orders)
         {
             var off = o.Status == OrderStatus.Canceled;
             var text = off ? St.OffText : St.Text;
@@ -126,15 +176,15 @@ internal static class StatsExcelReport
         list.Text(r, 1, "합계 (취소 제외)", St.TotalText);
         for (var c = 2; c <= 6; c++) list.Blank(r, c, St.TotalText);
         list.Merge(r, 1, r, 6);
-        list.Number(r, 7, valid.Sum(o => o.PackCount), St.TotalInt);
-        list.Number(r, 8, valid.Sum(o => o.BatteryCount), St.TotalInt);
-        list.Number(r, 9, valid.Sum(o => o.Total), St.TotalWon);
+        list.Number(r, 7, now.PackCount, St.TotalInt);
+        list.Number(r, 8, now.BatteryCount, St.TotalInt);
+        list.Number(r, 9, now.Sales, St.TotalWon);
         list.Blank(r, 10, St.TotalText);
         list.Blank(r, 11, St.TotalText);
         r += 2;
-        list.Text(r, 1, $"주문 {orders.Count}건 (취소 {orders.Count - valid.Count}건). 취소 주문은 회색으로 표시하고 합계에서 뺐습니다. 연락처는 가운데를 가렸습니다.", St.Note);
+        list.Text(r, 1, $"주문 {now.Orders.Count}건 (취소 {now.CancelCount}건). 취소 주문은 회색으로 표시하고 합계에서 뺐습니다. 연락처는 가운데를 가렸습니다.", St.Note);
 
-        WriteWorkbook(path, new[] { sum, list });
+        WriteWorkbook(path, new[] { sum, day, list });
     }
 
     // ───────────────────────── 셀 서식 번호 (아래 StylesXml의 cellXfs 순서와 같아야 함) ─────────────────────────
@@ -144,16 +194,20 @@ internal static class StatsExcelReport
         public const int Text = 6, Center = 7, Int = 8, Won = 9, Pct = 10, Count = 11, Pack = 12;
         public const int TotalText = 13, TotalInt = 14, TotalWon = 15, TotalPct = 16, TotalCount = 17, TotalPack = 18;
         public const int OffText = 19, OffCenter = 20, OffInt = 21, OffWon = 22, Note = 23;
+        public const int DiffInt = 24, DiffWon = 25, DiffPct = 26;
     }
 
     private static readonly string StylesXml =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
         "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" +
-        "<numFmts count=\"4\">" +
+        "<numFmts count=\"7\">" +
         "<numFmt numFmtId=\"164\" formatCode=\"#,##0&quot;원&quot;\"/>" +
         "<numFmt numFmtId=\"165\" formatCode=\"0.0&quot;%&quot;\"/>" +
         "<numFmt numFmtId=\"166\" formatCode=\"#,##0&quot;건&quot;\"/>" +
         "<numFmt numFmtId=\"167\" formatCode=\"#,##0&quot;팩&quot;\"/>" +
+        "<numFmt numFmtId=\"168\" formatCode=\"+#,##0;-#,##0;0\"/>" +
+        "<numFmt numFmtId=\"169\" formatCode=\"+#,##0&quot;원&quot;;-#,##0&quot;원&quot;;0&quot;원&quot;\"/>" +
+        "<numFmt numFmtId=\"170\" formatCode=\"+0.0&quot;%p&quot;;-0.0&quot;%p&quot;;0.0&quot;%p&quot;\"/>" +
         "</numFmts>" +
         "<fonts count=\"5\">" +
         "<font><sz val=\"11\"/><name val=\"맑은 고딕\"/><family val=\"3\"/><charset val=\"129\"/></font>" +
@@ -175,7 +229,7 @@ internal static class StatsExcelReport
         "<top style=\"thin\"><color rgb=\"FFBFBFBF\"/></top><bottom style=\"thin\"><color rgb=\"FFBFBFBF\"/></bottom><diagonal/></border>" +
         "</borders>" +
         "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
-        "<cellXfs count=\"24\">" +
+        "<cellXfs count=\"27\">" +
         Xf(0, 0, 0, 0, null) +              // 0 기본
         Xf(1, 0, 0, 0, "left") +            // 1 제목
         Xf(2, 0, 0, 0, "left") +            // 2 기간 등 이름
@@ -200,6 +254,9 @@ internal static class StatsExcelReport
         Xf(4, 0, 1, 3, null) +              // 21 취소 숫자
         Xf(4, 0, 1, 164, null) +            // 22 취소 금액
         Xf(4, 0, 0, 0, "left") +            // 23 안내 문구 (회색, 테두리 없음)
+        Xf(0, 0, 1, 168, null) +            // 24 증감 숫자 +3 / -2
+        Xf(0, 0, 1, 169, null) +            // 25 증감 금액 +1,000원
+        Xf(0, 0, 1, 170, null) +            // 26 증감 비율 +1.5%p
         "</cellXfs>" +
         "<cellStyles count=\"1\"><cellStyle name=\"표준\" xfId=\"0\" builtinId=\"0\"/></cellStyles>" +
         "</styleSheet>";
