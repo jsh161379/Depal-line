@@ -17,6 +17,9 @@ public partial class ControlPanelViewModel : ObservableObject {
     private readonly ILineClient _client;
     private readonly Session _session;
 
+    private string? _eventAlertGuide;
+    private string _eventAlertLevel = "warn";
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand), nameof(PauseCommand), nameof(ResumeCommand),
                                 nameof(StopCommand), nameof(SkipCommand), nameof(ResetCommand))]
@@ -33,10 +36,12 @@ public partial class ControlPanelViewModel : ObservableObject {
     private bool _canOperate;
 
     /// <summary>현재 상태·단계 요약 및 서버 안내 메시지 (이상·대기 시 표시)</summary>
-    [ObservableProperty] private string _statusGuide = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SkipCommand))]
+    private string _statusGuide = "";
 
-    /// <summary>StatusToBrush / StatusToFill 변환기용 상태 키 (normal / warn / alarm)</summary>
-    [ObservableProperty] private string _statusLevel = "normal";
+    /// <summary>StatusToBrush / StatusToFill 변환기용 상태 키 (neutral / warn / alarm)</summary>
+    [ObservableProperty] private string _statusLevel = "neutral";
 
     [ObservableProperty] private string _permissionHint = "";
     [ObservableProperty] private string _commandResult = "";
@@ -63,31 +68,51 @@ public partial class ControlPanelViewModel : ObservableObject {
     }
 
     private void ApplyLineStatus(LineStatus line) {
+        var modeChanged = Mode != line.Mode;
+        var stepChanged = Step != line.Step;
+
+        // 새 동작 상태로 전환되거나 비상정지·해제 진입 시 이전 이벤트 경고를 정리
+        if ((modeChanged && line.Mode is "idle" or "running" or "draining" or "estop") ||
+            (stepChanged && line.Step == "reset")) {
+            _eventAlertGuide = null;
+        }
+
         Mode = line.Mode;
         Step = line.Step;
         UpdateStatusGuide(line.Message);
     }
 
     private void UpdateStatusGuide(string? lineMessage) {
+        // 1) 비상정지 해제 진행 중 안내를 최우선으로 표시
+        if (Mode == "estop" && Step == "reset") {
+            StatusLevel = "alarm";
+            StatusGuide = "비상정지 해제 및 원점 복귀 중입니다. 잠시 기다려 주세요.";
+            return;
+        }
+
+        // 2) start 거부 · 해제 거부 · ARM2_FAILED 등 이벤트 경고는 주기 갱신에 덮이지 않게 유지
+        if (!string.IsNullOrWhiteSpace(_eventAlertGuide)) {
+            StatusLevel = _eventAlertLevel;
+            StatusGuide = _eventAlertGuide;
+            return;
+        }
+
         if (Mode == "estop") {
             StatusLevel = "alarm";
             StatusGuide = !string.IsNullOrWhiteSpace(lineMessage)
                 ? lineMessage
-                : Step == "reset"
-                    ? "비상정지 해제 및 원점 복귀 중입니다. 잠시 기다려 주세요."
-                    : "비상정지 상태 — 물리 비상정지 버튼을 돌려 복귀시킨 뒤 [비상정지 해제]를 누르세요.";
+                : "비상정지 상태 — 물리 비상정지 버튼을 돌려 복귀시킨 뒤 [비상정지 해제]를 누르세요.";
             return;
         }
 
         if (Mode == "paused") {
             StatusLevel = "warn";
-            if (!string.IsNullOrWhiteSpace(lineMessage)) {
+            if (!string.IsNullOrWhiteSpace(lineMessage))
                 StatusGuide = lineMessage;
-            } else if (Step == "wait_operator") {
+            else if (Step == "wait_operator")
                 StatusGuide = "작업자 확인 대기 — [재개]로 다시 시도하거나 [건너뛰기] / [회차 종료]를 선택하세요.";
-            } else {
+            else
                 StatusGuide = "일시정지 상태 — 현장 확인 후 [재개] 또는 [회차 종료]를 누르세요.";
-            }
             return;
         }
 
@@ -99,16 +124,17 @@ public partial class ControlPanelViewModel : ObservableObject {
             return;
         }
 
-        // idle 또는 running 상태에서 서버가 남긴 안내/경고 메시지(예: 벨트 켜기 실패, 회차 종료 사유 등)가 있으면 표시
+        // idle 또는 running 상태에서 서버가 남긴 안내/경고 메시지 표시 (ISA-101: 정상은 neutral 무채색)
         if (!string.IsNullOrWhiteSpace(lineMessage)) {
-            StatusLevel = Mode == "idle" && (lineMessage.Contains("실패") || lineMessage.Contains("못해") || lineMessage.Contains("이상"))
+            StatusLevel = Mode == "idle" &&
+                          (lineMessage.Contains("실패") || lineMessage.Contains("못해") || lineMessage.Contains("이상"))
                 ? "warn"
-                : "normal";
+                : "neutral";
             StatusGuide = lineMessage;
             return;
         }
 
-        StatusLevel = "normal";
+        StatusLevel = "neutral";
         StatusGuide = "";
     }
 
@@ -118,10 +144,13 @@ public partial class ControlPanelViewModel : ObservableObject {
             (ev.Device is "controller" or "arm1" or "mega" || ev.Message.Contains("거부") || ev.Message.Contains("실패"))) {
             CommandResult = $"{DateTime.Now:HH:mm:ss}  [{Labels.Level(ev.Level)}] {ev.Message}";
 
-            // 시작 거부나 해제 거부처럼 mode/message가 안 바뀌는 경우에도 상단 안내 박스에 즉시 반영
-            if (ev.Message.Contains("start 거부") || ev.Message.Contains("해제 거부") || ev.Message.Contains("ARM2_FAILED")) {
-                StatusLevel = ev.Level == "ERROR" ? "alarm" : "warn";
-                StatusGuide = ev.Message;
+            // 시작 거부·해제 거부·ARM2_FAILED는 server/line 주기 갱신에도 유지되도록 별도 보관
+            if (ev.Message.Contains("start 거부") ||
+                ev.Message.Contains("해제 거부") ||
+                ev.Message.Contains("ARM2_FAILED", StringComparison.OrdinalIgnoreCase)) {
+                _eventAlertLevel = ev.Level == "ERROR" ? "alarm" : "warn";
+                _eventAlertGuide = ev.Message;
+                UpdateStatusGuide(_client.LastLine?.Message);
             }
         }
     }
@@ -170,9 +199,10 @@ public partial class ControlPanelViewModel : ObservableObject {
     // 4) 회차 종료: 가동 중(running) 또는 일시정지(paused) 상태에서 가능 (이미 draining 중이면 불필요)
     private bool CanStop() => CanOperate && Mode is "running" or "paused";
 
-    // 5) 건너뛰기: 로봇팔 1 집기 실패로 작업자 선택을 기다리는 상태(paused + wait_operator)에서만 활성
-    private bool CanSkip() => CanOperate && Mode == "paused" && Step == "wait_operator" &&
-                              (StatusGuide.Contains("pick") || StatusGuide.Contains("집기") || string.IsNullOrEmpty(StatusGuide));
+    // 5) 건너뛰기: 작업자 선택 대기(paused + wait_operator)에서만 활성 (로봇팔 2 분류 실패 ARM2_FAILED는 제외)
+    private bool CanSkip() =>
+        CanOperate && Mode == "paused" && Step == "wait_operator" &&
+        !StatusGuide.Contains("ARM2_FAILED", StringComparison.OrdinalIgnoreCase);
 
     // 6) 비상정지 해제: 비상정지(estop) 상태이면서 이미 해제 진행 중(step == "reset")이 아닐 때만 가능
     private bool CanReset() => CanOperate && Mode == "estop" && Step != "reset";
@@ -182,10 +212,13 @@ public partial class ControlPanelViewModel : ObservableObject {
 
     private async Task SendAsync(string action, string name) {
         try {
+            _eventAlertGuide = null;
             await _client.SendCommandAsync(action);
             CommandResult = $"{DateTime.Now:HH:mm:ss}  {name} 명령을 보냈습니다.";
+            UpdateStatusGuide(_client.LastLine?.Message);
         } catch (Exception ex) {
             CommandResult = $"{DateTime.Now:HH:mm:ss}  {name} 실패: {ex.Message}";
+            UpdateStatusGuide(_client.LastLine?.Message);
         }
     }
 }
