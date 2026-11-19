@@ -45,7 +45,7 @@
                 </Border.Style>
                 <Grid>
                     <StackPanel>
-                        <TextBlock Text="라인 A 등급 준비 (오늘 검사 통과)" Style="{StaticResource Caption}" />
+                        <TextBlock Text="라인 A 등급 남음 (출고 가능)" Style="{StaticResource Caption}" />
                         <TextBlock Style="{StaticResource BigNumber}">
                             <Run Text="{Binding LineReadyA, Mode=OneWay}" /><Run Text="개" FontSize="16" />
                         </TextBlock>
@@ -146,7 +146,7 @@
                         <TextBox Style="{StaticResource Input}" FontFamily="{StaticResource Mono}" FontSize="16"
                                  Text="{Binding Tracking, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Button Content="출고 처리 (배송 중으로)" Style="{StaticResource Btn.Primary}" MinHeight="48"
+                        <Button Content="출고 처리" Style="{StaticResource Btn.Primary}" MinHeight="48"
                                 FontSize="15" Margin="0,18,0,0" Command="{Binding ShipCommand}" />
                     </StackPanel>
                 </StackPanel>
