@@ -11,6 +11,12 @@ public sealed record ProductRow(string Id, string Name, int Packs, int Sales);
 /// <summary>주문 상태 하나의 건수 (취소 포함 전체 주문 기준)</summary>
 public sealed record StatusRow(OrderStatus Status, string Name, int Count);
 
+/// <summary>고객 한 명 (연락처 기준)의 주문 수·금액 (취소 제외). 연락처는 가린 번호.</summary>
+public sealed record CustomerRow(string Name, string MaskedPhone, int Orders, int Sales, DateTime LastOrder);
+
+/// <summary>문의 유형 하나의 건수와 답변 대기 수</summary>
+public sealed record InquiryRow(string Type, string Name, int Count, int Unanswered);
+
 /// <summary>시간대 하나의 주문 수 (취소 제외)</summary>
 public sealed record HourRow(int Hour, int Orders);
 
@@ -100,6 +106,43 @@ public static class StatsCalculator
             valid.Count, valid.Sum(o => o.Total), valid.Sum(o => o.PackCount), valid.Sum(o => o.BatteryCount),
             all.Count - valid.Count,
             byProduct, byHour, byDay, byStatus);
+    }
+
+    /// <summary>
+    /// 끝을 포함하지 않는 방식(ReportPeriod.cs, DB 조회와 같음)으로 계산. toExclusive는 다음 날 00:00.
+    /// 예: 11월 = ComputeHalfOpen(주문, 11/1, 12/1)
+    /// </summary>
+    public static StatsResult ComputeHalfOpen(IEnumerable<Order> source, DateTime from, DateTime toExclusive) =>
+        Compute(source, from, toExclusive.Date.AddDays(-1));
+
+    /// <summary>자주 주문한 고객 (연락처 기준, 취소 제외). 주문 수 → 금액 순.</summary>
+    public static IReadOnlyList<CustomerRow> TopCustomers(StatsResult result, int count = 5) =>
+        result.Orders
+            .Where(o => o.Status != OrderStatus.Canceled)
+            .GroupBy(o => o.Phone)
+            .Select(g => new CustomerRow(
+                g.OrderByDescending(o => o.ReceivedAt).First().Name,
+                g.First().MaskedPhone,
+                g.Count(),
+                g.Sum(o => o.Total),
+                g.Max(o => o.ReceivedAt)))
+            .OrderByDescending(c => c.Orders).ThenByDescending(c => c.Sales)
+            .Take(count)
+            .ToList();
+
+    /// <summary>기간 안 문의 유형별 건수 (배송·취소·제품·대량·기타). 유형이 없어도 0으로 한 줄.</summary>
+    public static IReadOnlyList<InquiryRow> InquiriesByType(IEnumerable<Inquiry> source, DateTime start, DateTime end)
+    {
+        var from = start.Date;
+        var to = end.Date.AddDays(1);
+        var list = source.Where(q => q.AskedAt >= from && q.AskedAt < to).ToList();
+        return InquiryTypes.All
+            .Select(t =>
+            {
+                var mine = list.Where(q => q.Type == t).ToList();
+                return new InquiryRow(t, InquiryTypes.ToKorean(t), mine.Count, mine.Count(q => !q.IsAnswered));
+            })
+            .ToList();
     }
 
     /// <summary>"+3건 (▲25.0%)" 같은 증감 글자. 이전 값이 0이면 비율은 빼고 차이만.</summary>

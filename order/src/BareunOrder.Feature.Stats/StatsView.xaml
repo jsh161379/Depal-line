@@ -122,17 +122,21 @@
             </Border>
         </UniformGrid>
 
-        <!-- ═══ 그래프 4개 (2×2) ═══ -->
-        <Grid Grid.Row="6">
+        <!-- ═══ 그래프 4개 (2×2) + TOP5·문의 — 창이 작으면 아래로 스크롤 ═══ -->
+        <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="0,0,4,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="16" />
                 <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
+            <!-- 스크롤 안에서는 * 높이가 안 먹어서 막대 그래프 줄은 높이를 정해 둠 -->
             <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" MinHeight="280" />
                 <RowDefinition Height="16" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" MinHeight="280" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- 일별 주문·매출 -->
@@ -245,6 +249,63 @@
                     </ItemsControl>
                 </DockPanel>
             </Border>
+
+            <!-- 자주 주문한 고객 TOP 5 -->
+            <Border Grid.Row="4" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="자주 주문한 고객 TOP 5 (취소 제외)" Style="{StaticResource SectionTitle}" />
+                    <TextBlock DockPanel.Dock="Top" Text="이 기간에 주문이 없어요" Style="{StaticResource Caption}"
+                               Visibility="{Binding TopCustomers.Count, Converter={StaticResource ZeroToCollapsed}, ConverterParameter=invert}" />
+                    <ItemsControl ItemsSource="{Binding TopCustomers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="110" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding MaskedPhone}" FontFamily="{StaticResource Mono}"
+                                               Foreground="{StaticResource Ink2}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Orders, StringFormat={}{0}건}" FontFamily="{StaticResource Mono}"
+                                               HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Sales, StringFormat={}{0:N0}원}" FontFamily="{StaticResource Mono}"
+                                               HorizontalAlignment="Right" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+
+            <!-- 문의 유형별 건수 -->
+            <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="문의 유형별 건수" Style="{StaticResource SectionTitle}" />
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding InquiryNote}" Style="{StaticResource Caption}" Margin="0,6,0,0" />
+                    <ItemsControl ItemsSource="{Binding InquiryRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="110" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Count, StringFormat={}{0}건}" FontFamily="{StaticResource Mono}"
+                                               HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Unanswered, StringFormat=답변 대기 {0}건}"
+                                               Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
         </Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>

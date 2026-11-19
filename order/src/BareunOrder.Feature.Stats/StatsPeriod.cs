@@ -43,6 +43,16 @@ public static class StatsPeriod
         }
     }
 
+    /// <summary>
+    /// 현장 관리자 프로그램 ReportPeriod.cs와 같은 모양: (시작, 끝) — 끝은 포함하지 않는다 (다음 날 / 다음 주 월요일 / 다음 달 1일 00:00).
+    /// DB 조회 "시작 이상 ~ 끝 미만"에 그대로 넣으면 된다. 화면 종료일은 끝 - 1일.
+    /// </summary>
+    public static (DateTime Start, DateTime EndExclusive) HalfOpen(PeriodKind kind, DateTime anchor)
+    {
+        var (start, end) = For(kind, anchor);
+        return (start, end.AddDays(1));
+    }
+
     /// <summary>앞(-1)·뒤(+1) 기간. 직접 고른 기간은 같은 길이만큼 옮긴다.</summary>
     public static (DateTime Start, DateTime End) Shift(PeriodKind kind, DateTime start, DateTime end, int direction)
     {

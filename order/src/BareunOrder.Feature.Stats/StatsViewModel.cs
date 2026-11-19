@@ -21,9 +21,10 @@ public sealed record Bar(string Label, int Value, string ValueText, double Ratio
 /// - DB 조회: StatsDbReader.cs (가짜 모드·DB 설정 없음이면 프로그램에 있는 주문만)
 /// - 엑셀: StatsExcelReport.cs
 ///
+/// - [완료] 자주 주문한 고객 TOP 5, 문의 유형별 건수
+///
 /// ── 할 일 (TODO) ──
 /// - 마감 보고서 인쇄·PDF는 주문 관리 보고서(유동호)에서 CurrentResult / PreviousResult를 그대로 쓰도록 맞춤
-/// - 자주 주문하는 고객 TOP 5
 /// </summary>
 public sealed partial class StatsViewModel : ObservableObject
 {
@@ -51,6 +52,7 @@ public sealed partial class StatsViewModel : ObservableObject
         _selectedOption = PeriodOptions[0];
         (_startDate, _endDate) = StatsPeriod.For(PeriodKind.Day, DateTime.Today);
         _store.Changed += Recalc;
+        _store.Inquiries.CollectionChanged += (_, _) => Recalc();   // 문의 유형별 건수
         UpdatePeriodText();
         Recalc();
         _ = LoadAsync();
@@ -233,6 +235,11 @@ public sealed partial class StatsViewModel : ObservableObject
     [ObservableProperty] private IReadOnlyList<Bar> _byHour = Array.Empty<Bar>();
     [ObservableProperty] private IReadOnlyList<Bar> _byDay = Array.Empty<Bar>();
     [ObservableProperty] private IReadOnlyList<StatusRow> _byStatus = Array.Empty<StatusRow>();
+    [ObservableProperty] private IReadOnlyList<CustomerRow> _topCustomers = Array.Empty<CustomerRow>();
+    [ObservableProperty] private IReadOnlyList<InquiryRow> _inquiryRows = Array.Empty<InquiryRow>();
+
+    /// <summary>문의는 켤 때 DB에서 읽은 기간(최근 DbLoadDays일 + 답변 안 한 것) + 새로 받은 것만 센다</summary>
+    public string InquiryNote => $"켤 때 불러온 최근 {_settings.DbLoadDays}일 문의 + 새 문의 기준";
 
     private void Recalc()
     {
@@ -280,6 +287,8 @@ public sealed partial class StatsViewModel : ObservableObject
             .ToList();
 
         ByStatus = now.ByStatus;
+        TopCustomers = StatsCalculator.TopCustomers(now);
+        InquiryRows = StatsCalculator.InquiriesByType(_store.Inquiries.ToList(), StartDate, EndDate);
     }
 
     // ───────────────────────── 엑셀 ─────────────────────────
@@ -304,7 +313,7 @@ public sealed partial class StatsViewModel : ObservableObject
 
         try
         {
-            StatsExcelReport.Save(dialog.FileName, Kind, CurrentResult!, PreviousResult!);
+            StatsExcelReport.Save(dialog.FileName, Kind, CurrentResult!, PreviousResult!, TopCustomers, InquiryRows, InquiryNote);
             MessageBox.Show($"저장했습니다.\n{dialog.FileName}", "내보내기", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
