@@ -1,4 +1,4 @@
-# DepalAdmin.Feature.Operation (라인 조작 패널)
+﻿# DepalAdmin.Feature.Operation (라인 조작 패널)
 
 * **담당**: 유동호
 * **역할**: 라인 현황 화면(`DepalAdmin.Feature.Process`) 우측 슬롯(`PanelSlots.LineControls`)에 장착되어 작업자의 라인 제어 명령(`ui/cmd`)을 발행하고, 실시간 상태·경고 안내를 표시하는 조작 패널입니다.
