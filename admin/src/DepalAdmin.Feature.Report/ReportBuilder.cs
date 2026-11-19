@@ -55,6 +55,25 @@ public static class ReportBuilder
             doc.Blocks.Add(Note($"처리 시간 {d.FirstAt:MM-dd HH:mm} ~ {d.LastAt:MM-dd HH:mm},  회차 {d.Runs.Count}개"));
         doc.Blocks.Add(Note("등급 기준값은 아직 임시값입니다. 기준이 바뀌면 결과의 기준 버전(rule_version)이 달라집니다. 배출 실패는 등급은 정해졌지만 분류함에 넣지 못한 건(등급 개수에 포함)."));
 
+        // ── 지난달 비교 (월간) ──
+        if (d.IsMonthly && d.PrevRows != null)
+        {
+            Heading(doc, "지난달과 비교");
+            var now = ReportData.Summary(d.Rows);
+            var prev = ReportData.Summary(d.PrevRows);
+            doc.Blocks.Add(MakeTable(
+                new[] { "구분", "처리", "A 비율", "불량률", "재분류" },
+                new[]
+                {
+                    new[] { $"이번 달 ({d.From:M월})", now.Total.ToString(), Percent(now.A, now.Total), Percent(now.Ng, now.Total), now.Resort.ToString() },
+                    new[] { $"지난달 ({d.From.AddMonths(-1):M월})", prev.Total.ToString(), Percent(prev.A, prev.Total), Percent(prev.Ng, prev.Total), prev.Resort.ToString() },
+                    new[] { "차이", Diff(now.Total - prev.Total), PointDiff(now.A, now.Total, prev.A, prev.Total),
+                            PointDiff(now.Ng, now.Total, prev.Ng, prev.Total), Diff(now.Resort - prev.Resort) },
+                },
+                widths: new[] { 1.6, 1.0, 1.0, 1.0, 1.0 }));
+            doc.Blocks.Add(Note("불량률 = (외관 불량 + 전압 불량) ÷ 처리 수. 재분류는 불량이 아니라 따로 셉니다. 비율 차이는 %p(퍼센트포인트)."));
+        }
+
         // ── 측정값 ──
         Heading(doc, "측정값");
         var v = d.VOpens;
@@ -87,12 +106,12 @@ public static class ReportBuilder
                  reasons.Select(x => new[] { x.Reason, Labels.Grade(x.Grade), x.Count.ToString() }).ToArray(),
                  widths: new[] { 4.0, 1.0, 1.0 }));
 
-        // ── 일별 (주간 보고서만) ──
-        if (d.IsWeekly)
+        // ── 일별 (주간·월간) ──
+        if (d.IsWeekly || d.IsMonthly)
         {
             Heading(doc, "일별");
             var days = d.ByDay;
-            if (days.Count == 0) doc.Blocks.Add(Note("이 기간에 처리한 건전지가 없습니다."));
+            if (d.Total == 0) doc.Blocks.Add(Note("이 기간에 처리한 건전지가 없습니다."));
             else doc.Blocks.Add(MakeTable(
                      new[] { "날짜", "개수" }.Concat(grades.Select(ShortGrade)).Concat(new[] { "A 비율" }).ToArray(),
                      days.Select(x => new[] { x.Day.ToString("MM-dd (ddd)"), x.Count.ToString() }
@@ -104,7 +123,7 @@ public static class ReportBuilder
         // ── 시간대별 (일일·주간) ──
         if (!d.IsPerRun)
         {
-            Heading(doc, d.IsWeekly ? "시간대별 (7일 합계)" : "시간대별");
+            Heading(doc, d.IsDaily ? "시간대별" : "시간대별 (기간 합계)");
             var hours = d.ByHour;
             if (hours.Count == 0) doc.Blocks.Add(Note("처리한 시간이 없습니다."));
             else doc.Blocks.Add(MakeTable(
@@ -126,11 +145,11 @@ public static class ReportBuilder
                      new[] { "회차", "시작", "소요", "개수" }.Concat(grades.Select(ShortGrade)).ToArray(),
                      runs.Select(x => new[]
                          {
-                             x.RunId, x.Start?.ToString(d.IsWeekly ? "MM-dd HH:mm" : "HH:mm") ?? "-",
+                             x.RunId, x.Start?.ToString(d.IsDaily ? "HH:mm" : "MM-dd HH:mm") ?? "-",
                              d.RunDuration(x.RunId), x.Count.ToString(),
                          }
                          .Concat(x.ByGrade.Select(n => n.ToString())).ToArray()).ToArray(),
-                     widths: new[] { 2.6, d.IsWeekly ? 1.3 : 0.8, 1.0, 0.7 }.Concat(grades.Select(_ => 1.1)).ToArray()));
+                     widths: new[] { 2.6, d.IsDaily ? 0.8 : 1.3, 1.0, 0.7 }.Concat(grades.Select(_ => 1.1)).ToArray()));
         }
 
         // ── 배출 실패 목록 (있을 때만) ──
@@ -183,6 +202,16 @@ public static class ReportBuilder
     }
 
     private static string Percent(int part, int total) => total == 0 ? "-" : $"{part * 100.0 / total:0}%";
+
+    private static string Diff(int n) => n > 0 ? $"+{n}" : n.ToString();
+
+    /// <summary>비율 차이 (%p). 한쪽이라도 처리 0이면 "-"</summary>
+    private static string PointDiff(int a, int aTotal, int b, int bTotal)
+    {
+        if (aTotal == 0 || bTotal == 0) return "-";
+        var p = a * 100.0 / aTotal - b * 100.0 / bTotal;
+        return p > 0 ? $"+{p:0.0}%p" : $"{p:0.0}%p";
+    }
 
     private static void Heading(FlowDocument doc, string text) =>
         doc.Blocks.Add(new Paragraph(new Run(text))

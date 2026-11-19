@@ -12,7 +12,8 @@ namespace DepalAdmin.Feature.Report;
 
 /// <summary>
 /// 담당: 조시현 — 보고서.
-///   일일: 고른 날짜 하루 전체 / 주간: 고른 날짜까지 7일 / 회차: 그날의 회차 하나
+///   일일: 고른 날짜 하루 / 주간: 고른 날짜가 든 주(월~일) / 월간: 고른 날짜가 든 달(1일~말일) / 회차: 그날의 회차 하나
+///   기간 계산은 ReportPeriod (주문 관리 프로그램 보고서와 같은 규칙)
 ///   데이터: IHistoryRepository(장성찬, 결과·이벤트 수) + IHandoverStore(유동호, 인수인계 메모)
 ///   인쇄: 작업자 이상 (PDF는 인쇄 대화상자에서 "Microsoft Print to PDF")
 /// </summary>
@@ -20,6 +21,7 @@ public partial class ReportViewModel : ObservableObject
 {
     private const string Daily = "일일";
     private const string Weekly = "주간";
+    private const string Monthly = "월간";
     private const string PerRun = "회차";
 
     private readonly IHistoryRepository _repo;
@@ -29,7 +31,7 @@ public partial class ReportViewModel : ObservableObject
     private readonly AppSettings _settings;
     private ReportData? _data;
 
-    public string[] Kinds { get; } = { Daily, Weekly, PerRun };
+    public string[] Kinds { get; } = { Daily, Weekly, Monthly, PerRun };
     public ObservableCollection<string> RunIds { get; } = new();
 
     [ObservableProperty]
@@ -81,9 +83,15 @@ public partial class ReportViewModel : ObservableObject
         Status = "만드는 중…";
         try
         {
-            var from = Kind == Weekly ? Date.Date.AddDays(-6) : Date.Date;
-            var to = Date.Date.AddDays(1);
+            var (from, to) = Kind switch
+            {
+                Weekly => ReportPeriod.Week(Date),
+                Monthly => ReportPeriod.Month(Date),
+                _ => ReportPeriod.Day(Date),
+            };
+            var (periodFrom, periodTo) = (from, to);
             var rows = await _repo.GetResultsAsync(from, to, null);
+            IReadOnlyList<HistoryRow>? prevRows = null;
             string title, period;
 
             if (IsPerRun)
@@ -103,7 +111,14 @@ public partial class ReportViewModel : ObservableObject
             else if (Kind == Weekly)
             {
                 title = "주간 보고서";
-                period = $"{from:yyyy-MM-dd (ddd)} ~ {to.AddDays(-1):yyyy-MM-dd (ddd)}  (7일)";
+                period = $"{from:yyyy-MM-dd (ddd)} ~ {to.AddDays(-1):yyyy-MM-dd (ddd)}";
+            }
+            else if (Kind == Monthly)
+            {
+                title = "월간 보고서";
+                period = $"{from:yyyy년 M월}  ({from:MM-dd} ~ {to.AddDays(-1):MM-dd})";
+                var (prevFrom, _) = ReportPeriod.Month(from.AddDays(-1));
+                prevRows = await _repo.GetResultsAsync(prevFrom, from, null);
             }
             else
             {
@@ -121,6 +136,9 @@ public partial class ReportViewModel : ObservableObject
                 Period = period,
                 MadeBy = _session.UserName,
                 Kind = Kind,
+                From = periodFrom,
+                To = periodTo,
+                PrevRows = prevRows,
                 Rows = rows,
                 EventCounts = events,
                 Notes = notes,
