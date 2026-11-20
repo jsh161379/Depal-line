@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DepalAdmin.Feature.Results;
 
-/// <summary>담당: 김하균 — 검사 결과 탭 · 팔레트 2×5 맵 패널</summary>
+/// <summary>담당: 김하균 — 검사 결과 탭 · 팔레트 2×4 맵 패널</summary>
 public static class ResultsModule
 {
     public static IServiceCollection AddResultsFeature(this IServiceCollection services)

@@ -68,7 +68,7 @@ public sealed class ResultRow
 
     public string Time => Json.ParseTs(Raw.FinishedAt)?.ToString("HH:mm:ss") ?? "-";
     public int BatteryId => Raw.BatteryId;
-    public string Cell => Raw.PalletCell is { Length: 2 } c ? $"{c[0] * 5 + c[1] + 1}" : "-";
+    public string Cell => Raw.PalletCell is { Length: 2 } c ? $"{c[0] * Pallet.PalletViewModel.Cols + c[1] + 1}" : "-";
     public string Grade => Raw.Grade;
     public string GradeText => Labels.Grade(Raw.Grade);
 
