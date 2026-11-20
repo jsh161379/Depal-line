@@ -22,7 +22,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- ═══ 상단 기간 선택 바 (전체 날짜 선택 가능) ═══ -->
+        <!-- ═══ 상단 기간 선택 바 ═══ -->
         <DockPanel Grid.Row="0" LastChildFill="False">
             <ListBox DockPanel.Dock="Left" Style="{StaticResource FilterBar}"
                      ItemsSource="{Binding PeriodOptions}"
@@ -125,7 +125,6 @@
             <!-- 오른쪽: 프리뷰 영역 (상단 [성적서] / [보고서] 탭) -->
             <Border Grid.Column="2" Background="#E4E7EC" CornerRadius="4">
                 <DockPanel>
-                    <!-- 프리뷰 상단 탭 바 -->
                     <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
                             BorderThickness="0,0,0,1" CornerRadius="4,4,0,0" Padding="12,6">
                         <StackPanel Orientation="Horizontal">
@@ -158,7 +157,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 두 탭 모두 전체 폭을 채우도록 단일 Grid로 감쌈 -->
                     <Grid>
                         <!-- 탭 1: 성적서 프리뷰 (중앙 정렬) -->
                         <Grid Visibility="{Binding IsCertificateTab, Converter={StaticResource BoolToVis}}">
@@ -200,170 +198,183 @@
 
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                                               HorizontalAlignment="Stretch">
-                                    <Border Background="White" Width="640" Margin="20" Padding="40,36" BorderBrush="{StaticResource Line}"
-                                            BorderThickness="1" HorizontalAlignment="Center">
-                                        <Border.Effect>
-                                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" />
-                                        </Border.Effect>
-                                        <StackPanel>
-                                            <Grid>
-                                                <StackPanel>
-                                                    <TextBlock Text="건전지 출고 검사 성적서" FontSize="22" FontWeight="Bold" />
-                                                    <TextBlock Text="바른전지 · AA 건전지 자동 검사 라인" Style="{StaticResource Caption}" Margin="0,4,0,0" />
-                                                </StackPanel>
-                                                <Border HorizontalAlignment="Right" VerticalAlignment="Top" BorderThickness="2" CornerRadius="3"
-                                                        Padding="10,4">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="BorderBrush" Value="{StaticResource Green}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Data.AllPass}" Value="False">
-                                                                    <Setter Property="BorderBrush" Value="{StaticResource Red}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="{Binding Data.VerdictText}" FontSize="18" FontWeight="Bold">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource Green}" />
+                                    <StackPanel HorizontalAlignment="Center" Margin="20">
+                                        <!-- 고객용 성적서 종이 카드 -->
+                                        <Border Background="White" Width="660" Padding="40,34" BorderBrush="{StaticResource Line}"
+                                                BorderThickness="1">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" />
+                                            </Border.Effect>
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel>
+                                                        <TextBlock Text="건전지 출고 검사 성적서" FontSize="22" FontWeight="Bold" />
+                                                        <TextBlock Text="바른전지 · AA 건전지 자동 검사 라인" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+                                                    </StackPanel>
+                                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" BorderThickness="2" CornerRadius="3"
+                                                            Padding="10,4">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="BorderBrush" Value="{StaticResource Green}" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding Data.AllPass}" Value="False">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Red}" />
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Red}" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding Data.VerdictText}" FontSize="17" FontWeight="Bold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Green}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Data.AllPass}" Value="False">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Red}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Border>
+                                                </Grid>
+
+                                                <Rectangle Height="2" Fill="{StaticResource Ink}" Margin="0,14,0,12" />
+
+                                                <!-- 기본 정보 -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="90" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="90" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="26" />
+                                                        <RowDefinition Height="26" />
+                                                        <RowDefinition Height="26" />
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Text="성적서 번호" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Data.CertNo}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="2" Text="주문번호" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="3" Text="{Binding Selected.No}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
+
+                                                    <TextBlock Grid.Row="1" Text="받는 분" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Name}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="총 주문 수량" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="3" FontFamily="{StaticResource Mono}" VerticalAlignment="Center">
+                                                        <Run Text="{Binding Data.TotalPacks, Mode=OneWay}" /><Run Text="팩 (" /><Run Text="{Binding Data.Count, Mode=OneWay}" /><Run Text="개)" />
                                                     </TextBlock>
-                                                </Border>
-                                            </Grid>
 
-                                            <Rectangle Height="2" Fill="{StaticResource Ink}" Margin="0,16,0,14" />
+                                                    <TextBlock Grid.Row="2" Text="검사 일시" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Data.InspectedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                                                               FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="검사 회차" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding Data.RunId}" FontFamily="{StaticResource Mono}"
+                                                               FontSize="12" VerticalAlignment="Center" />
+                                                </Grid>
 
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="90" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="90" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="28" />
-                                                    <RowDefinition Height="28" />
-                                                    <RowDefinition Height="28" />
-                                                </Grid.RowDefinitions>
-                                                <TextBlock Text="성적서 번호" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Data.CertNo}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2" Text="주문번호" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="3" Text="{Binding Selected.No}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="1" Text="고객" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Name}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="1" Grid.Column="2" Text="수량" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Data.Count, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="2" Text="검사 일시" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Data.InspectedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
-                                                           FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="2" Grid.Column="2" Text="검사 회차" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding Data.RunId}" FontFamily="{StaticResource Mono}"
-                                                           FontSize="12" VerticalAlignment="Center" />
-                                            </Grid>
-
-                                            <Border BorderBrush="{StaticResource Ink}" BorderThickness="0,1,0,1" Margin="0,18,0,0">
-                                                <StackPanel>
-                                                    <Grid Background="{StaticResource SurfaceAlt}" Height="34">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="120" />
-                                                            <ColumnDefinition Width="185" />
-                                                            <ColumnDefinition Width="52" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Text="검사 항목" Style="{StaticResource ColHead}" Margin="10,0" />
-                                                        <TextBlock Grid.Column="1" Text="기준" Style="{StaticResource ColHead}" />
-                                                        <TextBlock Grid.Column="2" Text="결과" Style="{StaticResource ColHead}" />
-                                                        <TextBlock Grid.Column="3" Text="판정" Style="{StaticResource ColHead}" />
-                                                    </Grid>
-                                                    <ItemsControl ItemsSource="{Binding Data.Rows}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
-                                                                    <Grid MinHeight="36">
-                                                                        <Grid.ColumnDefinitions>
-                                                                            <ColumnDefinition Width="*" />
-                                                                            <ColumnDefinition Width="120" />
-                                                                            <ColumnDefinition Width="185" />
-                                                                            <ColumnDefinition Width="52" />
-                                                                        </Grid.ColumnDefinitions>
-                                                                        <TextBlock Text="{Binding Item}" Margin="10,6" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                                                        <TextBlock Grid.Column="1" Text="{Binding Standard}" Foreground="{StaticResource Ink2}"
-                                                                                   VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,4,4,4" />
-                                                                        <TextBlock Grid.Column="2" Text="{Binding Result}" FontFamily="{StaticResource Mono}" FontSize="12"
-                                                                                   VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,4,4,4" />
-                                                                        <TextBlock Grid.Column="3" FontWeight="Bold" VerticalAlignment="Center">
-                                                                            <TextBlock.Style>
-                                                                                <Style TargetType="TextBlock">
-                                                                                    <Setter Property="Text" Value="적합" />
-                                                                                    <Setter Property="Foreground" Value="{StaticResource Green}" />
-                                                                                    <Style.Triggers>
-                                                                                        <DataTrigger Binding="{Binding Pass}" Value="False">
-                                                                                            <Setter Property="Text" Value="부적합" />
-                                                                                            <Setter Property="Foreground" Value="{StaticResource Red}" />
-                                                                                        </DataTrigger>
-                                                                                    </Style.Triggers>
-                                                                                </Style>
-                                                                            </TextBlock.Style>
-                                                                        </TextBlock>
-                                                                    </Grid>
-                                                                </Border>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
+                                                <!-- 주문 상품 내역 표 -->
+                                                <StackPanel Margin="0,14,0,0"
+                                                            Visibility="{Binding Data.Products.Count, Converter={StaticResource ZeroToCollapsed}}">
+                                                    <TextBlock Text="주문 상품 내역" Style="{StaticResource Caption}" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                                    <Border BorderBrush="{StaticResource Ink}" BorderThickness="0,1,0,1">
+                                                        <StackPanel>
+                                                            <Grid Background="{StaticResource SurfaceAlt}" Height="30">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="90" />
+                                                                    <ColumnDefinition Width="85" />
+                                                                    <ColumnDefinition Width="90" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="상품명" Style="{StaticResource ColHead}" Margin="10,0" />
+                                                                <TextBlock Grid.Column="1" Text="팩 구성" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="2" Text="수량 (팩)" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                                                                <TextBlock Grid.Column="3" Text="건전지 수" Style="{StaticResource ColHead}" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                                                            </Grid>
+                                                            <ItemsControl ItemsSource="{Binding Data.Products}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+                                                                            <Grid Height="30">
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                    <ColumnDefinition Width="90" />
+                                                                                    <ColumnDefinition Width="85" />
+                                                                                    <ColumnDefinition Width="90" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <TextBlock Text="{Binding Name}" Margin="10,0" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding PackSpec}" Foreground="{StaticResource Ink2}" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="2" Text="{Binding PackQtyText}" FontFamily="{StaticResource Mono}" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="3" Text="{Binding BatteryCountText}" FontFamily="{StaticResource Mono}" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Background="#F0F4FA">
+                                                                <Grid Height="30">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="90" />
+                                                                        <ColumnDefinition Width="85" />
+                                                                        <ColumnDefinition Width="90" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="합계" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="2" Text="{Binding Data.TotalPacks, StringFormat={}{0:N0}팩}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="3" Text="{Binding Data.Count, StringFormat={}{0:N0}개}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Border>
                                                 </StackPanel>
-                                            </Border>
 
-                                            <StackPanel Margin="0,16,0,0"
-                                                        Visibility="{Binding Data.Runs.Count, Converter={StaticResource ZeroToCollapsed}}">
-                                                <TextBlock Text="연결된 생산 회차 내역" Style="{StaticResource Caption}" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                                <Border BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                                <!-- 검사 항목 및 결과 표 -->
+                                                <TextBlock Text="검사 항목 및 결과" Style="{StaticResource Caption}" FontWeight="SemiBold" Margin="0,16,0,5" />
+                                                <Border BorderBrush="{StaticResource Ink}" BorderThickness="0,1,0,1">
                                                     <StackPanel>
-                                                        <Grid Background="{StaticResource SurfaceAlt}" Height="28">
+                                                        <Grid Background="{StaticResource SurfaceAlt}" Height="34">
                                                             <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="145" />
-                                                                <ColumnDefinition Width="55" />
-                                                                <ColumnDefinition Width="50" />
-                                                                <ColumnDefinition Width="75" />
-                                                                <ColumnDefinition Width="75" />
-                                                                <ColumnDefinition Width="75" />
                                                                 <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="125" />
+                                                                <ColumnDefinition Width="185" />
+                                                                <ColumnDefinition Width="52" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock Text="회차 ID" Style="{StaticResource ColHead}" Margin="8,0" />
-                                                            <TextBlock Grid.Column="1" Text="출하" Style="{StaticResource ColHead}" />
-                                                            <TextBlock Grid.Column="2" Text="A등급" Style="{StaticResource ColHead}" />
-                                                            <TextBlock Grid.Column="3" Text="무부하" Style="{StaticResource ColHead}" />
-                                                            <TextBlock Grid.Column="4" Text="부하" Style="{StaticResource ColHead}" />
-                                                            <TextBlock Grid.Column="5" Text="내부저항" Style="{StaticResource ColHead}" />
-                                                            <TextBlock Grid.Column="6" Text="외관" Style="{StaticResource ColHead}" />
+                                                            <TextBlock Text="검사 항목" Style="{StaticResource ColHead}" Margin="10,0" />
+                                                            <TextBlock Grid.Column="1" Text="기준" Style="{StaticResource ColHead}" />
+                                                            <TextBlock Grid.Column="2" Text="결과" Style="{StaticResource ColHead}" />
+                                                            <TextBlock Grid.Column="3" Text="판정" Style="{StaticResource ColHead}" />
                                                         </Grid>
-                                                        <ItemsControl ItemsSource="{Binding Data.Runs}">
+                                                        <ItemsControl ItemsSource="{Binding Data.Rows}">
                                                             <ItemsControl.ItemTemplate>
                                                                 <DataTemplate>
                                                                     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
-                                                                        <Grid Height="28">
+                                                                        <Grid MinHeight="34">
                                                                             <Grid.ColumnDefinitions>
-                                                                                <ColumnDefinition Width="145" />
-                                                                                <ColumnDefinition Width="55" />
-                                                                                <ColumnDefinition Width="50" />
-                                                                                <ColumnDefinition Width="75" />
-                                                                                <ColumnDefinition Width="75" />
-                                                                                <ColumnDefinition Width="75" />
                                                                                 <ColumnDefinition Width="*" />
+                                                                                <ColumnDefinition Width="125" />
+                                                                                <ColumnDefinition Width="185" />
+                                                                                <ColumnDefinition Width="52" />
                                                                             </Grid.ColumnDefinitions>
-                                                                            <TextBlock Text="{Binding SourceRunId}" FontFamily="{StaticResource Mono}" FontSize="11" Margin="8,0" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="1" Text="{Binding BatteryCount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="2" Text="{Binding ACount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="3" Text="{Binding VOpenText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="4" Text="{Binding VLoadText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="5" Text="{Binding RIntText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Grid.Column="6" Text="{Binding VisualPassText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{Binding Item}" Margin="10,6" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                            <TextBlock Grid.Column="1" Text="{Binding Standard}" Foreground="{StaticResource Ink2}"
+                                                                                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,4,4,4" />
+                                                                            <TextBlock Grid.Column="2" Text="{Binding Result}" FontFamily="{StaticResource Mono}" FontSize="12"
+                                                                                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,4,4,4" />
+                                                                            <TextBlock Grid.Column="3" Text="{Binding StatusText}" FontWeight="Bold" VerticalAlignment="Center">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Foreground" Value="{StaticResource Green}" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding Pass}" Value="False">
+                                                                                                <Setter Property="Foreground" Value="{StaticResource Red}" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding IsReference}" Value="True">
+                                                                                                <Setter Property="Foreground" Value="{StaticResource Ink2}" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
                                                                         </Grid>
                                                                     </Border>
                                                                 </DataTemplate>
@@ -371,17 +382,140 @@
                                                         </ItemsControl>
                                                     </StackPanel>
                                                 </Border>
+
+                                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                                           Text="※ 판정 기준: 참고 항목을 제외한 모든 검사 항목이 '적합'이고, 검사 완료 수량이 주문 수량 이상일 때 '합격'으로 판정합니다." />
+
+                                                <!-- 검사 회차별 내역 (합계 줄 포함) -->
+                                                <StackPanel Margin="0,16,0,0"
+                                                            Visibility="{Binding Data.Runs.Count, Converter={StaticResource ZeroToCollapsed}}">
+                                                    <TextBlock Text="검사 회차별 내역" Style="{StaticResource Caption}" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                                        <StackPanel>
+                                                            <Grid Background="{StaticResource SurfaceAlt}" Height="28">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="155" />
+                                                                    <ColumnDefinition Width="58" />
+                                                                    <ColumnDefinition Width="52" />
+                                                                    <ColumnDefinition Width="75" />
+                                                                    <ColumnDefinition Width="75" />
+                                                                    <ColumnDefinition Width="75" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="회차 ID" Style="{StaticResource ColHead}" Margin="8,0" />
+                                                                <TextBlock Grid.Column="1" Text="출하" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="2" Text="A등급" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="3" Text="무부하" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="4" Text="부하" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="5" Text="내부저항" Style="{StaticResource ColHead}" />
+                                                                <TextBlock Grid.Column="6" Text="외관" Style="{StaticResource ColHead}" />
+                                                            </Grid>
+                                                            <ItemsControl ItemsSource="{Binding Data.Runs}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+                                                                            <Grid Height="28">
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="155" />
+                                                                                    <ColumnDefinition Width="58" />
+                                                                                    <ColumnDefinition Width="52" />
+                                                                                    <ColumnDefinition Width="75" />
+                                                                                    <ColumnDefinition Width="75" />
+                                                                                    <ColumnDefinition Width="75" />
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <TextBlock Text="{Binding SourceRunId}" FontFamily="{StaticResource Mono}" FontSize="11" Margin="8,0" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding BatteryCount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="2" Text="{Binding ACount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="3" Text="{Binding VOpenText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="4" Text="{Binding VLoadText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="5" Text="{Binding RIntText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="6" Text="{Binding VisualPassText}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Background="#F0F4FA"
+                                                                    Visibility="{Binding Data.RunTotal, Converter={StaticResource NullToCollapsed}}">
+                                                                <Grid Height="28">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="155" />
+                                                                        <ColumnDefinition Width="58" />
+                                                                        <ColumnDefinition Width="52" />
+                                                                        <ColumnDefinition Width="75" />
+                                                                        <ColumnDefinition Width="75" />
+                                                                        <ColumnDefinition Width="75" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding Data.RunTotal.Label}" FontWeight="SemiBold" FontSize="11" Margin="8,0" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Data.RunTotal.TotalShipped, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="2" Text="{Binding Data.RunTotal.TotalACount, StringFormat={}{0}개}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="3" Text="{Binding Data.RunTotal.VOpenText}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="4" Text="{Binding Data.RunTotal.VLoadText}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="5" Text="{Binding Data.RunTotal.RIntText}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Grid.Column="6" Text="{Binding Data.RunTotal.VisualPassText}" FontFamily="{StaticResource Mono}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,14,0,12"
+                                                           Text="본 제품은 외관·극 방향·전압·내부저항 검사를 통과한 A등급 제품입니다." />
+
+                                                <!-- 책임자 확인란 (검사자 / 승인자) -->
+                                                <Border BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                                    <Grid Height="34">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="68" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="105" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="125" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Background="{StaticResource SurfaceAlt}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                                                            <TextBlock Text="검사자" Style="{StaticResource Caption}" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <Border Grid.Column="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                                                            <TextBlock Text="{Binding OperatorName}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <Border Grid.Column="2" Background="{StaticResource SurfaceAlt}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                                                            <TextBlock Text="승인자 (품질)" Style="{StaticResource Caption}" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <Border Grid.Column="3" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                <Run Text="{Binding OperatorName, Mode=OneWay}" /><Run Text="  (인)" Foreground="{StaticResource Ink3}" />
+                                                            </TextBlock>
+                                                        </Border>
+                                                        <Border Grid.Column="4" Background="{StaticResource SurfaceAlt}">
+                                                            <TextBlock Text="바른전지 품질관리" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource Caption}" Margin="0,6,0,0">
+                                                    <Run Text="발행일: " /><Run Text="{Binding IssuedDateText, Mode=OneWay}" FontFamily="{StaticResource Mono}" />
+                                                </TextBlock>
                                             </StackPanel>
+                                        </Border>
 
-                                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,12,0,0"
-                                                       Text="{Binding Data.MissingNotice}"
-                                                       Visibility="{Binding Data.MissingNotice, Converter={StaticResource NullToCollapsed}}" />
-
-                                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
-                                                       Text="이 건전지는 YOLO 외관·극 방향 검사와 전압·내부저항 측정을 거쳐 A 등급으로 판정되었습니다." />
-                                            <TextBlock Text="바른전지 품질관리" HorizontalAlignment="Right" FontWeight="SemiBold" Margin="0,24,0,0" />
-                                        </StackPanel>
-                                    </Border>
+                                        <!-- 관리자 내부 참고 박스 (고객용 인쇄물에는 포함되지 않음) -->
+                                        <Border Width="660" Margin="0,12,0,0" Padding="14,10" Background="{StaticResource Surface}"
+                                                BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="4"
+                                                Visibility="{Binding Data.AdminInfo, Converter={StaticResource NullToCollapsed}}">
+                                            <StackPanel>
+                                                <TextBlock Text="관리자 참고 정보 (내부용 · 고객 인쇄 제외)" FontSize="11.5" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource Ink2}" Margin="0,0,0,4" />
+                                                <TextBlock Text="{Binding Data.AdminInfo.SourceLabel}" Style="{StaticResource Caption}" />
+                                                <TextBlock Text="{Binding Data.AdminInfo.VisualConfidenceText}" Style="{StaticResource Caption}"
+                                                           Visibility="{Binding Data.AdminInfo.VisualConfidenceText, Converter={StaticResource NullToCollapsed}}" />
+                                                <TextBlock Text="{Binding Data.AdminInfo.CameraPolarityText}" Style="{StaticResource Caption}"
+                                                           Visibility="{Binding Data.AdminInfo.CameraPolarityText, Converter={StaticResource NullToCollapsed}}" />
+                                                <TextBlock Text="{Binding Data.AdminInfo.MissingText}" Style="{StaticResource Caption}"
+                                                           Visibility="{Binding Data.AdminInfo.MissingText, Converter={StaticResource NullToCollapsed}}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
                                 </ScrollViewer>
                             </DockPanel>
                         </Grid>
@@ -389,10 +523,13 @@
                         <!-- 탭 2: 보고서 프리뷰 (중앙 정렬 + 우측 열 잘림 방지) -->
                         <DockPanel Visibility="{Binding IsReportTab, Converter={StaticResource BoolToVis}}">
                             <DockPanel DockPanel.Dock="Top" Margin="20,14,20,8" LastChildFill="False">
-                                <TextBlock DockPanel.Dock="Left" Text="{Binding ReportBundle.PeriodRangeText}"
-                                           FontWeight="Bold" VerticalAlignment="Center" />
+                                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding ReportBundle.PeriodRangeText}" FontWeight="Bold" />
+                                    <TextBlock Text="PDF로 저장하려면 [보고서 인쇄 · PDF]에서 'Microsoft Print to PDF'를 선택하세요"
+                                               Style="{StaticResource Caption}" FontSize="11" Margin="0,2,0,0" />
+                                </StackPanel>
                                 <Button DockPanel.Dock="Right" Content="보고서 인쇄 · PDF" Style="{StaticResource Btn.Primary}"
-                                        Command="{Binding PrintPeriodReportCommand}" />
+                                        VerticalAlignment="Center" Command="{Binding PrintPeriodReportCommand}" />
                             </DockPanel>
 
                             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"

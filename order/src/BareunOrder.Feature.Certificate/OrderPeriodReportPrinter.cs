@@ -18,13 +18,16 @@ public sealed record PeriodReportBundle(
     DateTime End,
     StatsResult Now,
     StatsResult Previous,
+    bool HasPreviousData,
     int ShippedOrderCount,
+    int UnshippedOrderCount,
     int IssuedCertCount,
     int UnissuedCertCount,
     double AvgPacksPerOrder,
     double PrevAvgPacksPerOrder,
     double AvgBatteriesPerOrder,
-    int TotalShippedBatteries) {
+    int TotalShippedBatteries,
+    int UnshippedBatteries) {
     public int Days => (End.Date - Start.Date).Days + 1;
     public string KindLabel => IsCustomRange ? $"지정 기간 ({Days}일)" : OrderPeriodReportPrinter.KindLabel(Kind);
     public string FileKindLabel => IsCustomRange ? "지정기간" : OrderPeriodReportPrinter.KindLabel(Kind);
@@ -39,11 +42,13 @@ public static class OrderPeriodReportPrinter {
     private static readonly FontFamily Mono = new("Consolas, Malgun Gothic");
     private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x1B, 0x23, 0x30));
     private static readonly Brush Sub = new SolidColorBrush(Color.FromRgb(0x56, 0x61, 0x73));
+    private static readonly Brush Muted = new SolidColorBrush(Color.FromRgb(0x98, 0xA2, 0xB3));
     private static readonly Brush Line = new SolidColorBrush(Color.FromRgb(0xD5, 0xDA, 0xE1));
     private static readonly Brush HeadFill = new SolidColorBrush(Color.FromRgb(0xF6, 0xF7, 0xF9));
     private static readonly Brush SoftFill = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xFA));
     private static readonly Brush BarFill = new SolidColorBrush(Color.FromRgb(0x1D, 0x5F, 0xD1));
     private static readonly Brush BarTrack = new SolidColorBrush(Color.FromRgb(0xEA, 0xEE, 0xF4));
+    private static readonly Brush FutureTrack = new SolidColorBrush(Color.FromRgb(0xF5, 0xF7, 0xFA));
 
     private const double PageWidth = 793;
     private const double PageHeight = 1122;
@@ -110,6 +115,8 @@ public static class OrderPeriodReportPrinter {
         var issuedCount = shippedOrders.Count(o => !string.IsNullOrWhiteSpace(o.CertNo));
         var unissuedCount = shippedOrders.Count - issuedCount;
         var totalShippedBatteries = shippedOrders.Sum(o => o.BatteryCount);
+        var unshippedOrders = Math.Max(0, now.OrderCount - shippedOrders.Count);
+        var unshippedBatteries = Math.Max(0, now.BatteryCount - totalShippedBatteries);
 
         var avgPacks = now.OrderCount > 0 ? (double)now.PackCount / now.OrderCount : 0.0;
         var prevAvgPacks = prev.OrderCount > 0 ? (double)prev.PackCount / prev.OrderCount : 0.0;
@@ -124,16 +131,19 @@ public static class OrderPeriodReportPrinter {
             End: e,
             Now: now,
             Previous: prev,
+            HasPreviousData: prev.Orders.Count > 0,
             ShippedOrderCount: shippedOrders.Count,
+            UnshippedOrderCount: unshippedOrders,
             IssuedCertCount: issuedCount,
             UnissuedCertCount: unissuedCount,
             AvgPacksPerOrder: avgPacks,
             PrevAvgPacksPerOrder: prevAvgPacks,
             AvgBatteriesPerOrder: avgBatteries,
-            TotalShippedBatteries: totalShippedBatteries);
+            TotalShippedBatteries: totalShippedBatteries,
+            UnshippedBatteries: unshippedBatteries);
     }
 
-    public static void PrintBundle(PeriodReportBundle bundle, string operatorName = "관리자") {
+    public static void PrintBundle(PeriodReportBundle bundle, string operatorName) {
         var dlg = new PrintDialog();
         if (dlg.ShowDialog() != true) return;
 
@@ -146,11 +156,14 @@ public static class OrderPeriodReportPrinter {
         dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, title);
     }
 
-    public static FlowDocument BuildDocument(PeriodReportBundle bundle, string operatorName = "관리자") {
+    public static FlowDocument BuildDocument(PeriodReportBundle bundle, string operatorName) {
         var now = bundle.Now;
         var previous = bundle.Previous;
+        var hasPrev = bundle.HasPreviousData;
         var kindLabel = bundle.KindLabel;
         var prevLabel = bundle.PreviousLabel;
+        var writer = string.IsNullOrWhiteSpace(operatorName) ? "담당자" : operatorName.Trim();
+        var today = DateTime.Today;
         var section = 1;
 
         var doc = new FlowDocument {
@@ -158,7 +171,7 @@ public static class OrderPeriodReportPrinter {
             FontSize = 11.5,
             Foreground = Ink,
             Background = Brushes.White,
-            PagePadding = new Thickness(44, 40, 44, 40),
+            PagePadding = new Thickness(44, 38, 44, 38),
             PageWidth = PageWidth,
             PageHeight = PageHeight,
             ColumnWidth = PageWidth,
@@ -177,196 +190,146 @@ public static class OrderPeriodReportPrinter {
         doc.Blocks.Add(new Paragraph {
             BorderBrush = Ink,
             BorderThickness = new Thickness(0, 0, 0, 2),
-            Margin = new Thickness(0, 0, 0, 12),
+            Margin = new Thickness(0, 0, 0, 10),
         });
 
         doc.Blocks.Add(MakeMetaTable(new[]
         {
             new[] { "보고서 구분", kindLabel, "조회 기간", bundle.PeriodRangeText },
-            new[] { "비교 기간", $"{prevLabel} ({bundle.PreviousRangeText})", "작성자", operatorName },
+            new[] { "비교 기간", $"{prevLabel} ({bundle.PreviousRangeText})", "작성자", writer },
             new[] { "집계 기준", "접수일 기준 (취소 주문 매출·팩 제외)", "발행 시각", DateTime.Now.ToString("yyyy-MM-dd HH:mm", Ko) },
         }));
 
-        // ── 기간 요약(합계·평균·출고) ──
-        Heading(doc, $"{section++}. 기간 요약 (합계 · 평균)");
+        // ── 1. 기간 요약 (합계 · 평균 · 전기 대비 통합) ──
+        Heading(doc, $"{section++}. 기간 요약 (합계 · 평균 · {prevLabel} 대비)");
+        var cancelNowText = $"취소 {now.CancelCount:N0}건 / 전체 {now.Orders.Count:N0}건 ({now.CancelRate:0.0}%)";
+        var cancelPrevText = hasPrev
+            ? $"취소 {previous.CancelCount:N0}건 / 전체 {previous.Orders.Count:N0}건 ({previous.CancelRate:0.0}%)"
+            : "-";
+
         var summaryRows = new[]
         {
-            new[] { "주문 수 (취소 제외, 합계)", $"{now.OrderCount:N0}건", $"{previous.OrderCount:N0}건", StatsCalculator.DiffText(now.OrderCount, previous.OrderCount, "건") },
-            new[] { "매출 (합계)", $"{now.Sales:N0}원", $"{previous.Sales:N0}원", StatsCalculator.DiffText(now.Sales, previous.Sales, "원") },
-            new[] { "주문당 평균 매출", $"{now.AverageOrder:N0}원", $"{previous.AverageOrder:N0}원", StatsCalculator.DiffText(now.AverageOrder, previous.AverageOrder, "원") },
-            new[] { "판매 팩 수 (합계)", $"{now.PackCount:N0}팩", $"{previous.PackCount:N0}팩", StatsCalculator.DiffText(now.PackCount, previous.PackCount, "팩") },
-            new[] { "주문당 평균 팩 수", $"{bundle.AvgPacksPerOrder:0.0}팩", $"{bundle.PrevAvgPacksPerOrder:0.0}팩", FormatDecimalDiff(bundle.AvgPacksPerOrder, bundle.PrevAvgPacksPerOrder, "팩") },
-            new[] { "판매 건전지 수 (합계)", $"{now.BatteryCount:N0}개", $"{previous.BatteryCount:N0}개", StatsCalculator.DiffText(now.BatteryCount, previous.BatteryCount, "개") },
-            new[] { "취소 건수 / 취소율", $"{now.CancelCount:N0}건 ({now.CancelRate:0.0}%)", $"{previous.CancelCount:N0}건 ({previous.CancelRate:0.0}%)", FormatRateDiff(now.CancelRate, previous.CancelRate) },
-            new[] { "출고·배송 건수 (배송 중 + 배송 완료)", $"{now.ShippedCount:N0}건", $"{previous.ShippedCount:N0}건", StatsCalculator.DiffText(now.ShippedCount, previous.ShippedCount, "건") },
+            new[] { "주문 수 (취소 제외, 합계)", $"{now.OrderCount:N0}건", hasPrev ? $"{previous.OrderCount:N0}건" : "-", FormatIntDiff(now.OrderCount, previous.OrderCount, "건", hasPrev) },
+            new[] { "매출 (합계)", $"{now.Sales:N0}원", hasPrev ? $"{previous.Sales:N0}원" : "-", FormatIntDiff(now.Sales, previous.Sales, "원", hasPrev) },
+            new[] { "주문당 평균 매출", $"{now.AverageOrder:N0}원", hasPrev ? $"{previous.AverageOrder:N0}원" : "-", FormatIntDiff(now.AverageOrder, previous.AverageOrder, "원", hasPrev) },
+            new[] { "판매 팩 수 (합계)", $"{now.PackCount:N0}팩", hasPrev ? $"{previous.PackCount:N0}팩" : "-", FormatIntDiff(now.PackCount, previous.PackCount, "팩", hasPrev) },
+            new[] { "주문당 평균 팩 수", $"{bundle.AvgPacksPerOrder:0.0}팩", hasPrev ? $"{bundle.PrevAvgPacksPerOrder:0.0}팩" : "-", FormatDecimalDiff(bundle.AvgPacksPerOrder, bundle.PrevAvgPacksPerOrder, "팩", hasPrev) },
+            new[] { "판매 건전지 수 (합계)", $"{now.BatteryCount:N0}개", hasPrev ? $"{previous.BatteryCount:N0}개" : "-", FormatIntDiff(now.BatteryCount, previous.BatteryCount, "개", hasPrev) },
+            new[] { "취소 건수 / 취소율", cancelNowText, cancelPrevText, FormatRateDiff(now.CancelRate, previous.CancelRate, hasPrev) },
+            new[] { "출고·배송 건수 (배송 중 + 완료)", $"{now.ShippedCount:N0}건", hasPrev ? $"{previous.ShippedCount:N0}건" : "-", FormatIntDiff(now.ShippedCount, previous.ShippedCount, "건", hasPrev) },
         };
         doc.Blocks.Add(MakeTable(
-            new[] { "요약 항목", "선택 기간", prevLabel, "전기 대비" },
+            new[] { "요약 항목", "선택 기간", prevLabel, $"{prevLabel} 대비" },
             summaryRows,
-            new[] { 2.3, 1.4, 1.4, 1.4 },
+            new[] { 2.0, 1.8, 1.5, 1.5 },
             rightAlignFromCol: 1));
+        if (!hasPrev)
+            doc.Blocks.Add(Note($"※ 비교 기간({prevLabel})에 집계된 주문 자료가 없어 대비 수치를 '비교 자료 없음'으로 표시했습니다."));
 
-        // ── 성적서 발급 현황 요약(평균·합계) ──
-        Heading(doc, $"{section++}. 검사 성적서 현황 (출고 주문 기준)");
+        // ── 2. 출고 및 검사 성적서 현황 (판매·출고·미출고 수량 대조 포함) ──
+        Heading(doc, $"{section++}. 출고 및 검사 성적서 현황");
+        var issueRateText = bundle.ShippedOrderCount == 0
+            ? "0.0%"
+            : $"{100.0 * bundle.IssuedCertCount / bundle.ShippedOrderCount:0.0}%";
         var certRows = new[]
         {
-            new[] { "기간 내 출고 주문 수", $"{bundle.ShippedOrderCount:N0}건", "성적서 발급 완료", $"{bundle.IssuedCertCount:N0}건" },
-            new[] { "성적서 미발급 건수", $"{bundle.UnissuedCertCount:N0}건", "출고 건전지 총합", $"{bundle.TotalShippedBatteries:N0}개" },
-            new[] { "출고 주문당 평균 건전지", $"{bundle.AvgBatteriesPerOrder:0.0}개", "성적서 발급률", bundle.ShippedOrderCount == 0 ? "0.0%" : $"{100.0 * bundle.IssuedCertCount / bundle.ShippedOrderCount:0.0}%" },
+            new[] { "판매 건전지 수 (취소 제외)", $"{now.BatteryCount:N0}개", "출고 건전지 수", $"{bundle.TotalShippedBatteries:N0}개" },
+            new[] { "미출고 건전지 수 (출고 대기)", $"{bundle.UnshippedBatteries:N0}개", "출고 주문당 평균 건전지", $"{bundle.AvgBatteriesPerOrder:0.0}개" },
+            new[] { "출고 주문 수 (배송 중 + 완료)", $"{bundle.ShippedOrderCount:N0}건", "미출고 주문 수 (접수·검사)", $"{bundle.UnshippedOrderCount:N0}건" },
+            new[] { "성적서 발급 완료 / 미발급", $"{bundle.IssuedCertCount:N0}건 / {bundle.UnissuedCertCount:N0}건", "성적서 발급률", issueRateText },
         };
         doc.Blocks.Add(MakeTable(
-            new[] { "성적서 항목", "값", "성적서 항목", "값" },
+            new[] { "항목", "값", "항목", "값" },
             certRows,
-            new[] { 1.7, 1.4, 1.7, 1.5 },
+            new[] { 1.8, 1.3, 1.8, 1.4 },
             rightAlignFromCol: 1));
 
-        // ── 상품별 매출 표 + 막대 그래프 ──
+        // ── 3. 상품별 매출 (매출 비중 열에 막대그래프 통합 — 중복 제거) ──
         Heading(doc, $"{section++}. 상품별 매출 (취소 제외)");
-        var totalSales = Math.Max(1, now.Sales);
-        var productRows = now.ByProduct
-            .Select(p => new[]
-            {
-                p.Name,
-                $"{p.Packs:N0}팩",
-                $"{p.Sales:N0}원",
-                now.Sales == 0 ? "0.0%" : $"{100.0 * p.Sales / totalSales:0.0}%",
-            })
-            .ToList();
-        productRows.Add(new[]
-        {
-            "합계",
-            $"{now.PackCount:N0}팩",
-            $"{now.Sales:N0}원",
-            now.Sales == 0 ? "0.0%" : "100.0%",
-        });
-        doc.Blocks.Add(MakeTable(
-            new[] { "상품명", "판매 팩 수", "매출", "매출 비중" },
-            productRows.ToArray(),
-            new[] { 2.6, 1.2, 1.5, 1.2 },
-            rightAlignFromCol: 1,
-            highlightLastRow: true));
-        doc.Blocks.Add(MakeProductChartBlock(now.ByProduct));
+        doc.Blocks.Add(MakeProductTableWithBars(now));
 
-        // ── 월간 보고서 전용: 지난달 비교 ──
-        if (!bundle.IsCustomRange && bundle.Kind == PeriodKind.Month) {
-            Heading(doc, $"{section++}. 지난달 비교 (월간)");
-            var lastMonthRows = new[]
-            {
-                new[] { "주문 수 (취소 제외)", $"{now.OrderCount:N0}건", $"{previous.OrderCount:N0}건", StatsCalculator.DiffText(now.OrderCount, previous.OrderCount, "건") },
-                new[] { "매출", $"{now.Sales:N0}원", $"{previous.Sales:N0}원", StatsCalculator.DiffText(now.Sales, previous.Sales, "원") },
-                new[] { "판매 팩 수", $"{now.PackCount:N0}팩", $"{previous.PackCount:N0}팩", StatsCalculator.DiffText(now.PackCount, previous.PackCount, "팩") },
-                new[] { "취소율", $"{now.CancelRate:0.0}%", $"{previous.CancelRate:0.0}%", FormatRateDiff(now.CancelRate, previous.CancelRate) },
-                new[] { "출고·배송 건수", $"{now.ShippedCount:N0}건", $"{previous.ShippedCount:N0}건", StatsCalculator.DiffText(now.ShippedCount, previous.ShippedCount, "건") },
-            };
-            doc.Blocks.Add(MakeTable(
-                new[] { "비교 지표", "이번 달", "지난달", "지난달 대비" },
-                lastMonthRows,
-                new[] { 2.3, 1.3, 1.3, 1.6 },
-                rightAlignFromCol: 1));
-        }
-
-        // ── 2일 이상(주간·월간·지정 기간): 일별 그래프 + 일별 표 ──
+        // ── 4~5. 2일 이상: 일별 매출 그래프(제목+그래프 단일 블록) + 기간 요약 표(월간=주차별, 주간=일별) ──
         if (bundle.Days > 1) {
             var scopeTag = bundle.IsCustomRange
                 ? $"지정 기간 · {bundle.Days}일"
                 : bundle.Kind == PeriodKind.Week ? "주간 · 월~일" : "월간";
 
-            Heading(doc, $"{section++}. 일별 매출 그래프 ({scopeTag})");
-            doc.Blocks.Add(MakeDailyChartBlock(now.ByDay));
+            // 제목과 그래프가 절대 다른 페이지로 나뉘지 않도록 단일 BlockUIContainer에 묶음
+            doc.Blocks.Add(MakeDailyChartSection($"{section++}. 일별 매출 그래프 ({scopeTag})", now.ByDay, today));
 
-            Heading(doc, $"{section++}. 일별 주문·매출 표 ({scopeTag})");
-            var dayRows = now.ByDay
-                .Select(d => new[]
-                {
-                    d.Date.ToString("yyyy-MM-dd", Ko),
-                    d.Date.ToString("ddd", Ko),
-                    $"{d.Orders:N0}건",
-                    $"{d.Sales:N0}원",
-                    $"{d.Packs:N0}팩",
-                    $"{d.Canceled:N0}건",
-                })
-                .ToList();
-
-            dayRows.Add(new[]
-            {
-                "합계",
-                "",
-                $"{now.OrderCount:N0}건",
-                $"{now.Sales:N0}원",
-                $"{now.PackCount:N0}팩",
-                $"{now.CancelCount:N0}건",
-            });
-
-            doc.Blocks.Add(MakeTable(
-                new[] { "날짜", "요일", "주문 수", "매출", "판매 팩", "취소" },
-                dayRows.ToArray(),
-                new[] { 1.5, 0.8, 1.0, 1.5, 1.0, 0.9 },
-                rightAlignFromCol: 2,
-                highlightLastRow: true));
+            if (bundle.Days > 14) {
+                Heading(doc, $"{section++}. 주차별 주문·매출 요약 ({scopeTag})");
+                doc.Blocks.Add(MakeWeeklySummaryTable(now, today));
+            } else {
+                Heading(doc, $"{section++}. 일별 주문·매출 표 ({scopeTag})");
+                doc.Blocks.Add(MakeDailyTable(now, today));
+            }
         }
 
+        // 인쇄물에는 UI 안내 문구(PDF 저장 방법)를 넣지 않고 집계 기준 각주만 깔끔하게 표기
         doc.Blocks.Add(new Paragraph(new Run(
-            "※ 일별 표와 그래프는 주문이 없는 날짜도 0으로 포함합니다. PDF 저장은 인쇄 창에서 'Microsoft Print to PDF'를 선택해 주세요.")) {
+            "※ 집계 기준: 접수일 기준(취소 주문은 매출·팩·건전지 수 합계에서 제외) · 발행일 이후 날짜는 '집계 전'으로 표시됩니다.")) {
             Foreground = Sub,
-            FontSize = 10,
-            Margin = new Thickness(0, 14, 0, 0),
+            FontSize = 9.5,
+            Margin = new Thickness(0, 12, 0, 0),
         });
 
         return doc;
     }
 
-    private static BlockUIContainer MakeProductChartBlock(IReadOnlyList<ProductRow> products) {
-        if (products.Count == 0) {
-            return new BlockUIContainer(new TextBlock {
-                Text = "표시할 상품 데이터가 없습니다.",
-                FontFamily = Font,
-                FontSize = 10.5,
-                Foreground = Sub,
-            }) { Margin = new Thickness(0, 2, 0, 6) };
-        }
+    private static Table MakeProductTableWithBars(StatsResult now) {
+        var totalSales = Math.Max(1, now.Sales);
+        var maxSales = now.ByProduct.Count > 0 ? Math.Max(1, now.ByProduct.Max(p => p.Sales)) : 1;
 
-        var maxSales = Math.Max(1, products.Max(p => p.Sales));
-        var container = new StackPanel { Margin = new Thickness(0, 6, 0, 8) };
+        var t = new Table {
+            CellSpacing = 0,
+            BorderBrush = Ink,
+            BorderThickness = new Thickness(0, 1, 0, 1),
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        t.Columns.Add(new TableColumn { Width = new GridLength(2.2, GridUnitType.Star) });
+        t.Columns.Add(new TableColumn { Width = new GridLength(0.95, GridUnitType.Star) });
+        t.Columns.Add(new TableColumn { Width = new GridLength(1.25, GridUnitType.Star) });
+        t.Columns.Add(new TableColumn { Width = new GridLength(2.1, GridUnitType.Star) });
 
-        foreach (var p in products) {
+        var group = new TableRowGroup();
+        group.Rows.Add(MakeRow(
+            new[] { "상품명", "판매 팩 수", "매출", "매출 비중" },
+            head: true, highlight: false, muted: false, rightAlignFromCol: 1));
+
+        foreach (var p in now.ByProduct) {
+            var pct = now.Sales == 0 ? 0.0 : 100.0 * p.Sales / totalSales;
             var ratio = Math.Clamp((double)p.Sales / maxSales, 0.0, 1.0);
-            var rowGrid = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(125) });
 
-            var nameTb = new TextBlock {
-                Text = p.Name,
-                FontFamily = Font,
-                FontSize = 10.5,
-                Foreground = Ink,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
+            var row = new TableRow();
+            row.Cells.Add(MakeTextCell(p.Name, TextAlignment.Left, Font, Ink, FontWeights.Normal, isHead: false));
+            row.Cells.Add(MakeTextCell($"{p.Packs:N0}팩", TextAlignment.Right, Mono, Ink, FontWeights.Normal, isHead: false));
+            row.Cells.Add(MakeTextCell($"{p.Sales:N0}원", TextAlignment.Right, Mono, Ink, FontWeights.Normal, isHead: false));
 
-            var trackBorder = new Border {
-                Height = 14,
+            // 매출 비중 셀 안에 인라인 막대 + % 표시
+            var barRow = new Grid { VerticalAlignment = VerticalAlignment.Center };
+            barRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            barRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(46, GridUnitType.Pixel) });
+
+            var track = new Border {
+                Height = 11,
                 Background = BarTrack,
                 CornerRadius = new CornerRadius(2),
-                Margin = new Thickness(6, 0, 8, 0),
+                Margin = new Thickness(0, 0, 6, 0),
                 VerticalAlignment = VerticalAlignment.Center,
             };
-
-            var barGrid = new Grid();
-            barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.01, ratio), GridUnitType.Star) });
-            barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.0, 1.0 - ratio), GridUnitType.Star) });
-
+            var inner = new Grid();
+            inner.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.001, ratio), GridUnitType.Star) });
+            inner.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.0, 1.0 - ratio), GridUnitType.Star) });
             if (p.Sales > 0) {
-                var fillBorder = new Border {
-                    Background = BarFill,
-                    CornerRadius = new CornerRadius(2),
-                };
-                Grid.SetColumn(fillBorder, 0);
-                barGrid.Children.Add(fillBorder);
+                var fill = new Border { Background = BarFill, CornerRadius = new CornerRadius(2) };
+                Grid.SetColumn(fill, 0);
+                inner.Children.Add(fill);
             }
-            trackBorder.Child = barGrid;
+            track.Child = inner;
 
-            var valTb = new TextBlock {
-                Text = $"{p.Sales:N0}원 ({p.Packs}팩)",
+            var pctText = new TextBlock {
+                Text = $"{pct:0.0}%",
                 FontFamily = Mono,
                 FontSize = 10.5,
                 Foreground = Ink,
@@ -374,42 +337,64 @@ public static class OrderPeriodReportPrinter {
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
-            Grid.SetColumn(nameTb, 0);
-            Grid.SetColumn(trackBorder, 1);
-            Grid.SetColumn(valTb, 2);
+            Grid.SetColumn(track, 0);
+            Grid.SetColumn(pctText, 1);
+            barRow.Children.Add(track);
+            barRow.Children.Add(pctText);
 
-            rowGrid.Children.Add(nameTb);
-            rowGrid.Children.Add(trackBorder);
-            rowGrid.Children.Add(valTb);
-            container.Children.Add(rowGrid);
+            row.Cells.Add(new TableCell(new BlockUIContainer(barRow) { Margin = new Thickness(0) }) {
+                BorderBrush = Line,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding = new Thickness(6, 4, 6, 4),
+            });
+            group.Rows.Add(row);
         }
 
-        return new BlockUIContainer(container) { Margin = new Thickness(0, 2, 0, 6) };
+        group.Rows.Add(MakeRow(
+            new[] { "합계", $"{now.PackCount:N0}팩", $"{now.Sales:N0}원", now.Sales == 0 ? "0.0%" : "100.0%" },
+            head: false, highlight: true, muted: false, rightAlignFromCol: 1));
+
+        t.RowGroups.Add(group);
+        return t;
     }
 
-    private static BlockUIContainer MakeDailyChartBlock(IReadOnlyList<DayRow> days) {
+    private static BlockUIContainer MakeDailyChartSection(string headingText, IReadOnlyList<DayRow> days, DateTime today) {
+        var wrapper = new StackPanel { Margin = new Thickness(0, 12, 0, 4) };
+        wrapper.Children.Add(new TextBlock {
+            Text = headingText,
+            FontFamily = Font,
+            FontSize = 12.5,
+            FontWeight = FontWeights.Bold,
+            Foreground = Ink,
+            Margin = new Thickness(0, 0, 0, 5),
+        });
+
         if (days.Count == 0) {
-            return new BlockUIContainer(new TextBlock {
+            wrapper.Children.Add(new TextBlock {
                 Text = "표시할 일별 데이터가 없습니다.",
                 FontFamily = Font,
                 FontSize = 10.5,
                 Foreground = Sub,
-            }) { Margin = new Thickness(0, 2, 0, 6) };
+            });
+            return new BlockUIContainer(wrapper) { Margin = new Thickness(0) };
         }
 
         if (days.Count > MaxDailyChartDays) {
-            return new BlockUIContainer(new TextBlock {
-                Text = $"※ 조회 기간이 {days.Count}일({MaxDailyChartDays}일 초과)이어서 일별 막대 그래프는 생략하고 아래 일별 표로 표시합니다.",
+            wrapper.Children.Add(new TextBlock {
+                Text = $"※ 조회 기간이 {days.Count}일({MaxDailyChartDays}일 초과)이어서 일별 막대 그래프는 생략하고 아래 표로 표시합니다.",
                 FontFamily = Font,
                 FontSize = 10.5,
                 Foreground = Sub,
                 TextWrapping = TextWrapping.Wrap,
-            }) { Margin = new Thickness(0, 2, 0, 6) };
+            });
+            return new BlockUIContainer(wrapper) { Margin = new Thickness(0) };
         }
 
         var maxSales = Math.Max(1, days.Max(d => d.Sales));
+        var hasAnySales = days.Any(d => d.Sales > 0);
         var isCompact = days.Count > 14;
-        var barMaxHeight = isCompact ? 68.0 : 92.0;
+        var barMaxHeight = isCompact ? 82.0 : 104.0;
+        var labelTopHeight = isCompact ? 14.0 : 22.0;
 
         var outerBorder = new Border {
             BorderBrush = Line,
@@ -419,34 +404,79 @@ public static class OrderPeriodReportPrinter {
             Background = Brushes.White,
         };
 
-        var grid = new Grid();
+        var layout = new Grid();
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58, GridUnitType.Pixel) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // 왼쪽 Y축 금액 눈금 (최대 / 절반 / 0원)
+        var yAxis = new Grid {
+            Margin = new Thickness(0, labelTopHeight, 6, 16),
+            Height = barMaxHeight,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        yAxis.Children.Add(new TextBlock {
+            Text = hasAnySales ? FormatAxisWon(maxSales) : "-",
+            FontFamily = Mono,
+            FontSize = 8.5,
+            Foreground = Sub,
+            TextAlignment = TextAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+        });
+        yAxis.Children.Add(new TextBlock {
+            Text = hasAnySales ? FormatAxisWon(maxSales / 2) : "",
+            FontFamily = Mono,
+            FontSize = 8.5,
+            Foreground = Sub,
+            TextAlignment = TextAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        yAxis.Children.Add(new TextBlock {
+            Text = "0원",
+            FontFamily = Mono,
+            FontSize = 8.5,
+            Foreground = Sub,
+            TextAlignment = TextAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        });
+        Grid.SetColumn(yAxis, 0);
+        layout.Children.Add(yAxis);
+
+        // 오른쪽 막대 영역
+        var chartGrid = new Grid();
         for (var i = 0; i < days.Count; i++)
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            chartGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         for (var i = 0; i < days.Count; i++) {
             var d = days[i];
-            var ratio = Math.Clamp((double)d.Sales / maxSales, 0.0, 1.0);
-            var barHeight = d.Sales > 0 ? Math.Max(4.0, barMaxHeight * ratio) : 0.0;
+            var isFuture = d.Date > today;
+            var ratio = isFuture ? 0.0 : Math.Clamp((double)d.Sales / maxSales, 0.0, 1.0);
+            var barHeight = (!isFuture && d.Sales > 0) ? Math.Max(4.0, barMaxHeight * ratio) : 0.0;
 
             var colStack = new StackPanel {
                 Margin = new Thickness(isCompact ? 0.5 : 2, 0, isCompact ? 0.5 : 2, 0),
                 VerticalAlignment = VerticalAlignment.Bottom,
             };
 
-            if (!isCompact) {
-                colStack.Children.Add(new TextBlock {
-                    Text = d.Orders > 0 ? $"{d.Orders}건" : "0",
-                    FontFamily = Mono,
-                    FontSize = 9,
-                    Foreground = Sub,
-                    TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 2),
-                });
-            }
+            // 막대 위 금액(·건수) 라벨
+            var topLabel = "";
+            if (!isFuture && d.Sales > 0)
+                topLabel = isCompact ? FormatCompactWon(d.Sales) : $"{FormatCompactWon(d.Sales)}\n({d.Orders}건)";
+            else if (isFuture && !isCompact)
+                topLabel = "집계 전";
+
+            colStack.Children.Add(new TextBlock {
+                Text = topLabel,
+                FontFamily = Mono,
+                FontSize = isCompact ? 7.5 : 8.5,
+                Foreground = isFuture ? Muted : Ink,
+                TextAlignment = TextAlignment.Center,
+                Height = labelTopHeight,
+                VerticalAlignment = VerticalAlignment.Bottom,
+            });
 
             var chartArea = new Border {
                 Height = barMaxHeight,
-                Background = BarTrack,
+                Background = isFuture ? FutureTrack : BarTrack,
                 CornerRadius = new CornerRadius(2),
                 VerticalAlignment = VerticalAlignment.Bottom,
             };
@@ -470,17 +500,134 @@ public static class OrderPeriodReportPrinter {
                 Text = isCompact ? d.Date.Day.ToString(CultureInfo.InvariantCulture) : $"{d.Date:MM/dd}",
                 FontFamily = Mono,
                 FontSize = isCompact ? 8.5 : 9.5,
-                Foreground = Ink,
+                Foreground = isFuture ? Muted : Ink,
                 TextAlignment = TextAlignment.Center,
                 Margin = new Thickness(0, 3, 0, 0),
             });
 
             Grid.SetColumn(colStack, i);
-            grid.Children.Add(colStack);
+            chartGrid.Children.Add(colStack);
         }
 
-        outerBorder.Child = grid;
-        return new BlockUIContainer(outerBorder) { Margin = new Thickness(0, 2, 0, 6) };
+        Grid.SetColumn(chartGrid, 1);
+        layout.Children.Add(chartGrid);
+        outerBorder.Child = layout;
+        wrapper.Children.Add(outerBorder);
+
+        return new BlockUIContainer(wrapper) { Margin = new Thickness(0) };
+    }
+
+    private static Table MakeWeeklySummaryTable(StatsResult now, DateTime today) {
+        var t = new Table {
+            CellSpacing = 0,
+            BorderBrush = Ink,
+            BorderThickness = new Thickness(0, 1, 0, 1),
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        var widths = new[] { 0.85, 1.75, 1.0, 1.45, 0.95, 0.85 };
+        foreach (var w in widths)
+            t.Columns.Add(new TableColumn { Width = new GridLength(w, GridUnitType.Star) });
+
+        var group = new TableRowGroup();
+        group.Rows.Add(MakeRow(
+            new[] { "주차", "기간", "주문 수", "매출", "판매 팩", "취소" },
+            head: true, highlight: false, muted: false, rightAlignFromCol: 2));
+
+        var days = now.ByDay;
+        for (var idx = 0; idx < days.Count; idx += 7) {
+            var slice = days.Skip(idx).Take(7).ToList();
+            var weekNo = (idx / 7) + 1;
+            var wStart = slice[0].Date;
+            var wEnd = slice[^1].Date;
+            var allFuture = wStart > today;
+            var isOngoing = !allFuture && wEnd > today;
+            var rangeText = wStart == wEnd ? $"{wStart:MM-dd}" : $"{wStart:MM-dd} ~ {wEnd:MM-dd}";
+            if (isOngoing) rangeText += " (진행 중)";
+
+            if (allFuture) {
+                group.Rows.Add(MakeRow(
+                    new[] { $"{weekNo}주차", rangeText, "집계 전", "-", "-", "-" },
+                    head: false, highlight: false, muted: true, rightAlignFromCol: 2));
+            } else {
+                var validSlice = slice.Where(d => d.Date <= today).ToList();
+                group.Rows.Add(MakeRow(
+                    new[]
+                    {
+                        $"{weekNo}주차",
+                        rangeText,
+                        $"{validSlice.Sum(d => d.Orders):N0}건",
+                        $"{validSlice.Sum(d => d.Sales):N0}원",
+                        $"{validSlice.Sum(d => d.Packs):N0}팩",
+                        $"{validSlice.Sum(d => d.Canceled):N0}건",
+                    },
+                    head: false, highlight: false, muted: false, rightAlignFromCol: 2));
+            }
+        }
+
+        group.Rows.Add(MakeRow(
+            new[] { "합계", "", $"{now.OrderCount:N0}건", $"{now.Sales:N0}원", $"{now.PackCount:N0}팩", $"{now.CancelCount:N0}건" },
+            head: false, highlight: true, muted: false, rightAlignFromCol: 2));
+
+        t.RowGroups.Add(group);
+        return t;
+    }
+
+    private static Table MakeDailyTable(StatsResult now, DateTime today) {
+        var t = new Table {
+            CellSpacing = 0,
+            BorderBrush = Ink,
+            BorderThickness = new Thickness(0, 1, 0, 1),
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        var widths = new[] { 1.5, 0.8, 1.0, 1.5, 1.0, 0.9 };
+        foreach (var w in widths)
+            t.Columns.Add(new TableColumn { Width = new GridLength(w, GridUnitType.Star) });
+
+        var group = new TableRowGroup();
+        group.Rows.Add(MakeRow(
+            new[] { "날짜", "요일", "주문 수", "매출", "판매 팩", "취소" },
+            head: true, highlight: false, muted: false, rightAlignFromCol: 2));
+
+        foreach (var d in now.ByDay) {
+            var isFuture = d.Date > today;
+            if (isFuture) {
+                group.Rows.Add(MakeRow(
+                    new[] { d.Date.ToString("yyyy-MM-dd", Ko), d.Date.ToString("ddd", Ko), "집계 전", "-", "-", "-" },
+                    head: false, highlight: false, muted: true, rightAlignFromCol: 2));
+            } else {
+                group.Rows.Add(MakeRow(
+                    new[]
+                    {
+                        d.Date.ToString("yyyy-MM-dd", Ko),
+                        d.Date.ToString("ddd", Ko),
+                        $"{d.Orders:N0}건",
+                        $"{d.Sales:N0}원",
+                        $"{d.Packs:N0}팩",
+                        $"{d.Canceled:N0}건",
+                    },
+                    head: false, highlight: false, muted: false, rightAlignFromCol: 2));
+            }
+        }
+
+        group.Rows.Add(MakeRow(
+            new[] { "합계", "", $"{now.OrderCount:N0}건", $"{now.Sales:N0}원", $"{now.PackCount:N0}팩", $"{now.CancelCount:N0}건" },
+            head: false, highlight: true, muted: false, rightAlignFromCol: 2));
+
+        t.RowGroups.Add(group);
+        return t;
+    }
+
+    private static string FormatAxisWon(int amount) {
+        if (amount >= 100_000_000) return $"{amount / 100_000_000.0:0.#}억원";
+        if (amount >= 10_000) return $"{amount / 10_000.0:0.#}만원";
+        return $"{amount:N0}원";
+    }
+
+    private static string FormatCompactWon(int amount) {
+        if (amount >= 100_000_000) return $"{amount / 100_000_000.0:0.#}억";
+        if (amount >= 10_000) return $"{amount / 10_000.0:0.#}만";
+        if (amount >= 1_000) return $"{amount / 1_000.0:0.#}천";
+        return $"{amount:N0}";
     }
 
     private static (DateTime Start, DateTime End) GetWeekRange(DateTime d) {
@@ -512,14 +659,21 @@ public static class OrderPeriodReportPrinter {
         _ => "전일",
     };
 
-    private static string FormatRateDiff(double nowRate, double prevRate) {
+    private static string FormatIntDiff(int nowVal, int prevVal, string unit, bool hasPrevData) {
+        if (!hasPrevData) return "비교 자료 없음";
+        return StatsCalculator.DiffText(nowVal, prevVal, unit);
+    }
+
+    private static string FormatRateDiff(double nowRate, double prevRate, bool hasPrevData) {
+        if (!hasPrevData) return "비교 자료 없음";
         var diff = nowRate - prevRate;
         if (Math.Abs(diff) < 0.05) return "±0.0%p";
         var sign = diff > 0 ? "+" : "−";
         return $"{sign}{Math.Abs(diff):0.0}%p";
     }
 
-    private static string FormatDecimalDiff(double nowVal, double prevVal, string unit) {
+    private static string FormatDecimalDiff(double nowVal, double prevVal, string unit, bool hasPrevData) {
+        if (!hasPrevData) return "비교 자료 없음";
         var diff = nowVal - prevVal;
         if (Math.Abs(diff) < 0.05) return $"±0.0{unit}";
         var sign = diff > 0 ? "+" : "−";
@@ -531,7 +685,11 @@ public static class OrderPeriodReportPrinter {
             FontSize = 12.5,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 12, 0, 5),
+            KeepWithNext = true,
         });
+
+    private static Paragraph Note(string text) =>
+        new(new Run(text)) { Foreground = Sub, FontSize = 9.5, Margin = new Thickness(0, 2, 0, 4) };
 
     private static Table MakeMetaTable(string[][] rows) {
         var t = new Table { CellSpacing = 0, Margin = new Thickness(0, 0, 0, 6) };
@@ -576,11 +734,11 @@ public static class OrderPeriodReportPrinter {
             t.Columns.Add(new TableColumn { Width = new GridLength(widths[i], GridUnitType.Star) });
 
         var group = new TableRowGroup();
-        group.Rows.Add(MakeRow(headers, head: true, highlight: false, rightAlignFromCol: rightAlignFromCol));
+        group.Rows.Add(MakeRow(headers, head: true, highlight: false, muted: false, rightAlignFromCol: rightAlignFromCol));
 
         for (var idx = 0; idx < rows.Length; idx++) {
             var isLast = highlightLastRow && idx == rows.Length - 1;
-            group.Rows.Add(MakeRow(rows[idx], head: false, highlight: isLast, rightAlignFromCol: rightAlignFromCol));
+            group.Rows.Add(MakeRow(rows[idx], head: false, highlight: isLast, muted: false, rightAlignFromCol: rightAlignFromCol));
         }
 
         t.RowGroups.Add(group);
@@ -591,29 +749,40 @@ public static class OrderPeriodReportPrinter {
         string[] cells,
         bool head,
         bool highlight,
+        bool muted,
         int rightAlignFromCol) {
         var row = new TableRow();
         if (head) row.Background = HeadFill;
         else if (highlight) row.Background = SoftFill;
 
+        var fg = muted ? Muted : Ink;
+        var weight = (head || highlight) ? FontWeights.SemiBold : FontWeights.Normal;
+
         for (var i = 0; i < cells.Length; i++) {
             var align = i >= rightAlignFromCol ? TextAlignment.Right : TextAlignment.Left;
-
-            var p = new Paragraph(new Run(cells[i])) {
-                Margin = new Thickness(0),
-                TextAlignment = align,
-                FontFamily = (!head && i >= rightAlignFromCol) ? Mono : Font,
-            };
-
-            row.Cells.Add(new TableCell(p) {
-                BorderBrush = Line,
-                BorderThickness = new Thickness(0, head ? 0 : 1, 0, 0),
-                Padding = new Thickness(6, 4, 6, 4),
-                Foreground = Ink,
-                FontWeight = (head || highlight) ? FontWeights.SemiBold : FontWeights.Normal,
-                FontSize = 11,
-            });
+            var family = (!head && i >= rightAlignFromCol) ? Mono : Font;
+            row.Cells.Add(MakeTextCell(cells[i], align, family, fg, weight, head));
         }
         return row;
     }
+
+    private static TableCell MakeTextCell(
+        string text,
+        TextAlignment align,
+        FontFamily family,
+        Brush fg,
+        FontWeight weight,
+        bool isHead) =>
+        new(new Paragraph(new Run(text)) {
+            Margin = new Thickness(0),
+            TextAlignment = align,
+            FontFamily = family,
+        }) {
+            BorderBrush = Line,
+            BorderThickness = new Thickness(0, isHead ? 0 : 1, 0, 0),
+            Padding = new Thickness(6, 4, 6, 4),
+            Foreground = fg,
+            FontWeight = weight,
+            FontSize = 10.5,
+        };
 }

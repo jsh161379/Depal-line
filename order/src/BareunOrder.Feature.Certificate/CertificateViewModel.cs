@@ -11,7 +11,33 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace BareunOrder.Feature.Certificate;
 
-public sealed record CheckRow(string Item, string Standard, string Result, bool Pass);
+public sealed record CheckRow(string Item, string Standard, string Result, bool Pass, bool IsReference = false) {
+    public string StatusText => IsReference ? "참고" : (Pass ? "적합" : "부적합");
+}
+
+public sealed record CertProductRow(string Name, string PackSpec, int PackQty, int BatteryCount) {
+    public string PackQtyText => $"{PackQty:N0}팩";
+    public string BatteryCountText => $"{BatteryCount:N0}개";
+}
+
+public sealed record RunTotalSummary(
+    int RunCount,
+    int TotalShipped,
+    int TotalACount,
+    string VOpenText,
+    string VLoadText,
+    string RIntText,
+    string VisualPassText) {
+    public string Label => $"합계 ({RunCount}개 회차)";
+}
+
+/// <summary>관리자 화면 내부 참고용 정보 (고객용 성적서·인쇄물에는 표시하지 않음)</summary>
+public sealed record AdminDetailInfo(
+    string SourceLabel,
+    int LinkedRunCount,
+    string? VisualConfidenceText,
+    string? CameraPolarityText,
+    string? MissingText);
 
 public sealed record ReportKindOption(string Label, PeriodKind Kind);
 
@@ -25,14 +51,24 @@ public sealed record CertificateData(
     DateTime InspectedAt,
     string RunId,
     int Count,
+    int TotalPacks,
+    int LinkedACount,
+    IReadOnlyList<CertProductRow> Products,
     IReadOnlyList<CheckRow> Rows,
     IReadOnlyList<RunSummaryRow> Runs,
+    RunTotalSummary? RunTotal,
+    AdminDetailInfo AdminInfo,
     bool IsExample,
-    bool HasRuns,
-    string? MissingNotice = null) {
-    public bool AllPass => HasRuns && Rows.Count > 0 && Rows.All(r => r.Pass);
-    public string VerdictText => AllPass ? "합격" : (HasRuns ? "불합격" : "미충족");
-    public string StampText => AllPass ? "합 격" : (HasRuns ? "불합격" : "미충족");
+    bool HasRuns) {
+    public bool IsQuantitySufficient => IsExample || (HasRuns && LinkedACount >= Count);
+    public bool ChecksAllPass => Rows.Count > 0 && Rows.Where(r => !r.IsReference).All(r => r.Pass);
+    public bool AllPass => HasRuns && IsQuantitySufficient && ChecksAllPass;
+
+    public string VerdictText => !HasRuns
+        ? "미충족"
+        : (!IsQuantitySufficient ? "수량 부족" : (ChecksAllPass ? "합격" : "불합격"));
+
+    public string StampText => AllPass ? "합 격" : VerdictText;
 }
 
 /// <summary>
@@ -52,7 +88,8 @@ public sealed partial class CertificateViewModel : ObservableObject {
 
     public event Action? ReportBundleChanged;
 
-    public string OperatorName => _settings.Operator;
+    public string OperatorName => string.IsNullOrWhiteSpace(_settings.Operator) ? "담당자" : _settings.Operator.Trim();
+    public string IssuedDateText => DateTime.Now.ToString("yyyy-MM-dd");
 
     public CertificateViewModel(OrderStore store, AppSettings settings) {
         _store = store;
@@ -64,7 +101,6 @@ public sealed partial class CertificateViewModel : ObservableObject {
             new ReportKindOption("주간", PeriodKind.Week),
             new ReportKindOption("월간", PeriodKind.Month),
         };
-        // 초기 화면에서 이번 달 출고 주문이 바로 보이도록 월간으로 시작
         _selectedPeriodOption = PeriodOptions[2];
 
         var today = DateTime.Today;
@@ -119,7 +155,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
         RefreshReportBundle(forceNotify: true);
     }
 
-    // ───────────────────────── 상단 기간 설정 (전체 날짜 선택 가능 + 시작일 기준 재계산) ─────────────────────────
+    // ───────────────────────── 상단 기간 설정 ─────────────────────────
 
     public IReadOnlyList<ReportKindOption> PeriodOptions { get; }
 
@@ -271,7 +307,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
         RefreshReportBundle();
         if (ReportBundle == null) return;
         try {
-            OrderPeriodReportPrinter.PrintBundle(ReportBundle, _settings.Operator);
+            OrderPeriodReportPrinter.PrintBundle(ReportBundle, OperatorName);
         } catch (Exception ex) {
             MessageBox.Show($"보고서 출력 중 오류가 발생했습니다.\n{ex.Message}", "주문 관리 보고서", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -324,7 +360,11 @@ public sealed partial class CertificateViewModel : ObservableObject {
     }
 
     public bool IsWarningBanner =>
-        !string.IsNullOrEmpty(ErrorMessage) || Data is { IsExample: true } or { HasRuns: false };
+        !string.IsNullOrEmpty(ErrorMessage)
+        || Data is { IsExample: true }
+        || Data is { HasRuns: false }
+        || Data is { IsQuantitySufficient: false }
+        || Data is { ChecksAllPass: false };
 
     public string StatusBannerText {
         get {
@@ -333,9 +373,13 @@ public sealed partial class CertificateViewModel : ObservableObject {
             if (!string.IsNullOrEmpty(ErrorMessage)) return ErrorMessage;
             if (Data == null) return "";
             if (Data.IsExample) return "예시 값 — Fake 모드 또는 DB 미연결 상태";
-            if (!Data.HasRuns) return "연결된 생산 회차(order_runs)가 없습니다 — 출고 시 라인 회차를 먼저 연결하세요";
+            if (!Data.HasRuns) return "연결된 생산 회차가 없습니다 — 출고 탭에서 라인 회차를 먼저 연결해 주세요";
+            if (!Data.IsQuantitySufficient)
+                return $"연결 수량 {Data.LinkedACount:N0}개 / 주문 수량 {Data.Count:N0}개 — 회차를 더 연결해 주세요";
+            if (!Data.ChecksAllPass)
+                return "검사 기준 미달 항목이 있어 성적서를 발급할 수 없습니다";
             return string.IsNullOrEmpty(Selected.CertNo)
-                ? "라인 DB 실측 데이터 조회 완료 · 미발급 상태"
+                ? "검사 데이터 확인 완료 · 미발급 상태"
                 : $"성적서 발급 완료 ({Selected.CertNo})";
         }
     }
@@ -353,6 +397,16 @@ public sealed partial class CertificateViewModel : ObservableObject {
         if (Selected == null || Data == null) return;
         if (!Data.IsExample && !Data.HasRuns) {
             MessageBox.Show("연결된 생산 회차가 없어 성적서를 발급할 수 없습니다.", "검사 성적서", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (!Data.IsExample && !Data.IsQuantitySufficient) {
+            MessageBox.Show(
+                $"연결 수량({Data.LinkedACount:N0}개)이 주문 수량({Data.Count:N0}개)보다 부족합니다.\n회차를 더 연결한 뒤 발급해 주세요.",
+                "검사 성적서", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (!Data.IsExample && !Data.ChecksAllPass) {
+            MessageBox.Show("검사 기준 미달 항목이 있어 성적서를 발급할 수 없습니다.", "검사 성적서", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -384,13 +438,13 @@ public sealed partial class CertificateViewModel : ObservableObject {
     }
 
     private bool CanIssue() =>
-        Selected != null && Data != null && !IsLoading && (Data.IsExample || Data.HasRuns);
+        Selected != null && Data != null && !IsLoading && (Data.IsExample || Data.AllPass);
 
     [RelayCommand(CanExecute = nameof(CanPrint))]
     private void Print() {
         if (Selected == null || Data == null) return;
         try {
-            CertificatePrinter.Print(Selected, Data);
+            CertificatePrinter.Print(Selected, Data, OperatorName);
         } catch (Exception ex) {
             MessageBox.Show($"인쇄 중 오류가 발생했습니다.\n{ex.Message}", "검사 성적서", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -400,7 +454,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
     private void ExportCsv() {
         if (Selected == null || Data == null) return;
         try {
-            var path = CertificateCsvExporter.Export(Selected, Data);
+            var path = CertificateCsvExporter.Export(Selected, Data, OperatorName);
             if (path != null) {
                 _store.Write($"{Selected.No} 성적서 CSV 저장 ({Path.GetFileName(path)})");
                 MessageBox.Show($"CSV 파일을 저장했습니다.\n{path}", "검사 성적서", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -463,6 +517,15 @@ public sealed partial class CertificateViewModel : ObservableObject {
         }
     }
 
+    private static IReadOnlyList<CertProductRow> BuildProductRows(Order o) =>
+        o.Items
+            .Select(i => new CertProductRow(
+                Name: i.Name,
+                PackSpec: $"{Products.PackSize(i.Id)}개입",
+                PackQty: i.Qty,
+                BatteryCount: i.BatteryCount))
+            .ToList();
+
     private static CertificateData BuildFromDb(Order o, string certNo, CertificateDbSummary s) {
         if (s.Runs.Count == 0)
             return MakeEmpty(o, certNo);
@@ -472,34 +535,39 @@ public sealed partial class CertificateViewModel : ObservableObject {
             : $"{s.Runs[0].SourceRunId} 외 {s.Runs.Count - 1}건";
         var inspectedAt = s.Runs.Max(r => r.StartedAt) ?? o.ReceivedAt;
 
+        // 외관 (고객용: 신뢰도% 노출 제거, 관리자 내부 정보로 분리)
         string visualResult;
         bool visualOk;
         if (s.VisualInspected == 0) {
             visualResult = "미측정";
             visualOk = false;
         } else {
-            var confText = s.VisualConfidence.HasValue ? $" (신뢰도 {s.VisualConfidence.Value:P1})" : "";
-            var failPart = (s.VisualFail + s.VisualError) > 0 ? $", 불량·오류 {s.VisualFail + s.VisualError}건" : "";
-            visualResult = $"{s.VisualPass}/{s.VisualInspected} 통과{failPart}{confText}";
+            var failPart = (s.VisualFail + s.VisualError) > 0 ? $" (불량·오류 {s.VisualFail + s.VisualError}건)" : "";
+            visualResult = $"{s.VisualPass}/{s.VisualInspected} 통과{failPart}";
             visualOk = s.VisualFail == 0 && s.VisualError == 0;
         }
 
+        // 극 방향 (고객용: "-상" 오해 방지를 위해 "정상 N/N"으로 명확 표기)
         string polarityResult;
         bool polarityOk;
         if (s.VisualInspected == 0 && s.MeasuredCount == 0) {
             polarityResult = "미측정";
             polarityOk = false;
         } else {
-            var parts = new List<string>();
-            if (s.VisualMinusUp > 0) parts.Add($"-상 {s.VisualMinusUp}");
-            if (s.VisualPlusUp > 0) parts.Add($"+상 {s.VisualPlusUp}");
-            if (s.VisualPolarityUnknown > 0) parts.Add($"미상 {s.VisualPolarityUnknown}");
-            var camText = parts.Count > 0 ? string.Join(" · ", parts) : "기록 없음";
-            polarityResult = s.MeasuredCount > 0
-                ? $"{camText} / 전기 정극성 {s.ElecPolarityNormal}/{s.MeasuredCount}"
-                : camText;
             polarityOk = s.VisualPolarityUnknown == 0
                          && (s.MeasuredCount == 0 || s.ElecPolarityNormal == s.MeasuredCount);
+            if (polarityOk) {
+                var okCount = s.MeasuredCount > 0 ? s.ElecPolarityNormal : (s.VisualInspected - s.VisualPolarityUnknown);
+                var totalCount = s.MeasuredCount > 0 ? s.MeasuredCount : s.VisualInspected;
+                polarityResult = $"정상 {okCount}/{totalCount}";
+            } else {
+                var issues = new List<string>();
+                if (s.MeasuredCount > 0 && s.ElecPolarityNormal < s.MeasuredCount)
+                    issues.Add($"전기 정극성 {s.ElecPolarityNormal}/{s.MeasuredCount}");
+                if (s.VisualPolarityUnknown > 0)
+                    issues.Add($"방향 미확인 {s.VisualPolarityUnknown}건");
+                polarityResult = $"확인 필요 ({string.Join(", ", issues)})";
+            }
         }
 
         var vOpenResult = s.VOpenAvg.HasValue
@@ -508,50 +576,92 @@ public sealed partial class CertificateViewModel : ObservableObject {
         var vOpenOk = s.VOpenAvg is >= AGradeVOpenMin;
 
         var vLoadResult = s.VLoadAvg.HasValue ? $"{s.VLoadAvg.Value:0.000} V" : "미측정";
-        var vLoadOk = s.VLoadAvg is > 0;
 
         var rIntResult = s.RIntAvg.HasValue
             ? $"{s.RIntAvg.Value:0.000} Ω (최대 {s.RIntMax:0.000})"
             : "미측정";
         var rIntOk = s.RIntAvg is <= AGradeRIntMax;
 
+        var qtyOk = s.ACount >= o.BatteryCount;
+        var gradeText = s.ACount > 0
+            ? $"A ({s.ACount:N0}개 / 주문 {o.BatteryCount:N0}개)"
+            : "기록 없음";
+
         var rows = new List<CheckRow>
         {
             new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", visualResult, visualOk),
-            new("극 방향 (카메라·전기)", "정극성 / 방향 확인", polarityResult, polarityOk),
+            new("극 방향 (외관·전기)", "정극성 / 방향 정상", polarityResult, polarityOk),
             new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", vOpenResult, vOpenOk),
-            new("부하 전압 (평균)", "측정 완료 (참고)", vLoadResult, vLoadOk),
+            new("부하 전압 (평균)", "참고 측정", vLoadResult, true, IsReference: true),
             new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", rIntResult, rIntOk),
-            new("등급 (A등급 출하)", "A", s.ACount > 0 ? $"A ({s.ACount}개)" : "기록 없음", s.ACount > 0),
+            new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", gradeText, s.ACount > 0 && qtyOk),
         };
 
-        string? notice = (s.ElectricalMissing > 0 || s.VisualMissing > 0)
-            ? $"참고: 연결된 회차 A등급 {s.ACount}개 기준 집계이며, 누락 건수(전기 {s.ElectricalMissing}개 / 외관 {s.VisualMissing}개)는 평균에서 제외되었습니다."
-            : "참고: 주문에 연결된 생산 회차(order_runs)의 A등급 전체 집계 기준입니다.";
+        var runTotal = new RunTotalSummary(
+            RunCount: s.Runs.Count,
+            TotalShipped: s.Runs.Sum(r => r.BatteryCount),
+            TotalACount: s.ACount,
+            VOpenText: s.VOpenAvg.HasValue ? $"{s.VOpenAvg.Value:0.000} V" : "-",
+            VLoadText: s.VLoadAvg.HasValue ? $"{s.VLoadAvg.Value:0.000} V" : "-",
+            RIntText: s.RIntAvg.HasValue ? $"{s.RIntAvg.Value:0.000} Ω" : "-",
+            VisualPassText: s.ACount > 0 ? $"{s.VisualPass}/{s.ACount}" : "-");
+
+        // 관리자 내부 참고 정보
+        var camParts = new List<string>();
+        if (s.VisualMinusUp > 0) camParts.Add($"음극 상향 {s.VisualMinusUp}개");
+        if (s.VisualPlusUp > 0) camParts.Add($"양극 상향 {s.VisualPlusUp}개");
+        if (s.VisualPolarityUnknown > 0) camParts.Add($"미확인 {s.VisualPolarityUnknown}개");
+        var missingText = (s.ElectricalMissing > 0 || s.VisualMissing > 0)
+            ? $"누락 건수(전기 {s.ElectricalMissing}개 / 외관 {s.VisualMissing}개)는 평균 계산에서 제외됨"
+            : null;
+
+        var adminInfo = new AdminDetailInfo(
+            SourceLabel: $"라인 DB 실측 (order_runs {s.Runs.Count}개 회차 집계)",
+            LinkedRunCount: s.Runs.Count,
+            VisualConfidenceText: s.VisualConfidence.HasValue ? $"YOLO 외관 평균 신뢰도 {s.VisualConfidence.Value:P1}" : null,
+            CameraPolarityText: camParts.Count > 0 ? $"카메라 극 방향 상세: {string.Join(" · ", camParts)}" : null,
+            MissingText: missingText);
 
         return new CertificateData(
             CertNo: certNo,
             InspectedAt: inspectedAt,
             RunId: runText,
             Count: o.BatteryCount,
+            TotalPacks: o.PackCount,
+            LinkedACount: s.ACount,
+            Products: BuildProductRows(o),
             Rows: rows,
             Runs: s.Runs,
+            RunTotal: runTotal,
+            AdminInfo: adminInfo,
             IsExample: false,
-            HasRuns: true,
-            MissingNotice: notice);
+            HasRuns: true);
     }
 
     private static CertificateData MakeEmpty(Order o, string certNo) {
         var rows = new List<CheckRow>
         {
             new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", "-", false),
-            new("극 방향 (카메라·전기)", "정극성 / 방향 확인", "-", false),
+            new("극 방향 (외관·전기)", "정극성 / 방향 정상", "-", false),
             new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", "-", false),
-            new("부하 전압 (평균)", "측정 완료 (참고)", "-", false),
+            new("부하 전압 (평균)", "참고 측정", "-", true, IsReference: true),
             new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", "-", false),
-            new("등급 (A등급 출하)", "A", "-", false),
+            new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", "-", false),
         };
-        return new CertificateData(certNo, o.ReceivedAt, "연결 없음", o.BatteryCount, rows, Array.Empty<RunSummaryRow>(), IsExample: false, HasRuns: false);
+        return new CertificateData(
+            CertNo: certNo,
+            InspectedAt: o.ReceivedAt,
+            RunId: "연결 없음",
+            Count: o.BatteryCount,
+            TotalPacks: o.PackCount,
+            LinkedACount: 0,
+            Products: BuildProductRows(o),
+            Rows: rows,
+            Runs: Array.Empty<RunSummaryRow>(),
+            RunTotal: null,
+            AdminInfo: new AdminDetailInfo("연결된 회차 없음 (order_runs 미등록)", 0, null, null, null),
+            IsExample: false,
+            HasRuns: false);
     }
 
     private static CertificateData MakeExample(Order o, string certNo) {
@@ -563,12 +673,12 @@ public sealed partial class CertificateViewModel : ObservableObject {
 
         var rows = new List<CheckRow>
         {
-            new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", "이상 없음", true),
-            new("극 방향 (카메라·전기)", "정극성 / 방향 확인", "정방향", true),
+            new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", $"{o.BatteryCount}/{o.BatteryCount} 통과", true),
+            new("극 방향 (외관·전기)", "정극성 / 방향 정상", $"정상 {o.BatteryCount}/{o.BatteryCount}", true),
             new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", $"{vOpen:0.000} V", vOpen >= AGradeVOpenMin),
-            new("부하 전압 (평균)", "측정 완료 (참고)", $"{vLoad:0.000} V", vLoad > 0),
+            new("부하 전압 (평균)", "참고 측정", $"{vLoad:0.000} V", true, IsReference: true),
             new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", $"{rInt:0.000} Ω", rInt <= AGradeRIntMax),
-            new("등급 (A등급 출하)", "A", "A", true),
+            new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", $"A ({o.BatteryCount:N0}개 / 주문 {o.BatteryCount:N0}개)", true),
         };
 
         return new CertificateData(
@@ -576,8 +686,13 @@ public sealed partial class CertificateViewModel : ObservableObject {
             InspectedAt: at,
             RunId: $"{at:yyyyMMdd-HHmmss}-{rnd.Next(0x1000, 0xFFFF):x4}",
             Count: o.BatteryCount,
+            TotalPacks: o.PackCount,
+            LinkedACount: o.BatteryCount,
+            Products: BuildProductRows(o),
             Rows: rows,
             Runs: Array.Empty<RunSummaryRow>(),
+            RunTotal: null,
+            AdminInfo: new AdminDetailInfo("예시 데이터 (Fake 모드 또는 DB 미연결)", 0, null, null, null),
             IsExample: true,
             HasRuns: true);
     }
