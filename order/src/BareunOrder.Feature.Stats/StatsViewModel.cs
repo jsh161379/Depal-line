@@ -21,10 +21,9 @@ public sealed record Bar(string Label, int Value, string ValueText, double Ratio
 /// - DB 조회: StatsDbReader.cs (가짜 모드·DB 설정 없음이면 프로그램에 있는 주문만)
 /// - 엑셀: StatsExcelReport.cs
 ///
-/// - [완료] 자주 주문한 고객 TOP 5, 문의 유형별 건수
+/// - 마감 보고서(PDF): StatsClosingReport.cs (페이지를 그림으로 그려 PDF 파일로 저장)
 ///
-/// ── 할 일 (TODO) ──
-/// - 마감 보고서 인쇄·PDF는 주문 관리 보고서(유동호)에서 CurrentResult / PreviousResult를 그대로 쓰도록 맞춤
+/// - [완료] 자주 주문한 고객 TOP 5, 문의 유형별 건수, 마감 보고서 PDF
 /// </summary>
 public sealed partial class StatsViewModel : ObservableObject
 {
@@ -289,6 +288,40 @@ public sealed partial class StatsViewModel : ObservableObject
         ByStatus = now.ByStatus;
         TopCustomers = StatsCalculator.TopCustomers(now);
         InquiryRows = StatsCalculator.InquiriesByType(_store.Inquiries.ToList(), StartDate, EndDate);
+    }
+
+    // ───────────────────────── 마감 보고서 (PDF) ─────────────────────────
+
+    /// <summary>
+    /// 지금 기간의 주문 마감 보고서를 PDF로 저장한다 (A4, 관리자 프로그램 보고서와 같은 모양).
+    /// 파일 이름 기본값: 바른전지_마감보고서_주간_20261116-20261122.pdf (엑셀 내보내기와 같은 규칙)
+    /// </summary>
+    [RelayCommand]
+    private void ClosingReport()
+    {
+        if (CurrentResult == null || PreviousResult == null) Recalc();
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "마감 보고서 PDF로 저장",
+            Filter = "PDF 문서 (*.pdf)|*.pdf",
+            DefaultExt = ".pdf",
+            AddExtension = true,
+            // 엑셀과 같은 모양: 바른전지_통계_주간_20261116-20261122.xlsx → 바른전지_마감보고서_주간_20261116-20261122.pdf
+            FileName = $"바른전지_마감보고서_{StatsPeriod.KindName(Kind).Replace(" ", "")}_{StartDate:yyyyMMdd}-{EndDate:yyyyMMdd}.pdf",
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var doc = StatsClosingReport.Build(Kind, CurrentResult!, PreviousResult!, InquiryRows, _settings.Operator);
+            StatsClosingReport.SavePdf(doc, dialog.FileName);
+            MessageBox.Show($"저장했습니다.\n{dialog.FileName}", "마감 보고서", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show($"저장하지 못했습니다. 같은 파일이 PDF 보기 프로그램에 열려 있으면 닫고 다시 시도하세요.\n\n{ex.Message}",
+                "마감 보고서", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     // ───────────────────────── 엑셀 ─────────────────────────

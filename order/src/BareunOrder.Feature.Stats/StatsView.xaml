@@ -65,7 +65,9 @@
                 <TextBlock Text="{Binding SourceText}" Style="{StaticResource Caption}" VerticalAlignment="Center"
                            MaxWidth="320" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceText}" Margin="0,0,12,0" />
                 <Button Content="새로고침" Style="{StaticResource Btn.Small}" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
-                <Button Content="엑셀 내보내기" Style="{StaticResource Btn.Small}" Command="{Binding ExportCommand}" />
+                <Button Content="엑셀 내보내기" Style="{StaticResource Btn.Small}" Command="{Binding ExportCommand}" Margin="0,0,8,0" />
+                <Button Content="마감 보고서 (PDF)" Style="{StaticResource Btn.Small}" Command="{Binding ClosingReportCommand}"
+                        ToolTip="지금 기간의 마감 보고서를 PDF 파일로 저장" />
             </StackPanel>
         </DockPanel>
 
