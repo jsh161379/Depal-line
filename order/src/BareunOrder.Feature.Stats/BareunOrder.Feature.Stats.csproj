@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 담당: (미정) — F4 통계 -->
+  <!-- 담당: 장성찬 — F4 통계 -->
   <ItemGroup>
     <ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
   </ItemGroup>
