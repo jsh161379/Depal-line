@@ -4,7 +4,7 @@ namespace DepalAdmin.Core.Data;
 public sealed class FakeHistoryRepository : IHistoryRepository
 {
     private const int RunsPerDay = 3;
-    private const int BatteriesPerRun = 10;
+    private const int BatteriesPerRun = 8;    // 팔레트 한 판 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
 
     // 사유는 메시지_형식 v1.4의 고정 문장
     private static readonly string[] VoltageReasons = { "전압 낮음", "내부저항 큼", "전압 낮음, 내부저항 큼" };
