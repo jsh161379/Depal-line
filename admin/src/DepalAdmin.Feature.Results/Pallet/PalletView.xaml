@@ -12,7 +12,7 @@
         <ItemsControl ItemsSource="{Binding Pallet}" Focusable="False">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <UniformGrid Rows="2" Columns="5"/>
+                    <UniformGrid Rows="2" Columns="4"/>
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
