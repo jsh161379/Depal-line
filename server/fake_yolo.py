@@ -11,7 +11,7 @@
 
 필요한 것: Python 3.11 이상, pip install "aiomqtt>=2" pydantic, 같은 폴더에 line_common.py
 사용법
-  python fake_yolo.py                       팔레트 10칸 가득
+  python fake_yolo.py                       팔레트 8칸(2×4) 가득
   python fake_yolo.py --cells 4             건전지 4개만 (빨리 시험)
   python fake_yolo.py --defect 0.2          외관 불량 확률
   python fake_yolo.py --plus-up 0.1         +극이 위로 보일 확률
@@ -23,7 +23,7 @@
 # ===================== 설정값 =====================
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
-PALLET_ROWS, PALLET_COLS = 2, 5
+PALLET_ROWS, PALLET_COLS = 2, 4   # 팔레트 한 판 8개 = 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
 BOOTH_SEC = 3.0                  # 벨트에 올린 뒤 촬영 부스를 지나 결과가 나올 때까지 (--speed 1 기준) 🟡
 TIME_SEC = {"scan_pallet": 0.5}
 DEFECT_TYPES = ["scratch", "damage", "corrosion"]   # 규약 3-2 불량 종류 (팀 라벨링 classes.txt와 같게, 11/19)
@@ -120,7 +120,8 @@ async def amain(args):
 
 def parse(argv=None):
     p = argparse.ArgumentParser(description="가짜 YOLO")
-    p.add_argument("--cells", type=int, default=10, help="팔레트 위 건전지 개수 (최대 10)")
+    p.add_argument("--cells", type=int, default=PALLET_ROWS * PALLET_COLS,
+                   help=f"팔레트 위 건전지 개수 (최대 {PALLET_ROWS * PALLET_COLS})")
     p.add_argument("--speed", type=float, default=0.3, help="동작 시간 배율 (1=실제)")
     p.add_argument("--defect", type=float, default=0.15, help="외관 불량 확률")
     p.add_argument("--plus-up", type=float, default=0.1, help="+극이 위로 보일 확률")

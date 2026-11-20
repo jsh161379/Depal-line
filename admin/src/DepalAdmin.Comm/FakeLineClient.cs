@@ -14,7 +14,8 @@ namespace DepalAdmin.Comm;
 public sealed class FakeLineClient : LineClientBase
 {
     // ── 수정할 값 ──────────────────────────────────────────
-    private const int BatteriesPerRun = 10;       // 팔레트 2×5
+    private const int PalletRows = 2, PalletCols = 4;   // 팔레트 한 판 8개 = 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
+    private const int BatteriesPerRun = PalletRows * PalletCols;
     private const int AgvBatch = 8;               // 잠정값
     private const double DelayChance = 0.01;      // 1초마다 어떤 장치가 '지연'될 확률
     private const int DelaySeconds = 4;
@@ -174,7 +175,7 @@ public sealed class FakeLineClient : LineClientBase
                 break;
             case "pick":
                 _batteryId++;
-                _cell = new[] { (_batteryId - 1) / 5 % 2, (_batteryId - 1) % 5 };
+                _cell = new[] { (_batteryId - 1) / PalletCols % PalletRows, (_batteryId - 1) % PalletCols };
                 if (_rnd.NextDouble() < PickFailChance)
                 {
                     _mode = "paused";

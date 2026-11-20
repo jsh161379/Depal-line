@@ -94,7 +94,7 @@ BOOTH_SEC = 3.0                  # 퍽이 벨트에 올라간 뒤 부스 기준�
 FAKE_DEFECT_TYPES = sorted(DEFECT_CLASSES)
 
 # 팔레트 (팔레트 카메라 미정 ❓ — 정해지기 전까지 가득 찬 팔레트로 가정)
-PALLET_ROWS, PALLET_COLS = 2, 5
+PALLET_ROWS, PALLET_COLS = 2, 4   # 팔레트 한 판 8개 = 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
 # ====================================================
 
 sys.path.insert(0, str(HERE.parent / "server"))   # line_common.py
