@@ -75,6 +75,16 @@ public sealed partial class Order : ObservableObject
     public IReadOnlyList<OrderItem> Items { get; init; } = Array.Empty<OrderItem>();
     public int Total { get; init; }
 
+    // 고객 정보 (주문 통신 규약 v1.0.4, 11/20). 선택 항목 — 값은 CustomerInfo.Normalize를 거친 코드값
+    public string CustomerType { get; init; } = CustomerInfo.Personal;   // personal / company
+    public string AgeGroup { get; init; } = CustomerInfo.None;           // 10s 20s 30s 40s 50s+ none
+    public string Region { get; init; } = CustomerInfo.None;             // 시·도 17개 짧은 이름 / none
+
+    /// <summary>목록·상세에 보일 고객 정보: "개인 · 30대 · 서울", "기업 · 경기"</summary>
+    public string CustomerText => CustomerType == CustomerInfo.Company
+        ? $"기업 · {CustomerInfo.RegionText(Region)}"
+        : $"개인 · {CustomerInfo.AgeText(AgeGroup)} · {CustomerInfo.RegionText(Region)}";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(NextStatusText))]
@@ -117,4 +127,48 @@ public sealed partial class Order : ObservableObject
 
     public int PackCount => Items.Sum(i => i.Qty);
     public int BatteryCount => Items.Sum(i => i.BatteryCount);
+}
+
+/// <summary>
+/// 고객 유형·연령대·지역 코드값 (주문 통신 규약 v1.0.4, DB orders 칸과 같은 값).
+/// 세 칸 모두 선택 항목: 없거나 틀린 값이면 주문을 거절하지 않고 기본값으로 바꾼다 (DB 저장 프로그램과 같은 규칙).
+/// </summary>
+public static class CustomerInfo
+{
+    public const string Personal = "personal";
+    public const string Company = "company";
+    public const string None = "none";
+
+    public static readonly string[] Types = { Personal, Company };
+    public static readonly string[] AgeGroups = { "10s", "20s", "30s", "40s", "50s+", None };
+
+    /// <summary>시·도 17개 짧은 이름 (홈페이지 v8 · DB 저장 프로그램과 같은 목록)</summary>
+    public static readonly string[] Regions =
+    {
+        "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기",
+        "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+    };
+
+    /// <summary>받은 값 → 저장할 값. 틀리면 기본값, 기업이면 연령대는 항상 none</summary>
+    public static (string Type, string Age, string Region) Normalize(string? type, string? age, string? region)
+    {
+        var t = type != null && Types.Contains(type) ? type : Personal;
+        var a = t == Company || age == null || !AgeGroups.Contains(age) ? None : age;
+        var r = region != null && Regions.Contains(region) ? region : None;   // none·틀린 값이면 DB 저장 프로그램이 배송 주소로 채움
+        return (t, a, r);
+    }
+
+    public static string TypeText(string type) => type == Company ? "기업" : "개인";
+
+    public static string AgeText(string age) => age switch
+    {
+        "10s" => "10대",
+        "20s" => "20대",
+        "30s" => "30대",
+        "40s" => "40대",
+        "50s+" => "50대 이상",
+        _ => "연령 선택 안 함",
+    };
+
+    public static string RegionText(string region) => Regions.Contains(region) ? region : "지역 선택 안 함";
 }

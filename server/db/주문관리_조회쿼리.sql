@@ -1,4 +1,4 @@
--- 주문 관리 프로그램 탭별 조회 쿼리 (2026-11-17, 주문 통신 규약 v1.0 기준)
+-- 주문 관리 프로그램 탭별 조회 쿼리 (2026-11-17, 주문 통신 규약 v1.0 기준 / 11-20 고객 유형·연령대·지역 통계 추가)
 -- 제안서 쿼리를 확정한 칸 이름으로 바꾼 것. ? 자리는 프로그램에서 값을 넣는다.
 -- 기간 조건은 "시작일 <= 시각 < 종료일 다음 날" 형태로 써서 인덱스를 쓰게 했다.
 
@@ -27,6 +27,54 @@ SELECT i.product_id, SUM(i.quantity) AS packs, SUM(i.quantity * i.unit_price) AS
 FROM order_items i JOIN orders o ON o.order_no = i.order_no
 WHERE o.received_at >= ? AND o.received_at < ? AND o.order_status <> 'canceled'
 GROUP BY i.product_id;
+
+-- [통계] 고객 유형별 주문 수·매출 (personal / company, 취소 제외)  — 11-20 추가
+SELECT customer_type, COUNT(*) AS orders, SUM(total_amount) AS sales
+FROM orders
+WHERE received_at >= ? AND received_at < ? AND order_status <> 'canceled'
+GROUP BY customer_type;
+
+-- [통계] 연령대별 주문 수·매출 (개인 고객만, 취소 제외). none = 선택 안 함 (화면에서 따로 묶어 표시)
+SELECT age_group, COUNT(*) AS orders, SUM(total_amount) AS sales
+FROM orders
+WHERE received_at >= ? AND received_at < ? AND order_status <> 'canceled' AND customer_type = 'personal'
+GROUP BY age_group
+ORDER BY FIELD(age_group, '10s', '20s', '30s', '40s', '50s+', 'none');
+
+-- [통계] 지역별 주문 수·매출 (취소 제외). 지역을 모르는 주문은 none (화면에는 '선택 안 함')
+SELECT region, COUNT(*) AS orders, SUM(total_amount) AS sales
+FROM orders
+WHERE received_at >= ? AND received_at < ? AND order_status <> 'canceled'
+GROUP BY region
+ORDER BY orders DESC;
+
+-- [통계] 지역별 많이 팔린 상품 순위 (지역마다 상위 3개, 판매 팩 수 기준, 취소 제외)
+SELECT region, product_id, product_name, packs, sales, rank_no
+FROM (
+    SELECT o.region AS region, i.product_id, MAX(i.product_name) AS product_name,
+           SUM(i.quantity) AS packs, SUM(i.quantity * i.unit_price) AS sales,
+           ROW_NUMBER() OVER (PARTITION BY o.region
+                              ORDER BY SUM(i.quantity) DESC, SUM(i.quantity * i.unit_price) DESC) AS rank_no
+    FROM order_items i JOIN orders o ON o.order_no = i.order_no
+    WHERE o.received_at >= ? AND o.received_at < ? AND o.order_status <> 'canceled'
+    GROUP BY o.region, i.product_id
+) ranked
+WHERE rank_no <= 3
+ORDER BY region, rank_no;
+
+-- [통계] 연령대별 많이 팔린 상품 순위 (개인 고객, 연령대마다 상위 3개, 취소 제외)
+SELECT age_group, product_id, product_name, packs, sales, rank_no
+FROM (
+    SELECT o.age_group, i.product_id, MAX(i.product_name) AS product_name,
+           SUM(i.quantity) AS packs, SUM(i.quantity * i.unit_price) AS sales,
+           ROW_NUMBER() OVER (PARTITION BY o.age_group
+                              ORDER BY SUM(i.quantity) DESC, SUM(i.quantity * i.unit_price) DESC) AS rank_no
+    FROM order_items i JOIN orders o ON o.order_no = i.order_no
+    WHERE o.received_at >= ? AND o.received_at < ? AND o.order_status <> 'canceled' AND o.customer_type = 'personal'
+    GROUP BY o.age_group, i.product_id
+) ranked
+WHERE rank_no <= 3
+ORDER BY age_group, rank_no;
 
 -- [재고] 창고 팩 수, 주문에 묶인 팩 수, 바로 팔 수 있는 팩 수
 -- 재고는 배송 완료(delivered) 때 빠지므로, 배송 중(shipping)인 주문도 묶인 수에 넣는다.
