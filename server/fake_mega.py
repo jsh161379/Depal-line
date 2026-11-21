@@ -117,11 +117,14 @@ class FakeMega:
 
     # ---------- 측정값 ----------
     def sample_battery(self):
-        kind = self.rnd.choices(["new", "used", "dead"], weights=[5, 3, 2])[0]
+        # 판정 기준 temp-2026-11-20 (A ≤ 1.2Ω, B ≤ 2.0Ω, 개방전압 먼저)에서 new→A, used→B, worn→내부저항 큼, dead→전압 낮음
+        kind = self.rnd.choices(["new", "used", "worn", "dead"], weights=[5, 3, 1, 1])[0]
         if kind == "new":
             return self.rnd.uniform(1.55, 1.62), self.rnd.uniform(0.12, 0.30)
         if kind == "used":
-            return self.rnd.uniform(1.33, 1.48), self.rnd.uniform(0.40, 0.90)
+            return self.rnd.uniform(1.33, 1.48), self.rnd.uniform(0.40, 1.80)
+        if kind == "worn":
+            return self.rnd.uniform(1.33, 1.48), self.rnd.uniform(2.1, 3.0)
         return self.rnd.uniform(1.00, 1.28), self.rnd.uniform(1.2, 3.0)
 
     def measure_once(self):

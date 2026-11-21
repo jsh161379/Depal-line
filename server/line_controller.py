@@ -1,5 +1,5 @@
 """
-라인 컨트롤러 - 퍽 줄 관리 방식 (통신 규약 v1.2, 4장)
+라인 컨트롤러 - 퍽 줄 관리 방식 (통신 규약 v1.2, 4장 / 판정 기준 발행 server/rules v1.5.2)
 =====================================================
 벨트 위에 퍽이 여러 개 동시에 있다. 컨트롤러는 퍽을 올린 순서(battery_id)대로 줄을 만들고,
 장치들이 보내는 알림을 받을 때마다 그 퍽의 다음 단계를 정한다.
@@ -42,10 +42,14 @@ TIMEOUT_SEC = {                 # done/failed 응답까지
     "agv":  {"go": 120, "return": 120},
 }
 
-# 등급 판정 기준 (🟡 임시값, 측정 헤드 제작 후 확정) — 바꾸면 RULE_VERSION도 바꿀 것
-RULE_VERSION = "temp-2026-11-10"
-GRADE_A = {"v_open_min": 1.50, "r_int_max": 0.9}
-GRADE_B = {"v_open_min": 1.30, "r_int_max": 1.5}
+# 등급 판정 기준 (🟡 임시값, 하드웨어 측정 확정 후 최종) — 바꾸면 RULE_VERSION도 바꿀 것
+#   11/20 팀 결정 ⑩: A ≤ 1.2Ω, B ≤ 2.0Ω, 개방전압(무부하 전압)을 먼저 본다. 전압 값은 이전 임시값 그대로
+#   이 값은 회차 시작·브로커 연결 때 server/rules(retained)로 발행 → DB 저장 프로그램이 grading_rules에 저장
+#   → 검사 성적서(F6)가 결과의 rule_version으로 그 회차 기준값을 읽음 (성적서 합격 기준 = 라인 A 기준)
+RULE_VERSION = "temp-2026-11-20"
+RULE_EFFECTIVE_AT = "2026-11-20 00:00:00.000"
+GRADE_A = {"v_open_min": 1.50, "r_int_max": 1.2}
+GRADE_B = {"v_open_min": 1.30, "r_int_max": 2.0}
 
 USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림). 실행할 때 --agv를 붙여도 True
 AGV_BATCH = 8                   # A 몇 개마다 출발 (잠정)
@@ -124,14 +128,24 @@ def judge_measure(m: dict | None):
     v, r = m.get("v_open"), m.get("r_int")
     if v is None or r is None:
         return "RESORT", "측정 실패"
+    # 개방전압 먼저 (11/20 ⑩): B 전압도 안 되면 내부저항과 관계없이 전압 불량
+    if v < GRADE_B["v_open_min"]:
+        return "NG_VOLTAGE", "전압 낮음"
     if v >= GRADE_A["v_open_min"] and r <= GRADE_A["r_int_max"]:
         return "A", None
-    if v >= GRADE_B["v_open_min"] and r <= GRADE_B["r_int_max"]:
+    if r <= GRADE_B["r_int_max"]:
         return "B", None
-    low_v, high_r = v < GRADE_B["v_open_min"], r > GRADE_B["r_int_max"]
-    if low_v and high_r:
-        return "NG_VOLTAGE", "전압 낮음, 내부저항 큼"
-    return "NG_VOLTAGE", "전압 낮음" if low_v else "내부저항 큼"
+    return "NG_VOLTAGE", "내부저항 큼"
+
+
+def rule_body() -> dict:
+    """server/rules 메시지 (통신 규약 v1.5.2 4장). 값이 바뀌면 RULE_VERSION도 바꾼다"""
+    return {
+        "rule_version": RULE_VERSION,
+        "effective_at": RULE_EFFECTIVE_AT,
+        "thresholds": {"A": dict(GRADE_A), "B": dict(GRADE_B), "order": "v_open_first"},
+        "ts": now_str(),
+    }
 
 
 def normalize_vision(msg: dict) -> dict:
@@ -196,6 +210,10 @@ class LineController:
                 key = "sort"
             out.setdefault(key, []).append(p.bid)
         return out
+
+    async def publish_rules(self):
+        """판정 기준값을 server/rules로 (retained). DB 쓰기는 저장 프로그램만 (11/20 ⑤⑩)"""
+        await self.publish("server/rules", json.dumps(rule_body(), ensure_ascii=False), retain=True)
 
     async def publish_line(self):
         body = {"run_id": self.run_id, "mode": self.mode, "step": self.step,
@@ -314,6 +332,7 @@ class LineController:
         self.stop_requested = False
         self.last_seq = {"yolo": None, "mega": None}
         self.mode = "running"
+        await self.publish_rules()       # 이 회차 결과의 rule_version이 가리킬 기준값 (DB grading_rules)
         await self.event("INFO", f"회차 시작 (run_id {self.run_id}, 판정 기준 {RULE_VERSION}, 벨트 위 최대 {MAX_ON_BELT}개)")
         await self.set_step("running")
         if not await self.send_belt(True):
@@ -687,6 +706,7 @@ class LineController:
                     for t in ("res/+", "ui/cmd", "server/devices", "event/estop", "vision/result", "event/mega", "event/env"):
                         await c.subscribe(t, qos=1)
                     self.mode, self.step = "idle", "idle"
+                    await self.publish_rules()
                     await self.publish_line()
                     print(f"[{now_str()}] 브로커 연결됨 ({BROKER_HOST}:{BROKER_PORT}) — 관리자 프로그램 시작 버튼 또는 line_cmd.py start", flush=True)
                     try:
