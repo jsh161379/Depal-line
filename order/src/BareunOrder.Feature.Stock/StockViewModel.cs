@@ -65,7 +65,7 @@ public sealed partial class StockViewModel : ObservableObject
         _settings = settings;
         _supply = supply;
 
-        var start = new Dictionary<string, int> { ["aa4"] = 40, ["aa12"] = 18, ["aa24"] = 6 };   // 가짜 모드 예시 값
+        var start = new Dictionary<string, int> { ["aa4"] = 40, ["aa8"] = 20, ["aa12"] = 18, ["aa24"] = 6 };   // 가짜 모드 예시 값
         foreach (var p in Products.OnSale)   // 판매 중지 상품(aar2)은 재고 관리에서 뺌 (11/20 ⑨)
             Items.Add(new StockItem(p, UsesDb ? 0 : start.GetValueOrDefault(p.Id), settings.LowStockPacks));
 

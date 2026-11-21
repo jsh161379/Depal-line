@@ -16,6 +16,7 @@ public static class Products
     public static readonly IReadOnlyList<Product> All = new[]
     {
         new Product("aa4",  "AA 알카라인 4개입",  3200,  4),
+        new Product("aa8",  "AA 알카라인 8개입",  6200,  8),   // 11/21 추가: 팔레트 한 판(2×4)과 같은 구성 (홈페이지 v10)
         new Product("aa12", "AA 알카라인 12개입", 8900,  12),
         new Product("aa24", "AA 알카라인 24개입", 15900, 24),
         // 11/20 팀 결정 ⑨: 라인은 알카라인 AA만 검사 → 홈페이지 v9에서 뺌. 지난 주문 통계를 위해 지우지 않음
