@@ -33,6 +33,7 @@
   python fake_mega.py --estop-at 40         40초 뒤 비상정지 버튼 누름, 5초 뒤 복귀 (--estop-hold)
   python fake_mega.py --gas-alarm-at 30     30초 뒤 가스 경고(ENV_ALARM) 한 번
   python fake_mega.py --seed 1              매번 같은 결과
+  python fake_mega.py --all-a               (시험) 모든 측정을 새 건전지 값(A)으로, 극성 반대·접촉 불량 없음
 """
 
 # ===================== 설정값 =====================
@@ -128,6 +129,10 @@ class FakeMega:
         return self.rnd.uniform(1.00, 1.28), self.rnd.uniform(1.2, 3.0)
 
     def measure_once(self):
+        if self.a.all_a:             # (시험) 모두 새 건전지 → A (AGV 적재 개수 도달 시험)
+            v, r = self.rnd.uniform(1.55, 1.62), self.rnd.uniform(0.12, 0.30)
+            return {"polarity": "normal", "v_open": round(v, 4), "v_load": round(v * R_LOAD / (R_LOAD + r), 4),
+                    "r_load": R_LOAD, "r_int": round(r, 3)}
         x = self.rnd.random()
         if x < self.a.adc_fail:
             return {"polarity": None, "error": "ADC_FAILED"}
@@ -395,6 +400,7 @@ def parse(argv=None):
     p.add_argument("--gas-alarm-at", type=float, default=0, help="N초 뒤 가스 경고 한 번 (0이면 안 함)")
     p.add_argument("--estop-at", type=float, default=0, help="N초 뒤 비상정지 버튼 누름 (0이면 안 함)")
     p.add_argument("--estop-hold", type=float, default=5.0, help="버튼을 누르고 있는 시간(초)")
+    p.add_argument("--all-a", action="store_true", help="(시험) 모든 측정을 새 건전지 값(A)으로")
     return p.parse_args(argv)
 
 

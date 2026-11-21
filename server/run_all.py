@@ -14,6 +14,7 @@ run_all.py - 서버 쪽 프로그램을 한 번에 켜고 끄는 실행기
   --agv         컨트롤러가 AGV에 go/return 명령을 보냄 (가짜 AGV를 켜면 자동으로 붙음)
   --no-db       DB 저장 프로그램을 켜지 않음 (MySQL 없이 라인만 볼 때)
   --estop-test  가짜 Mega가 40초 뒤 비상정지 버튼을 누름
+  --all-a       (시험) 가짜 YOLO·가짜 Mega가 모든 건전지를 A로 만듦 → AGV 적재 개수 도달(회차 중 출발) 시험
   --yolo        가짜 YOLO 대신 실제 YOLO 프로그램(..\yolo\yolo_vision.py)을 켬. 카메라·모델은 그 파일 맨 위 CAMERAS
   --yolo-fake   가짜 YOLO 대신 yolo_vision.py --fake (카메라 없이 실제 프로그램의 합치기·전송을 시험)
   --hidden      창 없이 실행 (start_all.vbs가 붙임)
@@ -306,6 +307,7 @@ def main():
     ap.add_argument("--agv", action="store_true", help="컨트롤러가 AGV에 명령을 보냄 (실제 AGV 중계용)")
     ap.add_argument("--no-db", action="store_true", help="DB 저장 프로그램을 켜지 않음")
     ap.add_argument("--estop-test", action="store_true", help=f"가짜 Mega가 {ESTOP_TEST_AT_SEC}초 뒤 비상정지")
+    ap.add_argument("--all-a", action="store_true", help="(시험) 가짜 YOLO·가짜 Mega가 모든 건전지를 A로")
     ap.add_argument("--env-port", metavar="COM", help="환경 Uno 중계(env_relay.py)를 이 포트로 켬 (없으면 가짜 환경 센서)")
     ap.add_argument("--yolo", action="store_true", help="가짜 YOLO 대신 yolo_vision.py (실제 카메라·모델)")
     ap.add_argument("--yolo-fake", action="store_true", help="가짜 YOLO 대신 yolo_vision.py --fake")
@@ -391,10 +393,11 @@ def main():
         if not a.no_db:
             plan.append(("db_writer", ["mqtt_db_writer.py"], HERE / "db"))
         if not a.no_fake:
-            mega_args = ["fake_mega.py"] + (["--estop-at", str(ESTOP_TEST_AT_SEC)] if a.estop_test else [])
+            mega_args = (["fake_mega.py"] + (["--estop-at", str(ESTOP_TEST_AT_SEC)] if a.estop_test else [])
+                         + (["--all-a"] if a.all_a else []))
             plan += [("fake_arm1", ["fake_arm1.py"], HERE), ("fake_mega", mega_args, HERE)]
             if not (a.yolo or a.yolo_fake):
-                plan.append(("fake_yolo", ["fake_yolo.py"], HERE))
+                plan.append(("fake_yolo", ["fake_yolo.py"] + (["--all-a"] if a.all_a else []), HERE))
             if fake_agv:
                 plan.append(("fake_agv", ["fake_agv.py"], HERE))
             if not a.env_port:   # 환경 센서 Uno (규약 v1.5): 실제 포트를 안 주면 가짜 값

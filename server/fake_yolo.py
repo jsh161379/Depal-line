@@ -11,19 +11,20 @@
 
 필요한 것: Python 3.11 이상, pip install "aiomqtt>=2" pydantic, 같은 폴더에 line_common.py
 사용법
-  python fake_yolo.py                       팔레트 8칸(2×4) 가득
+  python fake_yolo.py                       팔레트 6칸(2×3) 가득
   python fake_yolo.py --cells 4             건전지 4개만 (빨리 시험)
   python fake_yolo.py --defect 0.2          외관 불량 확률
   python fake_yolo.py --plus-up 0.1         +극이 위로 보일 확률
   python fake_yolo.py --fail 0.1            검사 실패 확률
   python fake_yolo.py --miss 0.1            결과를 아예 안 보낼 확률 (WAIT_PLAN 시험)
   python fake_yolo.py --seed 1              매번 같은 결과
+  python fake_yolo.py --all-a               (시험) 모든 퍽을 외관 정상·-극 위로 → A 회차 시험 (fake_mega.py --all-a와 함께)
 """
 
 # ===================== 설정값 =====================
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
-PALLET_ROWS, PALLET_COLS = 2, 4   # 팔레트 한 판 8개 = 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
+PALLET_ROWS, PALLET_COLS = 2, 3   # 팔레트 한 판 6개 = 2줄 × 3칸 (11/21 변경, 규약 v1.5.3)
 BOOTH_SEC = 3.0                  # 벨트에 올린 뒤 촬영 부스를 지나 결과가 나올 때까지 (--speed 1 기준) 🟡
 TIME_SEC = {"scan_pallet": 0.5}
 DEFECT_TYPES = ["scratch", "damage", "corrosion"]   # 규약 3-2 불량 종류 (팀 라벨링 classes.txt와 같게, 11/19)
@@ -58,6 +59,9 @@ async def amain(args):
         """퍽 1개의 결과 (vision/result 형식)"""
         out["seq"] += 1
         body = {"seq": out["seq"], "ts": now_str()}
+        if args.all_a:               # (시험) 모두 외관 정상·-극 위 → 측정으로 감
+            return body | {"status": "ok", "result": "normal", "conf": round(rnd.uniform(0.85, 0.98), 2),
+                           "polarity": "minus_up", "defects": []}
         if rnd.random() < args.fail:
             return body | {"status": "failed", "result": None, "conf": None, "polarity": None, "defects": []}
         x = rnd.random()
@@ -128,6 +132,7 @@ def parse(argv=None):
     p.add_argument("--fail", type=float, default=0.0, help="검사 실패 확률")
     p.add_argument("--miss", type=float, default=0.0, help="결과를 보내지 않을 확률")
     p.add_argument("--seed", type=int, default=None, help="난수 시드")
+    p.add_argument("--all-a", action="store_true", help="(시험) 모든 퍽을 외관 정상·-극 위로 (A 회차 시험)")
     return p.parse_args(argv)
 
 

@@ -16,6 +16,7 @@ BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
 TOPIC = "server/results"
 SAMPLE_RULE_VERSION = "temp-2026-11-10"
+PALLET_ROWS, PALLET_COLS = 2, 3   # 팔레트 한 판 6개 = 2줄 × 3칸 (규약 v1.5.3)
 # 아래 등급 기준은 임시값 (전압 시험 데이터로 확정 예정)
 # ==================================================
 
@@ -73,7 +74,10 @@ def make_samples(run_id: str) -> list[BatteryResult]:
     v_ok = VisionResult(status="ok", result="normal", conf=0.94, polarity="minus_up")
     skip = dict(electrical_status="skipped", polarity=None, v_open=None, v_load=None, r_int=None)
 
-    def r(no, cell, sec, **kw):
+    def r(no, _cell, sec, **kw):
+        # 칸은 번호 순서로 팔레트 2×3에 채움 (규약 v1.5.3). 샘플이 9건이라 7~9번은 다시 [0,0]부터 씀 (시험용)
+        k = (no - 1) % (PALLET_ROWS * PALLET_COLS)
+        cell = [k // PALLET_COLS, k % PALLET_COLS]
         return BatteryResult(run_id=run_id, battery_id=no, pallet_cell=cell, picked_at=ts(t + timedelta(seconds=sec)),
                              finished_at=ts(t + timedelta(seconds=sec + 20)), **kw)
 

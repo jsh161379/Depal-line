@@ -52,7 +52,7 @@ GRADE_A = {"v_open_min": 1.50, "r_int_max": 1.2}
 GRADE_B = {"v_open_min": 1.30, "r_int_max": 2.0}
 
 USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림). 실행할 때 --agv를 붙여도 True
-AGV_BATCH = 8                   # A 몇 개마다 출발 (잠정)
+AGV_BATCH = 6                   # A 몇 개마다 출발 (🟡 11/21 팀 결정: 팔레트 한 판 6개 = 6개입 한 팩)
 
 WATCH_DEVICES = ["arm1", "mega", "yolo"]   # 끊기면 일시정지할 장치
 # ====================================================================

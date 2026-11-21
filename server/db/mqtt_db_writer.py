@@ -51,7 +51,7 @@ EVENT_LOG_TOPICS = {"vision/result": "yolo", "event/mega": "mega"}
 COMMUNICATION_TOPICS = ("cmd/+", "res/+", "ui/cmd", *EVENT_LOG_TOPICS)
 COMMUNICATION_KINDS = {"cmd": "COMMAND", "res": "RESPONSE", "ui": "OPERATOR_COMMAND"}
 ELECTRICAL_STATES = {"measured": "COMPLETED", "skipped": "SKIPPED", "failed": "FAILED"}
-PALLET_COLS = 4  # pallet 2 x 4 (protocol v1.5.1); pallet_slot = row * 4 + column + 1
+PALLET_COLS = 3  # pallet 2 x 3 (protocol v1.5.3); pallet_slot = row * 3 + column + 1
 
 
 def parse_timestamp(value):
@@ -133,7 +133,7 @@ class Vision(BaseModel):
 class Result(BaseModel):
     run_id: RunId
     battery_id: Annotated[int, Field(ge=1, le=2**64 - 1)]
-    # Pallet of 8: 2 rows x 4 columns (communication protocol v1.5.1).
+    # Pallet of 6: 2 rows x 3 columns (communication protocol v1.5.3).
     pallet_cell: tuple[Annotated[int, Field(ge=0, le=1)], Annotated[int, Field(ge=0, le=PALLET_COLS - 1)]]
     picked_at: Timestamp
     vision: Vision
@@ -432,7 +432,8 @@ def insert_result(cursor, run_id, result, has_camera):
         rule_id = cursor.lastrowid
 
     row, column = result.pallet_cell
-    # The DB uses one-based row-major slots 1-8. For example, [0, 3] is slot 4 and [1, 0] is slot 5.
+    # The DB uses one-based row-major slots 1-6. For example, [0, 2] is slot 3 and [1, 0] is slot 4.
+    # Rows saved before 2026-11-21 used row * 4 (and row * 5 before 2026-11-20); they are left as they are.
     if not insert_once(cursor, """
         INSERT INTO battery_cycles (
             run_id, source_battery_id, rule_id, pallet_slot, started_at, processing_status,
