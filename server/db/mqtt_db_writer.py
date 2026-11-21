@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from getpass import getpass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import mysql.connector
 import paho.mqtt.client as mqtt
@@ -19,6 +19,9 @@ EVENTS = "server/events"
 RESULTS = "server/results"
 ENVIRONMENT = "sensor/env"
 EMERGENCY_STOP = "event/estop"
+# Grading thresholds (2026-11-21, team decision 11/20 ⑩, protocol v1.5.2). Retained, published by the line
+# controller; the certificate tab reads the thresholds of a run through battery_cycles.rule_id.
+GRADING_RULES = "server/rules"
 # Order management, as in 주문_통신_규약_v1.0 chapters 3-4 (2026-11-17).
 # The homepage account is public, so only messages the order program has checked are stored:
 # order/accepted and inquiry/accepted, never order/new or inquiry/new.
@@ -28,15 +31,27 @@ ORDER_STOCK = "order/stock"
 ORDER_RUN = "order/run"
 INQUIRY_ACCEPTED = "inquiry/accepted"
 INQUIRY_ANSWER = "inquiry/answer/+"  # retained; the last level is the inquiry number
+# Shift handover notes (2026-11-19). Topic names are provisional until the communication owner confirms them.
+HANDOVER_NOTE = "handover/note"
+HANDOVER_READ = "handover/read"
+HANDOVER_TABLES = ("handover_notes", "handover_reads")
 # Subscribed by the first 11-17 draft. A persistent session would keep them, so they are dropped on connect.
 LEGACY_ORDER_TOPICS = ("order/new", "inquiry/new", "inquiry/answer")
 ORDER_TABLES = ("orders", "order_items", "order_status_log", "order_runs", "stock", "stock_log", "inquiries")
 FINAL_ORDER_STATUSES = ("delivered", "canceled")
+# Customer region (2026-11-20): the 17 시·도 and the address prefixes that belong to each.
+REGIONS = {
+    "서울": ("서울",), "부산": ("부산",), "대구": ("대구",), "인천": ("인천",), "광주": ("광주",),
+    "대전": ("대전",), "울산": ("울산",), "세종": ("세종",), "경기": ("경기",), "강원": ("강원",),
+    "충북": ("충북", "충청북도"), "충남": ("충남", "충청남도"), "전북": ("전북", "전라북도"),
+    "전남": ("전남", "전라남도"), "경북": ("경북", "경상북도"), "경남": ("경남", "경상남도"), "제주": ("제주",),
+}
 # Notification topics kept as raw text in communication_logs (message_kind EVENT), with the sending device.
 EVENT_LOG_TOPICS = {"vision/result": "yolo", "event/mega": "mega"}
 COMMUNICATION_TOPICS = ("cmd/+", "res/+", "ui/cmd", *EVENT_LOG_TOPICS)
 COMMUNICATION_KINDS = {"cmd": "COMMAND", "res": "RESPONSE", "ui": "OPERATOR_COMMAND"}
 ELECTRICAL_STATES = {"measured": "COMPLETED", "skipped": "SKIPPED", "failed": "FAILED"}
+PALLET_COLS = 4  # pallet 2 x 4 (protocol v1.5.1); pallet_slot = row * 4 + column + 1
 
 
 def parse_timestamp(value):
@@ -118,7 +133,8 @@ class Vision(BaseModel):
 class Result(BaseModel):
     run_id: RunId
     battery_id: Annotated[int, Field(ge=1, le=2**64 - 1)]
-    pallet_cell: tuple[Annotated[int, Field(ge=0, le=1)], Annotated[int, Field(ge=0, le=4)]]
+    # Pallet of 8: 2 rows x 4 columns (communication protocol v1.5.1).
+    pallet_cell: tuple[Annotated[int, Field(ge=0, le=1)], Annotated[int, Field(ge=0, le=PALLET_COLS - 1)]]
     picked_at: Timestamp
     vision: Vision
     electrical_status: Literal["measured", "skipped", "failed"]
@@ -154,6 +170,24 @@ class Result(BaseModel):
         return self
 
 
+class GradeThreshold(BaseModel):
+    v_open_min: Voltage
+    r_int_max: Resistance
+
+
+class GradingThresholds(BaseModel):
+    A: GradeThreshold
+    B: GradeThreshold
+    order: Literal["v_open_first"]
+
+
+class GradingRule(BaseModel):
+    rule_version: Annotated[str, StringConstraints(min_length=1, max_length=40)]
+    effective_at: Timestamp
+    thresholds: GradingThresholds
+    ts: Timestamp
+
+
 OrderNo = Annotated[str, StringConstraints(pattern=r"^BR-[0-9]{8}-[0-9A-Za-z]{4}$")]
 InquiryNo = Annotated[str, StringConstraints(pattern=r"^Q-[0-9]{8}-[0-9A-Za-z]{4}$")]
 OrderStatusName = Literal["received", "inspect", "shipping", "delivered", "canceled"]
@@ -184,6 +218,11 @@ class OrderAccepted(BaseModel):
     memo: Annotated[str, StringConstraints(max_length=255)] | None = None  # "" is stored as NULL
     items: Annotated[list[OrderItem], Field(min_length=1)]
     total: Won
+    # Customer info (2026-11-20). Optional and never a reason to reject the order: a missing or malformed value
+    # becomes the default (personal / none / region from the address, else none) in customer_info().
+    customer_type: Any = None
+    age_group: Any = None
+    region: Any = None
 
 
 class OrderStatusChange(BaseModel):
@@ -239,6 +278,26 @@ class InquiryAnswer(BaseModel):
     ts: Timestamp
 
 
+AccountId = Annotated[str, StringConstraints(pattern=r"^[\x20-\x7E]{1,255}$")]  # ascii column, like depaladmin_users.id
+
+
+class HandoverNote(BaseModel):
+    note_id: EventId  # Guid.ToString("N")
+    ts: Timestamp  # when the note was written
+    author_id: AccountId
+    author_name: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    text: Annotated[str, StringConstraints(min_length=1, max_length=100000)]
+    line_mode: Annotated[str, StringConstraints(min_length=1, max_length=20)] | None = None
+    run_id: RunId | None = None
+    unacked_alarms: Annotated[int, Field(ge=0, le=2**32 - 1)] = 0
+
+
+class HandoverRead(BaseModel):
+    note_id: EventId
+    user_id: AccountId
+    ts: Timestamp
+
+
 class Rejected(ValueError):
     """A well-formed message that the stored data does not allow (for example an unknown order)."""
 
@@ -248,6 +307,7 @@ LINE_MODELS = {
     RESULTS: Result,
     ENVIRONMENT: EnvironmentSample,
     EMERGENCY_STOP: EmergencyStopEvent,
+    GRADING_RULES: GradingRule,
 }
 ORDER_MODELS = {
     ORDER_ACCEPTED: OrderAccepted,
@@ -257,7 +317,11 @@ ORDER_MODELS = {
     INQUIRY_ACCEPTED: InquiryAccepted,
     INQUIRY_ANSWER: InquiryAnswer,
 }
-MESSAGE_MODELS = {**LINE_MODELS, **ORDER_MODELS}
+HANDOVER_MODELS = {
+    HANDOVER_NOTE: HandoverNote,
+    HANDOVER_READ: HandoverRead,
+}
+MESSAGE_MODELS = {**LINE_MODELS, **ORDER_MODELS, **HANDOVER_MODELS}
 
 
 def topic_matches(subscription, topic):
@@ -287,7 +351,7 @@ def parse_message(topic, payload):
 
 def message_label(message):
     """Short identifier for log lines."""
-    for field in ("run_id", "no", "order_no", "inquiry_id", "product_id", "reading_id", "event_id"):
+    for field in ("run_id", "rule_version", "no", "order_no", "note_id", "product_id", "reading_id", "event_id"):
         value = getattr(message, field, None)
         if value:
             return f"{field} {value}"
@@ -314,6 +378,49 @@ def defect_rows(vision):
     return []
 
 
+def save_grading_rule(cursor, rule):
+    """Store the thresholds of one rule version. A version never changes its values: the controller must
+    publish a new rule_version instead, so different values for a stored version are only logged."""
+    thresholds = rule.thresholds.model_dump()
+    text = json.dumps(thresholds, default=float)  # numbers stay numbers, like the test data
+    cursor.execute("""
+        SELECT voltage_and_resistance_thresholds, effective_at FROM grading_rules
+        WHERE rule_version = %s FOR UPDATE
+        """, (rule.rule_version,))
+    row = cursor.fetchone()
+    if row is None:
+        cursor.execute("""
+            INSERT INTO grading_rules (rule_version, voltage_and_resistance_thresholds, effective_at)
+            VALUES (%s, %s, %s)
+            """, (rule.rule_version, text, rule.effective_at))
+        return True
+    stored, effective_at = row
+    if stored is None or effective_at is None:
+        # Made earlier from a result that named only the version: fill in what is missing.
+        cursor.execute("""
+            UPDATE grading_rules
+            SET voltage_and_resistance_thresholds = COALESCE(voltage_and_resistance_thresholds, %s),
+                effective_at = COALESCE(effective_at, %s)
+            WHERE rule_version = %s
+            """, (text, rule.effective_at, rule.rule_version))
+        return True
+    stored = json.loads(stored) if isinstance(stored, (str, bytes, bytearray)) else stored
+    if not _same_numbers(stored, json.loads(text)):
+        logging.warning("grading_rules %s already holds %s; ignored %s (change rule_version when values change)",
+                        rule.rule_version, stored, text)
+    return False
+
+
+def _same_numbers(a, b):
+    """Compare two thresholds objects, numbers by value (1.5 == 1.50)."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_numbers(a[k], b[k]) for k in a)
+    try:
+        return Decimal(str(a)) == Decimal(str(b))
+    except ArithmeticError:
+        return a == b
+
+
 def insert_result(cursor, run_id, result, has_camera):
     rule_id = None
     if result.rule_version is not None:
@@ -325,13 +432,13 @@ def insert_result(cursor, run_id, result, has_camera):
         rule_id = cursor.lastrowid
 
     row, column = result.pallet_cell
-    # The DB uses one-based row-major slots. For example, [0, 3] is slot 4.
+    # The DB uses one-based row-major slots 1-8. For example, [0, 3] is slot 4 and [1, 0] is slot 5.
     if not insert_once(cursor, """
         INSERT INTO battery_cycles (
             run_id, source_battery_id, rule_id, pallet_slot, started_at, processing_status,
             electrical_status, final_grade, result_reason, finished_at, sorted_destination
         ) VALUES (%s, %s, %s, %s, %s, 'FINALIZED', %s, %s, %s, %s, %s)
-        """, (run_id, result.battery_id, rule_id, row * 5 + column + 1, result.picked_at,
+        """, (run_id, result.battery_id, rule_id, row * PALLET_COLS + column + 1, result.picked_at,
               ELECTRICAL_STATES[result.electrical_status], result.grade, result.reason,
               result.finished_at, result.dest)):
         return False
@@ -414,14 +521,53 @@ def insert_emergency_stop(cursor, event):
               event.source, event.kind, event.details, event.ts))
 
 
-def insert_order(cursor, order):
-    if not insert_once(cursor, """
-        INSERT INTO orders (
-            order_no, received_at, accepted_at, customer_name, customer_phone, shipping_address,
-            memo, total_amount, order_status, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'received', %s)
-        """, (order.no, order.ts, order.accepted_at, order.name, order.phone, order.addr,
-              order.memo or None, order.total, order.ts)):
+def region_of(text):
+    """One of the 17 시·도 for a region name or an address (서울특별시 …, 경기도 …, 충청북도 …), or None."""
+    text = (text or "").strip()
+    return next((name for name, prefixes in REGIONS.items() if text.startswith(prefixes)), None)
+
+
+CUSTOMER_TYPES = ("personal", "company")
+AGE_GROUPS = ("10s", "20s", "30s", "40s", "50s+", "none")
+
+
+def customer_info(order):
+    """(customer_type, age_group, region) as stored.
+
+    Missing or malformed values become defaults instead of rejecting the order, companies have no age group,
+    and the region falls back to the delivery address, then to "none".
+    """
+    def pick(value, allowed, default, name):
+        if value is None or value == default:
+            return default
+        if value in allowed:
+            return value
+        logging.warning("Unknown %s %r in %s; stored as %s", name, value, order.no, default)
+        return default
+
+    customer_type = pick(order.customer_type, CUSTOMER_TYPES, "personal", "customer_type")
+    age_group = pick(order.age_group, AGE_GROUPS, "none", "age_group")
+    if customer_type == "company":
+        age_group = "none"
+    given = order.region if isinstance(order.region, str) else None
+    region = region_of(given) or region_of(order.addr) or "none"
+    # "none" (선택 안 함) is a normal value from the homepage: fall back to the address without a warning.
+    if order.region not in (None, "", "none") and region_of(given) is None:
+        logging.warning("Unknown region %r in %s; using the address instead", order.region, order.no)
+    return customer_type, age_group, region
+
+
+def insert_order(cursor, order, has_customer_info=True):
+    columns = ["order_no", "received_at", "accepted_at", "customer_name", "customer_phone", "shipping_address",
+               "memo", "total_amount", "order_status", "updated_at"]
+    values = [order.no, order.ts, order.accepted_at, order.name, order.phone, order.addr,
+              order.memo or None, order.total, "received", order.ts]
+    if has_customer_info:
+        columns += ["customer_type", "age_group", "region"]
+        values += list(customer_info(order))
+    if not insert_once(cursor, f"""
+        INSERT INTO orders ({", ".join(columns)}) VALUES ({", ".join(["%s"] * len(columns))})
+        """, values):
         return False  # the order number already exists
     for item in order.items:
         cursor.execute("""
@@ -548,6 +694,31 @@ def answer_inquiry(cursor, answer):
     return True
 
 
+def insert_handover_note(cursor, note):
+    return insert_once(cursor, """
+        INSERT INTO handover_notes (
+            note_id, written_at, author_id, author_name, note_text, line_mode, source_run_id, unacked_alarms
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (note.note_id.lower(), note.ts, note.author_id, note.author_name, note.text, note.line_mode,
+              note.run_id.lower() if note.run_id else None, note.unacked_alarms))
+
+
+def insert_handover_read(cursor, read):
+    cursor.execute("SELECT 1 FROM handover_notes WHERE note_id = %s", (read.note_id.lower(),))
+    if cursor.fetchone() is None:
+        raise Rejected(f"unknown handover note {read.note_id}")
+    # The (note_id, user_id) key keeps only the first read of each account.
+    return insert_once(cursor, """
+        INSERT INTO handover_reads (note_id, user_id, read_at) VALUES (%s, %s, %s)
+        """, (read.note_id.lower(), read.user_id, read.ts))
+
+
+HANDOVER_WRITERS = {
+    HandoverNote: insert_handover_note,
+    HandoverRead: insert_handover_read,
+}
+
+
 ORDER_WRITERS = {
     OrderAccepted: insert_order,
     OrderStatusChange: update_order_status,
@@ -558,7 +729,7 @@ ORDER_WRITERS = {
 }
 
 
-def save_message(connection, message, started_at, has_camera=False):
+def save_message(connection, message, started_at, has_camera=False, has_customer_info=True):
     try:
         # Buffered so a SELECT read with fetchone() never leaves unread rows behind.
         with connection.cursor(buffered=True) as cursor:
@@ -566,8 +737,14 @@ def save_message(connection, message, started_at, has_camera=False):
                 inserted = insert_environment_readings(cursor, message)
             elif isinstance(message, EmergencyStopEvent):
                 inserted = insert_emergency_stop(cursor, message)
+            elif isinstance(message, GradingRule):
+                inserted = save_grading_rule(cursor, message)
+            elif isinstance(message, OrderAccepted):
+                inserted = insert_order(cursor, message, has_customer_info)
             elif type(message) in ORDER_WRITERS:
                 inserted = ORDER_WRITERS[type(message)](cursor, message)
+            elif type(message) in HANDOVER_WRITERS:
+                inserted = HANDOVER_WRITERS[type(message)](cursor, message)
             else:
                 inserted = insert_line_message(cursor, message, started_at, has_camera)
     except Rejected:
@@ -642,8 +819,10 @@ class Database:
         self.connection = None
         self.has_camera = False
         self.has_event_kind = False
-        # Assume the order tables exist until a connection shows otherwise.
+        self.has_customer_info = False
+        # Assume the order and handover tables exist until a connection shows otherwise.
         self.has_orders = True
+        self.has_handover = True
 
     def connect(self):
         if self.connection is not None and self.connection.is_connected():
@@ -660,15 +839,17 @@ class Database:
                 SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS
                 WHERE TABLE_SCHEMA = %s AND (
                     (TABLE_NAME = 'visual_defects' AND COLUMN_NAME = 'camera') OR
-                    (TABLE_NAME = 'communication_logs' AND COLUMN_NAME = 'message_kind'))
+                    (TABLE_NAME = 'communication_logs' AND COLUMN_NAME = 'message_kind') OR
+                    (TABLE_NAME = 'orders' AND COLUMN_NAME IN ('customer_type', 'age_group', 'region')))
                 """, (self.options["database"],))
             rows = [tuple(value.decode() if isinstance(value, (bytes, bytearray)) else value for value in row)
                     for row in cursor.fetchall()]
-            # Order tables added on 2026-11-17.
+            # Order tables added on 2026-11-17, handover tables on 2026-11-19.
+            optional = (*ORDER_TABLES, *HANDOVER_TABLES)
             cursor.execute(f"""
                 SELECT TABLE_NAME FROM information_schema.TABLES
-                WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN ({", ".join(["%s"] * len(ORDER_TABLES))})
-                """, (self.options["database"], *ORDER_TABLES))
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN ({", ".join(["%s"] * len(optional))})
+                """, (self.options["database"], *optional))
             order_tables = {value.decode() if isinstance(value, (bytes, bytearray)) else value
                             for value, in cursor.fetchall()}
         self.connection.commit()
@@ -677,7 +858,16 @@ class Database:
         if missing_orders:
             logging.warning("Order tables missing (%s); order and inquiry topics will not be subscribed",
                             ", ".join(missing_orders))
+        missing_handover = [table for table in HANDOVER_TABLES if table not in order_tables]
+        self.has_handover = not missing_handover
+        if missing_handover:
+            logging.warning("Handover tables missing (%s); handover topics will not be subscribed",
+                            ", ".join(missing_handover))
         self.has_camera = any(column == "camera" for _, column, _ in rows)
+        # Customer info columns added on 2026-11-20 (DB_변경_2026-11-20_고객정보.sql).
+        self.has_customer_info = {"customer_type", "age_group", "region"} <= {column for _, column, _ in rows}
+        if self.has_orders and not self.has_customer_info:
+            logging.warning("orders has no customer_type/age_group/region; customer info will not be stored")
         self.has_event_kind = any(column == "message_kind" and "'EVENT'" in str(column_type)
                                   for _, column, column_type in rows)
         if not self.has_camera:
@@ -697,7 +887,8 @@ class Database:
 
 def subscribed_topics(db):
     order_topics = tuple(ORDER_MODELS) if db.has_orders else ()
-    return (*LINE_MODELS, *order_topics, *COMMUNICATION_TOPICS)
+    handover_topics = tuple(HANDOVER_MODELS) if db.has_handover else ()
+    return (*LINE_MODELS, *order_topics, *handover_topics, *COMMUNICATION_TOPICS)
 
 
 def on_connect(client, db, flags, reason_code, properties):
@@ -709,7 +900,9 @@ def on_connect(client, db, flags, reason_code, properties):
     except mysql.connector.Error as error:
         logging.warning("MySQL not reachable yet (%s); subscribing to every topic", error)
     # A persistent session keeps old subscriptions, so drop the ones this version does not want.
-    client.unsubscribe(list(LEGACY_ORDER_TOPICS) if db.has_orders else [*LEGACY_ORDER_TOPICS, *ORDER_MODELS])
+    unwanted = [*LEGACY_ORDER_TOPICS, *([] if db.has_orders else ORDER_MODELS),
+                *([] if db.has_handover else HANDOVER_MODELS)]
+    client.unsubscribe(unwanted)
     client.subscribe([(topic, 1) for topic in subscribed_topics(db)])
 
 
@@ -726,11 +919,12 @@ def on_message(client, db, received):
         if is_structured_message:
             message, started_at = parse_message(received.topic, received.payload)
         connection = db.connect()
-        if is_structured_message and type(message) in ORDER_WRITERS and not db.has_orders:
-            # Delivered before the unsubscribe took effect; the order tables are not there to hold it.
-            logging.warning("Dropped %s: order tables are missing", received.topic)
+        if is_structured_message and ((type(message) in ORDER_WRITERS and not db.has_orders)
+                                      or (type(message) in HANDOVER_WRITERS and not db.has_handover)):
+            # Delivered before the unsubscribe took effect; the tables are not there to hold it.
+            logging.warning("Dropped %s: its tables are missing", received.topic)
         elif is_structured_message:
-            inserted = save_message(connection, message, started_at, db.has_camera)
+            inserted = save_message(connection, message, started_at, db.has_camera, db.has_customer_info)
             logging.info("%s %s (%s)", "Saved" if inserted else "Duplicate", received.topic, message_label(message))
         elif received.topic in EVENT_LOG_TOPICS and not db.has_event_kind:
             pass  # The DB cannot store EVENT rows yet; detect_schema has already warned.

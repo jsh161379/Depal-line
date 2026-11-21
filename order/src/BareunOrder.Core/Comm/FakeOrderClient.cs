@@ -79,6 +79,9 @@ public sealed class FakeOrderClient : IOrderClient
             memo = o.Memo,
             items = o.Items.Select(i => new { id = i.Id, name = i.Name, qty = i.Qty, price = i.Price }),
             total = o.Total,
+            customer_type = o.CustomerType,
+            age_group = o.AgeGroup,
+            region = o.Region,
         }));
 
         if (_tick % 3 == 0)
@@ -102,7 +105,13 @@ public sealed class FakeOrderClient : IOrderClient
     private Order MakeOrder(DateTime at, OrderStatus status)
     {
         var lines = _rnd.Next(1, 3);
-        var items = Products.All.OrderBy(_ => _rnd.Next()).Take(lines)
+        var town = Towns[_rnd.Next(Towns.Length)];
+        var company = _rnd.Next(8) == 0;                       // 가끔 기업 고객
+        var (ctype, age, region) = CustomerInfo.Normalize(
+            company ? CustomerInfo.Company : CustomerInfo.Personal,
+            CustomerInfo.AgeGroups[_rnd.Next(CustomerInfo.AgeGroups.Length)],
+            _rnd.Next(5) == 0 ? CustomerInfo.None : town.Split(' ')[0]);   // 주소의 시·도, 가끔 선택 안 함
+        var items = Products.OnSale.OrderBy(_ => _rnd.Next()).Take(lines)
             .Select(p => new OrderItem(p.Id, p.Name, _rnd.Next(1, 4), p.Price))
             .ToList();
 
@@ -112,13 +121,16 @@ public sealed class FakeOrderClient : IOrderClient
             ReceivedAt = at,
             Name = Names[_rnd.Next(Names.Length)],
             Phone = $"010-{_rnd.Next(1000, 9999)}-{_rnd.Next(1000, 9999)}",
-            Address = $"{Towns[_rnd.Next(Towns.Length)]} {_rnd.Next(1, 300)}-{_rnd.Next(1, 30)}",
+            Address = $"{town} {_rnd.Next(1, 300)}-{_rnd.Next(1, 30)}",
             Memo = Memos[_rnd.Next(Memos.Length)],
             Items = items,
             Total = items.Sum(i => i.Amount),
             Status = status,
             Courier = status is OrderStatus.Shipping or OrderStatus.Delivered ? "CJ대한통운" : null,
             Tracking = status is OrderStatus.Shipping or OrderStatus.Delivered ? $"6{_rnd.Next(10000000, 99999999)}{_rnd.Next(100, 999)}" : null,
+            CustomerType = ctype,
+            AgeGroup = age,
+            Region = region,
         };
     }
 }

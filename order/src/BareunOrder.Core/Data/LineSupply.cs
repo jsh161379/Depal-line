@@ -193,7 +193,8 @@ public sealed partial class LineSupplyReader : ObservableObject
 
     /// <summary>
     /// 회차별 A 등급 수와 이미 연결된 수 (주문관리_조회쿼리.sql의 "오늘 A 등급 수"를 회차별로 넓힌 것).
-    /// runs.run_type = 'LINE'만 (BENCH_TEST 제외), 최근 days일에 시작한 회차.
+    /// 11/20 팀 결정 ⑦: A 등급 = final_grade 'A' + sorted_destination 있음 (실제로 A 자리에 배출된 것만,
+    /// 배출 실패는 dest가 null), runs.run_type = 'LINE'만 (BENCH_TEST 제외). 최근 days일에 시작한 회차.
     /// 권한: ui_reader에 runs·battery_cycles·order_runs SELECT (F6 성적서와 같음)
     /// </summary>
     private static async Task<(IReadOnlyList<LineRun> Runs, int TodayA)> LoadAsync(string cs, int days)
@@ -210,6 +211,7 @@ public sealed partial class LineSupplyReader : ObservableObject
                        COALESCE(l.linked, 0)   AS linked
                 FROM runs ru
                 JOIN battery_cycles b ON b.run_id = ru.run_id AND b.final_grade = 'A'
+                                     AND b.sorted_destination IS NOT NULL
                 LEFT JOIN (SELECT source_run_id, SUM(battery_count) AS linked
                            FROM order_runs GROUP BY source_run_id) l
                        ON l.source_run_id = ru.source_run_id
@@ -236,9 +238,10 @@ public sealed partial class LineSupplyReader : ObservableObject
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT COUNT(*) FROM battery_cycles
-                WHERE final_grade = 'A'
-                  AND finished_at >= CURDATE() AND finished_at < CURDATE() + INTERVAL 1 DAY;
+                SELECT COUNT(*) FROM battery_cycles b
+                JOIN runs ru ON ru.run_id = b.run_id AND ru.run_type = 'LINE'
+                WHERE b.final_grade = 'A' AND b.sorted_destination IS NOT NULL
+                  AND b.finished_at >= CURDATE() AND b.finished_at < CURDATE() + INTERVAL 1 DAY;
                 """;
             today = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         }

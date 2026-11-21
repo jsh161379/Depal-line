@@ -61,3 +61,15 @@
   - "주문에 묶임"에 배송 중 포함 (재고는 배송 완료 때 빠지므로)
   - 라인 A 숫자 = LineSupplyReader.Available
 - 남은 것: 포장 입고와 "남은 A"를 어떻게 맞출지 (주문 통신 규약 7장 결정 ⑦)
+
+## v4.7 (11/21, 조시현) — 11/20 팀 결정 반영 (⑦⑨)
+- ⑦ LineSupplyReader: A 등급 = `final_grade = 'A'` **+ `sorted_destination IS NOT NULL`**(실제로 A 자리에 배출된 것만, 배출 실패는 dest가 null), LINE 회차만(BENCH_TEST 제외). "오늘 A"도 같은 조건
+- ⑨ 충전지(aar2) 판매 중지: `Product.OnSale`(기본 true), aar2는 `OnSale: false`로 **목록에 남김** (지난 주문·통계·DB 기록 유지)
+  - `Products.OnSale` = 판매 중인 것만. 새 주문 검사(OrderJson)는 판매 중지 상품이면 BAD_FORMAT, 가짜 주문·F3 재고 목록은 OnSale만
+  - `Products.All`(통계 등)은 그대로 aar2 포함. 화면에 "(판매 중지)"를 붙이려면 `Product.Label`
+  - 홈페이지 v9(PRODUCTS에서 aar2 뺌), 가짜 주문 관리(fake_order_admin.py)도 같게
+- 성적서 합격 기준(⑩)은 F6 담당: `grading_rules`에서 읽기 (통신 규약 v1.5.2, 메시지_형식 v1.4.4 5-1)
+
+## v4.8 (11/21, 조시현) — 상품 AA 8개입 추가
+- `aa8` AA 알카라인 8개입 6,200원 (팔레트 한 판 2×4와 같은 구성, 홈페이지 v10과 같게). 가짜 주문·재고·통계는 상품 목록을 읽어 자동 반영, F3 가짜 모드 예시 재고 20팩
+- 가짜 주문 관리(fake_order_admin.py) 가격표·시험 실행 파일 주소(v10)도 같게

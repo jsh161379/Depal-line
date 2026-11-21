@@ -73,13 +73,17 @@ public static class OrderJson
             if (it.ValueKind != JsonValueKind.Object) return Bad();
             var id = Str(it, "id");
             var product = id == null ? null : Products.Find(id);
-            if (product == null) return Bad();
+            if (product == null || !product.OnSale) return Bad();   // 판매 중지 상품(aar2, 11/20 ⑨)도 BAD_FORMAT
             if (!Int(it, "qty", out var qty) || qty is < 1 or > 99) return Bad();
             if (!Int(it, "price", out var price)) return Bad();
             if (price != product.Price) priceWrong = true;             // 단가를 가격표로 다시 확인
             items.Add(new OrderItem(product.Id, product.Name, qty, product.Price));
         }
         if (priceWrong || total != items.Sum(i => i.Amount)) return new(null, no, "PRICE_MISMATCH");
+
+        // 고객 정보 (선택, v1.0.4): 없거나 틀려도 거절하지 않고 기본값으로
+        var (customerType, ageGroup, region) =
+            CustomerInfo.Normalize(Str(r, "customer_type"), Str(r, "age_group"), Str(r, "region"));
 
         var order = new Order
         {
@@ -92,6 +96,9 @@ public static class OrderJson
             Items = items,
             Total = total,
             Status = OrderStatus.Received,
+            CustomerType = customerType,
+            AgeGroup = ageGroup,
+            Region = region,
         };
         return new(order, no, null);
     }
@@ -121,6 +128,9 @@ public static class OrderJson
         items = o.Items.Select(i => new { id = i.Id, name = i.Name, qty = i.Qty, price = i.Price }),
         total = o.Total,
         accepted_at = Ts(o.AcceptedAt ?? DateTime.Now),
+        customer_type = o.CustomerType,   // v1.0.4 고객 정보 (region이 none이면 DB 저장 프로그램이 배송 주소로 채움)
+        age_group = o.AgeGroup,
+        region = o.Region,
     });
 
     /// <summary>order/status/&lt;no&gt; (retained). 이름·연락처·주소는 넣지 않는다</summary>

@@ -35,9 +35,10 @@ DEFAULT_COURIER = "CJ대한통운"
 # 가격표 (주문 관리 Core/Models/Products.cs, 홈페이지 PRODUCTS와 같아야 함)
 PRODUCTS = {
     "aa4":  ("AA 알카라인 4개입", 3200),
+    "aa8":  ("AA 알카라인 8개입", 6200),     # 11/21 추가 (홈페이지 v10)
     "aa12": ("AA 알카라인 12개입", 8900),
     "aa24": ("AA 알카라인 24개입", 15900),
-    "aar2": ("AA 충전지 2개입", 9800),
+    # "aar2" (AA 충전지 2개입)는 11/20 판매 중지 (팀 결정 ⑨) → 새 주문은 BAD_FORMAT. Products.cs에는 OnSale=false로 남음
 }
 
 # ───── 규약 값 (주문 통신 규약 v1.0) ─────
