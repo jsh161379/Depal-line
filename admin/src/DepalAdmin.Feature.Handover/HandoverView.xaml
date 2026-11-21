@@ -139,7 +139,7 @@
                                         <TextBlock Text="후번 이월 미검사 팔레트" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBox Text="{Binding RemainingPallets, UpdateSourceTrigger=PropertyChanged}" Width="46"
                                                  HorizontalContentAlignment="Right" FontFamily="{StaticResource Font.Readout}"/>
-                                        <TextBlock Text="판 (2×4칸)" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                        <TextBlock Text="판 (2×3칸)" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
