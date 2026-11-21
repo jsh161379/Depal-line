@@ -8,6 +8,7 @@ using DepalAdmin.Core.Messaging;
 using DepalAdmin.Core.Models;
 using DepalAdmin.Core.Pages;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -15,7 +16,7 @@ using System.Windows.Threading;
 namespace DepalAdmin.Feature.Handover;
 
 /// <summary>
-/// 담당: 유동호 — 인수인계.
+/// 담당: 유동호 — 인수인계 (규약 v1.5.1 / v2 반영).
 ///   - 메모 쓰기: 쓴 사람·시각·그때 라인 상태·회차·미확인 알람 수를 자동으로 붙인다 (작업자 이상)
 ///   - 목록·검색 (최근 7일 기본)
 ///   - 다음 근무자 '읽음' 확인 (내가 쓴 메모는 읽음 대상 아님)
@@ -23,6 +24,7 @@ namespace DepalAdmin.Feature.Handover;
 /// </summary>
 public partial class HandoverViewModel : ObservableObject, IHasBadge {
     private const int DefaultDays = 7;
+    private static readonly string[] CoreDevices = { "arm1", "mega", "yolo", "agv", "env" };
 
     private readonly IHandoverStore _store;
     private readonly Session _session;
@@ -63,12 +65,17 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     [NotifyPropertyChangedFor(nameof(IsViewingSelected))]
     [NotifyPropertyChangedFor(nameof(IsWritingMode))]
     [NotifyPropertyChangedFor(nameof(CanEditForm))]
+    [NotifyPropertyChangedFor(nameof(CanInteractDraft))]
     [NotifyPropertyChangedFor(nameof(RightPanelHeader))]
+    [NotifyPropertyChangedFor(nameof(DisplayLineStatusText))]
+    [NotifyPropertyChangedFor(nameof(DisplayRunIdText))]
+    [NotifyPropertyChangedFor(nameof(DisplayCountsText))]
     private NoteRow? _selected;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(WriteCommand))]
     [NotifyPropertyChangedFor(nameof(CanEditForm))]
+    [NotifyPropertyChangedFor(nameof(CanInteractDraft))]
     private bool _canWrite;
 
     [ObservableProperty] private string _searchText = "";
@@ -78,11 +85,23 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     [ObservableProperty] private string _notice = "";       // 로그인 직후 안내
     [ObservableProperty] private string _status = "";
 
-    // ── 실시간 라인 수치 자동 표시 속성 ──
-    [ObservableProperty] private string _liveLineStatusText = "라인 상태: 대기  |  미확인 알람: 0건";
-    [ObservableProperty] private string _liveRunIdText = "현재 회차: -";
-    [ObservableProperty] private string _liveCountsText = "실시간 분류 — A: 0개  B: 0개  외관불량: 0개  전압불량: 0개  재분류: 0개";
+    // ── 실시간 라인 · 장치 · 환경 센서 자동 표시 속성 ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayLineStatusText))]
+    private string _liveLineStatusText = "라인 상태: 대기  |  미확인 알람: 0건";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayRunIdText))]
+    private string _liveRunIdText = "현재 회차: -";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayCountsText))]
+    private string _liveCountsText = "실시간 분류 — A: 0개  B: 0개  외관불량: 0개  전압불량: 0개  재분류: 0개";
+
     [ObservableProperty] private string _liveAgvText = "AGV 적재: 0 / 8개 (분류 위치)";
+    [ObservableProperty] private string _liveDevicesText = "장치 상태: 수신 대기";
+    [ObservableProperty] private bool _liveDevicesHasIssue;
+    [ObservableProperty] private string _liveEnvText = "환경 센서(Uno): 수신 대기";
 
     // ── 1. 검사 회차(Run) 실적 및 진행 현황 ──
     [ObservableProperty] private bool _runStateIdle = true;
@@ -129,9 +148,26 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     public bool IsViewingSelected => Selected != null;
     public bool IsWritingMode => Selected == null;
     public bool CanEditForm => Selected == null && CanWrite;
+
+    /// <summary>보기 전용(Viewer) 계정도 선택한 메모 본문은 스크롤·복사할 수 있도록 허용</summary>
+    public bool CanInteractDraft => IsViewingSelected || CanWrite;
+
     public string RightPanelHeader => Selected != null
-        ? "선택한 메모 상세 (다른 곳을 클릭하면 새 메모 작성으로 돌아갑니다)"
+        ? "선택한 메모 상세 (빈 곳 클릭 또는 [새 메모 쓰기]로 작성 복귀)"
         : "메모 남기기 (교대 인수인계 작성)";
+
+    // 1번 영역 상단 요약: 작성 중에는 실시간 수치, 메모 선택 시에는 작성 당시 기록 표시
+    public string DisplayLineStatusText => Selected != null
+        ? $"작성 시 라인 상태: {Labels.Mode(Selected.Raw.LineMode)}  |  미확인 알람: {Selected.Raw.UnackedAlarms}건"
+        : LiveLineStatusText;
+
+    public string DisplayRunIdText => Selected != null
+        ? (string.IsNullOrWhiteSpace(Selected.Raw.RunId) ? "작성 시 회차: -" : $"작성 시 회차: {Selected.Raw.RunId}")
+        : LiveRunIdText;
+
+    public string DisplayCountsText => Selected != null
+        ? FormatSavedCounts(Selected.Raw.Text)
+        : LiveCountsText;
 
     public HandoverViewModel(IHandoverStore store, Session session, ILineClient line, IAlarmService alarms,
                              IAuditLog audit, Navigator navigator) {
@@ -145,9 +181,13 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         _store.Changed += async (_, _) => await LoadAsync();
         _session.Changed += async (_, _) => await OnSessionChangedAsync();
         _line.LineStatusReceived += (_, _) => UpdateLiveLineSnapshot();
+        _line.DevicesReceived += (_, _) => UpdateLiveDevicesSnapshot();
+        _line.EnvReceived += (_, _) => UpdateLiveEnvSnapshot();
         _alarms.Changed += (_, _) => UpdateLiveLineSnapshot();
 
         UpdateLiveLineSnapshot();
+        UpdateLiveDevicesSnapshot();
+        UpdateLiveEnvSnapshot();
     }
 
     partial void OnSearchTextChanged(string value) => Fill();
@@ -183,11 +223,12 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         var b = line?.Count(Grades.B) ?? 0;
         var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
         var ngVoltage = line?.Count(Grades.NgVoltage) ?? 0;
-        var legacyNg = line?.Count(Grades.Ng) ?? 0;
+        // LineStatus.Count(Grades.Ng)는 NG 전체 합계이므로 실제 구버전 "NG" 키만 별도 조회
+        var legacyNg = line != null && line.Counts.TryGetValue(Grades.Ng, out var rawNg) ? rawNg : 0;
         var resort = line?.Count(Grades.Resort) ?? 0;
 
         LiveCountsText = legacyNg > 0
-            ? $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개  (이전 NG합계: {legacyNg}개)"
+            ? $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개  (이전 NG: {legacyNg}개)"
             : $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개";
 
         var agvLoaded = line?.Agv?.Loaded ?? 0;
@@ -196,12 +237,75 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         LiveAgvText = $"AGV 적재: {agvLoaded} / {agvBatch}개 ({agvState})";
     }
 
+    private void UpdateLiveDevicesSnapshot() {
+        var devices = _line.LastDevices;
+        if (devices == null || devices.Count == 0) {
+            LiveDevicesHasIssue = false;
+            LiveDevicesText = "장치 상태: 수신 대기";
+            return;
+        }
+
+        var issues = new List<string>();
+        var okNames = new List<string>();
+
+        foreach (var key in CoreDevices) {
+            if (!devices.TryGetValue(key, out var info)) continue;
+            var state = (info.State ?? "").ToLowerInvariant();
+            if (state is "ok" or "online" or "normal") {
+                okNames.Add(key);
+            } else {
+                issues.Add($"{Labels.Device(info.Name)}({Labels.DeviceState(info.State)})");
+            }
+        }
+
+        if (issues.Count > 0) {
+            LiveDevicesHasIssue = true;
+            LiveDevicesText = $"장치 점검 필요: {string.Join(", ", issues)}";
+        } else if (okNames.Count > 0) {
+            LiveDevicesHasIssue = false;
+            LiveDevicesText = $"주요 장치 정상 ({string.Join(" · ", okNames)})";
+        } else {
+            LiveDevicesHasIssue = false;
+            LiveDevicesText = "장치 상태: 확인 중";
+        }
+    }
+
+    private void UpdateLiveEnvSnapshot() {
+        var env = _line.LastEnv;
+        if (env == null || env.Readings.Count == 0) {
+            LiveEnvText = "환경 센서(Uno): 수신 대기";
+            return;
+        }
+
+        var parts = new List<string>();
+        var temp = env.Find(EnvMetrics.Temperature);
+        var hum = env.Find(EnvMetrics.Humidity);
+        var gas = env.Find(EnvMetrics.Gas);
+
+        if (temp != null) parts.Add($"온도 {temp.Value.ToString("0.0", CultureInfo.InvariantCulture)}℃");
+        if (hum != null) parts.Add($"습도 {hum.Value.ToString("0.0", CultureInfo.InvariantCulture)}%");
+        if (gas != null) parts.Add($"가스 {gas.Value.ToString("0", CultureInfo.InvariantCulture)} {gas.Unit}".Trim());
+
+        LiveEnvText = parts.Count > 0
+            ? $"환경 센서(Uno) — {string.Join(" · ", parts)}"
+            : "환경 센서(Uno): 수신 대기";
+    }
+
     private async Task OnSessionChangedAsync() {
         CanWrite = _session.Can(Permission.OperateLine);
         Notice = "";
-        if (!_session.IsLoggedIn) return;
+        if (!_session.IsLoggedIn) {
+            BadgeCount = 0;
+            Selected = null;
+            _loaded.Clear();
+            Notes.Clear();
+            Status = "";
+            return;
+        }
 
         UpdateLiveLineSnapshot();
+        UpdateLiveDevicesSnapshot();
+        UpdateLiveEnvSnapshot();
         await LoadAsync();
         if (BadgeCount == 0) return;
 
@@ -229,7 +333,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         foreach (var n in _loaded.Where(n =>
                      string.IsNullOrWhiteSpace(SearchText) ||
                      n.Raw.Text.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                     n.Raw.AuthorName.Contains(SearchText, StringComparison.OrdinalIgnoreCase))) {
+                     n.Raw.AuthorName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     (n.Raw.RunId?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false))) {
             Notes.Add(n);
         }
         Selected = keep == null ? null : Notes.FirstOrDefault(n => n.Raw.Id == keep);
@@ -254,11 +359,16 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
             UnackedAlarms = _alarms.UnackedCount,
             ReadBy = { user.Id },   // 쓴 사람은 읽은 것으로
         };
-        await _store.AddAsync(note);
-        _audit.Write("인수인계 작성", note.Text.Length > 40 ? note.Text[..40] + "…" : note.Text);
 
-        ResetFormToDefaults();
-        _draftBackup = CaptureCurrentForm();
+        try {
+            await _store.AddAsync(note);
+            _audit.Write("인수인계 작성", note.Text.Length > 40 ? note.Text[..40] + "…" : note.Text);
+            ResetFormToDefaults();
+            _draftBackup = CaptureCurrentForm();
+        } catch (Exception ex) {
+            Status = $"저장 실패: {ex.Message}";
+            MessageBox.Show($"인수인계 메모를 저장하지 못했습니다.\n{ex.Message}", "인수인계", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private bool CanMarkRead() => Selected is { IsUnreadForMe: true };
@@ -267,9 +377,15 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     private async Task MarkReadAsync() {
         var user = _session.User;
         if (user == null || Selected == null) return;
-        await _store.MarkReadAsync(Selected.Raw.Id, user.Id);
-        _audit.Write("인수인계 읽음", $"{Selected.Raw.AuthorName} {Selected.Raw.WrittenAt:MM-dd HH:mm} 메모");
-        if (BadgeCount <= 1) Notice = "";
+
+        try {
+            await _store.MarkReadAsync(Selected.Raw.Id, user.Id);
+            _audit.Write("인수인계 읽음", $"{Selected.Raw.AuthorName} {Selected.Raw.WrittenAt:MM-dd HH:mm} 메모");
+            if (BadgeCount <= 1) Notice = "";
+        } catch (Exception ex) {
+            Status = $"읽음 처리 실패: {ex.Message}";
+            MessageBox.Show($"읽음 처리를 완료하지 못했습니다.\n{ex.Message}", "인수인계", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private string BuildFormattedNoteText(LineStatus? line) {
@@ -279,7 +395,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         var runState = RunStatePaused ? "회차 진행 중 일시정지"
                      : RunStateAborted ? "비정상 중단"
                      : "회차 완료 후 대기";
-        var pallets = string.IsNullOrWhiteSpace(RemainingPallets) ? "0" : RemainingPallets.Trim();
+        var pallets = ParseNonNegativeInt(RemainingPallets).ToString(CultureInfo.InvariantCulture);
         var a = line?.Count(Grades.A) ?? 0;
         var b = line?.Count(Grades.B) ?? 0;
         var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
@@ -289,12 +405,12 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
 
         // 2. 설비 · 비전 · 측정 · AGV 상태
         var equipChecks = new List<string>();
-        if (CheckLoadArm) equipChecks.Add("1번 적재팔(집게)");
-        if (CheckSortArm) equipChecks.Add("2번 분류팔(전자석)");
-        if (CheckConveyor) equipChecks.Add("컨베이어·원점스위치");
-        if (CheckMeasureHead) equipChecks.Add("전압 측정 헤드");
+        if (CheckLoadArm) equipChecks.Add("로봇팔 1(집게)");
+        if (CheckSortArm) equipChecks.Add("로봇팔 2(분류)");
+        if (CheckConveyor) equipChecks.Add("컨베이어·재분류 서보");
+        if (CheckMeasureHead) equipChecks.Add("전압 측정 헤드(ADS1115)");
         if (CheckVisionBooth) equipChecks.Add("카메라 3대·암막조명");
-        if (CheckAgvLift) equipChecks.Add("AGV 지게차·리프트");
+        if (CheckAgvLift) equipChecks.Add("AGV(포크·주행)");
         var equipText = equipChecks.Count == 0 ? "특이점검 없음" : string.Join(", ", equipChecks);
         sb.AppendLine($"[2. 설비/AGV] 점검체크: {equipText} | AGV 상태: {SelectedAgvStatus}");
 
@@ -305,7 +421,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         if (IssueContactAbnormal) issues.Add("측정 접촉 불량(abnormal)");
         if (IssueVisionOrSortFail) issues.Add("비전 실패/배출 실패");
         var issueText = issues.Count == 0 ? "특이 이슈 없음" : string.Join(", ", issues);
-        var resortCount = string.IsNullOrWhiteSpace(ResortRemainingCount) ? "0" : ResortRemainingCount.Trim();
+        var resortCount = ParseNonNegativeInt(ResortRemainingCount).ToString(CultureInfo.InvariantCulture);
         var resortState = ResortPending ? $"보관 중({resortCount}개)" : "전량 재투입 완료";
         sb.AppendLine($"[3. 품질/재분류] 이슈: {issueText} | 재분류함: {resortState}");
 
@@ -314,7 +430,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         if (BoxBCleared) boxChecks.Add("B 분류함 비움");
         if (BoxNgVisualCleared) boxChecks.Add("외관불량함 비움");
         if (BoxNgVoltageCleared) boxChecks.Add("전압불량함 비움");
-        if (BoxResortChecked) boxChecks.Add("재분류함 확인");
+        if (BoxResortChecked) boxChecks.Add("재분류함(서보) 확인");
         if (PuckHomeChecked) boxChecks.Add("컨베이어 퍽 원점 확인");
         var boxText = boxChecks.Count == 0 ? "미체크" : string.Join(", ", boxChecks);
         sb.AppendLine($"[4. 분류함/퍽] 확인: {boxText}");
@@ -326,7 +442,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         var safeChecks = new List<string>();
         if (SafeAgvPath) safeChecks.Add("AGV 주행로 장애물 없음");
         if (SafeArmArea) safeChecks.Add("로봇팔 반경 간섭 없음");
-        if (SafeEnvSensor) safeChecks.Add("가스(MQ-9)·온습도 정상");
+        if (SafeEnvSensor) safeChecks.Add("가스(MQ-9)·온습도(Uno) 정상");
         var safeText = safeChecks.Count == 0 ? "미체크" : string.Join(", ", safeChecks);
         sb.AppendLine($"[5. 안전/환경] 비상정지: {estopText} | 안전체크: {safeText}");
 
@@ -365,12 +481,13 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
                     RunStateIdle = !RunStatePaused && !RunStateAborted;
                     RemainingPallets = ExtractBetween(line, "이월 팔레트:", "판") ?? "0";
                 } else if (line.StartsWith("[2. 설비/AGV]")) {
-                    CheckLoadArm = line.Contains("1번 적재팔(집게)");
-                    CheckSortArm = line.Contains("2번 분류팔(전자석)");
-                    CheckConveyor = line.Contains("컨베이어·원점스위치");
+                    // 신규 v2 명칭 + 구버전 명칭 모두 하위 호환 파싱
+                    CheckLoadArm = line.Contains("로봇팔 1(집게)") || line.Contains("1번 적재팔(집게)");
+                    CheckSortArm = line.Contains("로봇팔 2(분류)") || line.Contains("2번 분류팔(전자석)");
+                    CheckConveyor = line.Contains("컨베이어·재분류 서보") || line.Contains("컨베이어·원점스위치");
                     CheckMeasureHead = line.Contains("전압 측정 헤드");
                     CheckVisionBooth = line.Contains("카메라 3대·암막조명");
-                    CheckAgvLift = line.Contains("AGV 지게차·리프트");
+                    CheckAgvLift = line.Contains("AGV(포크·주행)") || line.Contains("AGV 지게차·리프트");
                     var agv = ExtractAfter(line, "AGV 상태:");
                     if (!string.IsNullOrWhiteSpace(agv) && AgvStatusOptions.Contains(agv))
                         SelectedAgvStatus = agv;
@@ -401,7 +518,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
                     EstopNone = !EstopRecovered && !EstopActive;
                     SafeAgvPath = line.Contains("AGV 주행로 장애물 없음");
                     SafeArmArea = line.Contains("로봇팔 반경 간섭 없음");
-                    SafeEnvSensor = line.Contains("가스(MQ-9)·온습도 정상");
+                    SafeEnvSensor = line.Contains("가스(MQ-9)·온습도");
                 } else if (line.StartsWith("[6. 전달사항]")) {
                     var cat = ExtractBetween(line, "구분:", "| 내용:");
                     if (!string.IsNullOrWhiteSpace(cat) && WriteCategories.Contains(cat))
@@ -418,6 +535,18 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
             _isRestoringForm = false;
         }
     }
+
+    private static string FormatSavedCounts(string? noteText) {
+        if (string.IsNullOrWhiteSpace(noteText))
+            return "작성 시 분류 실적: 기록 없음";
+        var saved = ExtractBetween(noteText, "실적(", ")");
+        return string.IsNullOrWhiteSpace(saved)
+            ? "작성 시 분류 실적: 기록 없음"
+            : $"작성 시 분류 — {saved.Replace(", ", "  ")}";
+    }
+
+    private static int ParseNonNegativeInt(string? text) =>
+        int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : 0;
 
     private static string? ExtractBetween(string text, string startMarker, string endMarker) {
         var s = text.IndexOf(startMarker, StringComparison.Ordinal);
@@ -581,7 +710,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         public string Draft { get; init; } = "";
     }
 
-    // HandoverViewModel 클래스 내부에 추가 (BadgeCount 변경 시 상단 Notice 배너도 자동 동기화)
+    // BadgeCount 변경 시 상단 Notice 배너도 자동 동기화
     partial void OnBadgeCountChanged(int value) {
         Notice = value > 0
             ? $"안 읽은 인수인계 메모가 {value}건 있습니다. 읽고 [읽음]을 눌러 주세요."
@@ -612,4 +741,3 @@ public sealed class NoteRow {
     public string ReadText => Raw.ReadBy.Count <= 1 ? "아직 아무도 안 읽음" : $"{Raw.ReadBy.Count - 1}명 읽음";
     public string StateKey => IsUnreadForMe ? "warn" : "neutral";
 }
-

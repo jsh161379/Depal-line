@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -132,17 +133,12 @@ ORDER BY r.note_id, r.read_at;";
         if (!IsAsciiPrintable(note.AuthorId))
             throw new InvalidOperationException("작성자 계정 ID는 영문·숫자(ASCII)만 사용할 수 있습니다.");
 
-        // 1) 내 화면 캐시에 즉시 반영
-        lock (_cacheLock) {
-            _cache[note.Id] = note;
-        }
-
-        // 2) MQTT handover/note 발행 (QoS 1, retained=false)
+        // 1) MQTT handover/note 발행 먼저 수행 (전송 실패 시 캐시 오염 방지)
         if (!_settings.UseFakeMqtt) {
             EnsureMqttConnected();
             var dto = new HandoverNotePayload {
                 NoteId = note.Id,
-                Ts = note.WrittenAt.ToString(Json.TimeFormat),
+                Ts = note.WrittenAt.ToString(Json.TimeFormat, CultureInfo.InvariantCulture),
                 AuthorId = note.AuthorId,
                 AuthorName = note.AuthorName,
                 Text = note.Text,
@@ -152,6 +148,17 @@ ORDER BY r.note_id, r.read_at;";
             };
             var payload = JsonSerializer.Serialize(dto, Json.Options);
             await PublishAsync(TopicHandoverNote, payload, ct).ConfigureAwait(false);
+        }
+
+        // 2) 발행 성공 후 내 화면 캐시에 반영 (에코로 이미 들어온 읽음 목록 유지)
+        lock (_cacheLock) {
+            if (_cache.TryGetValue(note.Id, out var existing)) {
+                foreach (var uid in existing.ReadBy) {
+                    if (!note.IsReadBy(uid))
+                        note.ReadBy.Add(uid);
+                }
+            }
+            _cache[note.Id] = note;
         }
 
         RaiseChangedOnUi();
@@ -165,18 +172,13 @@ ORDER BY r.note_id, r.read_at;";
             throw new InvalidOperationException("읽음 확인 계정 ID는 영문·숫자(ASCII)만 사용할 수 있습니다.");
 
         var normalizedId = noteId.ToLowerInvariant();
-        var added = false;
 
         lock (_cacheLock) {
-            if (_cache.TryGetValue(normalizedId, out var note) && !note.IsReadBy(userId)) {
-                note.ReadBy.Add(userId);
-                added = true;
-            }
+            if (_cache.TryGetValue(normalizedId, out var existing) && existing.IsReadBy(userId))
+                return;
         }
 
-        if (!added)
-            return;
-
+        // 1) MQTT handover/read 발행 먼저 수행 (전송 실패 시 재시도 가능하도록 캐시 보존)
         if (!_settings.UseFakeMqtt) {
             EnsureMqttConnected();
             var dto = new HandoverReadPayload {
@@ -188,7 +190,17 @@ ORDER BY r.note_id, r.read_at;";
             await PublishAsync(TopicHandoverRead, payload, ct).ConfigureAwait(false);
         }
 
-        RaiseChangedOnUi();
+        // 2) 발행 성공 후 캐시 반영
+        var added = false;
+        lock (_cacheLock) {
+            if (_cache.TryGetValue(normalizedId, out var note) && !note.IsReadBy(userId)) {
+                note.ReadBy.Add(userId);
+                added = true;
+            }
+        }
+
+        if (added)
+            RaiseChangedOnUi();
     }
 
     private void EnsureMqttConnected() {
@@ -251,7 +263,6 @@ ORDER BY r.note_id, r.read_at;";
                 var id = dto.NoteId.ToLowerInvariant();
                 var dirty = false;
                 lock (_cacheLock) {
-                    // 내가 방금 보낸 메시지가 되돌아온 경우 이미 캐시에 있으므로 무시
                     if (!_cache.ContainsKey(id)) {
                         var note = new HandoverNote {
                             Id = id,

@@ -96,7 +96,7 @@
                             <TextBox Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" Height="74" AcceptsReturn="True"
                                      TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"
                                      IsReadOnly="{Binding IsViewingSelected}"
-                                     IsEnabled="{Binding CanWrite}"/>
+                                     IsEnabled="{Binding CanInteractDraft}"/>
                             <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,8"
                                        Visibility="{Binding IsWritingMode, Converter={StaticResource BoolToVis}}"
                                        Text="지금 라인 상태·회차·미확인 알람 수가 자동으로 붙습니다. 보기 전용 계정은 쓸 수 없습니다."/>
@@ -114,18 +114,18 @@
                                 <StackPanel>
                                     <TextBlock Text="1. 검사 회차(Run) 실적 및 진행 현황" FontWeight="SemiBold" Margin="0,0,0,5"/>
 
-                                    <!-- 실시간 라인 수치 자동 표시 -->
+                                    <!-- 작성 모드: 실시간 라인 수치 / 선택 모드: 작성 시점 기록 수치 -->
                                     <Border BorderBrush="{StaticResource Brush.RuleSoft}" BorderThickness="1"
                                             Background="{StaticResource Brush.Field}" Padding="8,5" Margin="0,0,0,6">
                                         <StackPanel>
                                             <DockPanel Margin="0,0,0,2">
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding LiveRunIdText}"
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding DisplayRunIdText}"
                                                            FontFamily="{StaticResource Font.Readout}" FontSize="11.5"
                                                            Foreground="{StaticResource Brush.SubText}"/>
-                                                <TextBlock Text="{Binding LiveLineStatusText}" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock Text="{Binding DisplayLineStatusText}" FontWeight="SemiBold" FontSize="12"/>
                                             </DockPanel>
-                                            <TextBlock Text="{Binding LiveCountsText}"
-                                                       FontFamily="{StaticResource Font.Readout}" FontSize="12"/>
+                                            <TextBlock Text="{Binding DisplayCountsText}"
+                                                       FontFamily="{StaticResource Font.Readout}" FontSize="12" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
 
@@ -139,7 +139,7 @@
                                         <TextBlock Text="후번 이월 미검사 팔레트" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBox Text="{Binding RemainingPallets, UpdateSourceTrigger=PropertyChanged}" Width="46"
                                                  HorizontalContentAlignment="Right" FontFamily="{StaticResource Font.Readout}"/>
-                                        <TextBlock Text="판 (2×5칸)" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                        <TextBlock Text="판 (2×4칸)" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -147,14 +147,27 @@
                             <!-- 2. 설비 · 비전 · 측정 · AGV 상태 -->
                             <Border Style="{StaticResource Box}" Margin="0,0,0,8" Padding="10,7">
                                 <StackPanel>
-                                    <TextBlock Text="2. 로봇팔 · 컨베이어 · 비전 · 측정 · AGV 상태" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                    <TextBlock Text="2. 로봇팔 · 컨베이어 · 비전 · 측정 · AGV 상태" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding LiveDevicesText}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,5">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.SubText}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding LiveDevicesHasIssue}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Warn}"/>
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                     <UniformGrid Columns="2" Margin="0,0,0,6">
-                                        <CheckBox Content="1번 적재팔(집게) 점검" IsChecked="{Binding CheckLoadArm}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="2번 분류팔(전자석) 점검" IsChecked="{Binding CheckSortArm}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="컨베이어·원점스위치 점검" IsChecked="{Binding CheckConveyor}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="전압 측정 헤드 점검" IsChecked="{Binding CheckMeasureHead}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="로봇팔 1(집게) 점검" IsChecked="{Binding CheckLoadArm}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="로봇팔 2(분류) 점검" IsChecked="{Binding CheckSortArm}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="컨베이어·재분류 서보 점검" IsChecked="{Binding CheckConveyor}" Margin="0,0,0,4"/>
+                                        <CheckBox Content="전압 측정 헤드(ADS1115) 점검" IsChecked="{Binding CheckMeasureHead}" Margin="0,0,0,4"/>
                                         <CheckBox Content="카메라 3대·암막조명 점검" IsChecked="{Binding CheckVisionBooth}" Margin="0,0,0,2"/>
-                                        <CheckBox Content="AGV 지게차·리프트 점검" IsChecked="{Binding CheckAgvLift}" Margin="0,0,0,2"/>
+                                        <CheckBox Content="AGV(포크·주행) 점검" IsChecked="{Binding CheckAgvLift}" Margin="0,0,0,2"/>
                                     </UniformGrid>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="AGV 상태" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -197,7 +210,7 @@
                                         <CheckBox Content="B 분류함 비움" IsChecked="{Binding BoxBCleared}" Margin="0,0,0,4"/>
                                         <CheckBox Content="외관불량함 비움" IsChecked="{Binding BoxNgVisualCleared}" Margin="0,0,0,4"/>
                                         <CheckBox Content="전압불량함 비움" IsChecked="{Binding BoxNgVoltageCleared}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="재분류함 확인" IsChecked="{Binding BoxResortChecked}" Margin="0,0,0,2"/>
+                                        <CheckBox Content="재분류함(서보) 확인" IsChecked="{Binding BoxResortChecked}" Margin="0,0,0,2"/>
                                         <CheckBox Content="컨베이어 퍽 원점 확인" IsChecked="{Binding PuckHomeChecked}" Margin="0,0,0,2"/>
                                     </UniformGrid>
                                 </StackPanel>
@@ -206,7 +219,9 @@
                             <!-- 5. 비상정지 이력 및 안전/환경 센서 -->
                             <Border Style="{StaticResource Box}" Padding="10,7">
                                 <StackPanel>
-                                    <TextBlock Text="5. 비상정지 이력 및 안전/환경 센서" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                    <TextBlock Text="5. 비상정지 이력 및 안전/환경 센서" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding LiveEnvText}" FontFamily="{StaticResource Font.Readout}"
+                                               FontSize="11.5" Foreground="{StaticResource Brush.SubText}" Margin="0,0,0,5"/>
                                     <TextBlock Text="당번 중 비상정지 발생 여부" Style="{StaticResource Label}" Margin="0,0,0,4"/>
                                     <WrapPanel Margin="0,0,0,6">
                                         <RadioButton Content="없음" IsChecked="{Binding EstopNone}" GroupName="EstopState" Margin="0,0,12,0"/>
@@ -216,7 +231,7 @@
                                     <UniformGrid Columns="2">
                                         <CheckBox Content="AGV 주행로 장애물 없음" IsChecked="{Binding SafeAgvPath}" Margin="0,0,0,4"/>
                                         <CheckBox Content="로봇팔 반경 간섭 없음" IsChecked="{Binding SafeArmArea}" Margin="0,0,0,4"/>
-                                        <CheckBox Content="가스(MQ-9)·온습도 정상" IsChecked="{Binding SafeEnvSensor}"/>
+                                        <CheckBox Content="가스(MQ-9)·온습도(Uno) 정상" IsChecked="{Binding SafeEnvSensor}"/>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>
