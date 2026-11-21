@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>바른전지 | 비전 검사를 통과한 AA 건전지</title>
+<!-- v7 (2026-11-17): 주문·문의를 MQTT(WebSocket)로 주문 관리 프로그램에 연결 — 주문 통신 규약 v1.0. 같은 폴더에 mqtt.min.js 필요 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@600;700&display=swap">
+<style>
+:root {
+  --ink: #102238;
+  --muted: #4f6175;
+  --blue: #1456c7;
+  --blue-hover: #0b439f;
+  --navy: #0b1b31;
+  --line: #d6e0ea;
+  --silver: #eef3f8;
+  --paper: #fff;
+  --pass: #138a55;
+  --body: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+  --header: 72px;
+  font-family: var(--body);
+  color: var(--ink);
+  background: var(--paper);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration: none; }
+button, input, textarea, select { font: inherit; }
+button:not(:disabled) { cursor: pointer; }
+:focus-visible { outline: 3px solid #347be7; outline-offset: 4px; }
+h1, h2, h3, p, figure, dl, dd { margin: 0; }
+h1, h2, h3, p, dd { word-break: keep-all; }
+svg { display: block; }
+.shell { width: min(1200px, calc(100% - 96px)); margin-inline: auto; }
+
+/* 헤더 */
+.site-header { position: sticky; top: 0; z-index: 10; background: #fcfdfffa; border-bottom: 1px solid #d6e0eac9; backdrop-filter: blur(14px); }
+.header-inner { height: calc(var(--header) - 1px); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; }
+.wordmark { display: inline-flex; align-items: center; gap: 10px; width: max-content; font-weight: 900; font-size: 23px; letter-spacing: -.06em; }
+.mark { width: 33px; height: 33px; border-radius: 8px; background: var(--blue); display: grid; place-items: center; }
+.header-inner nav { display: flex; gap: clamp(18px, 3vw, 42px); align-self: stretch; }
+.header-inner nav a { position: relative; display: grid; place-items: center; color: var(--muted); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.header-inner nav a:hover, .header-inner nav a[aria-current] { color: var(--blue); }
+.header-inner nav a[aria-current]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--blue); }
+.button { display: inline-flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; padding: 0 18px; border: 1px solid transparent; border-radius: 5px; font-size: 14px; font-weight: 800; white-space: nowrap; transition: background .16s, border-color .16s; }
+.button span { font-size: 17px; font-weight: 500; }
+.primary { background: var(--blue); color: #fff; }
+.primary:hover:not(:disabled) { background: var(--blue-hover); }
+.primary:disabled { background: #e1e8f1; color: #6a7d92; }
+.nav-order { justify-self: end; min-height: 40px; color: #154aa5; border-color: #bed1ed; background: #edf4ff; }
+.nav-order:hover, .nav-order[aria-current] { color: #fff; background: var(--blue); border-color: var(--blue); }
+.light-outline { color: #fff; border-color: #a5bbda91; background: #11284778; }
+.light-outline:hover { background: #233f63; }
+
+/* 히어로 */
+.hero { position: relative; isolation: isolate; overflow: hidden; color: #fff; background: #0a182b; }
+.hero-art { position: absolute; inset: 0 0 0 auto; width: min(64%, 860px); height: 100%; z-index: -2; }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #08182cf5 0%, #08182ce0 32%, #08182c40 60%, transparent 85%); }
+.hero-inner { min-height: clamp(500px, 70vh, 660px); display: grid; align-items: center; padding-block: 56px 66px; }
+.hero-copy { max-width: 640px; }
+.eyebrow { display: flex; align-items: center; gap: 9px; color: #20569f; font: 700 12px/1.4 var(--mono); letter-spacing: .13em; }
+.eyebrow i { width: 18px; height: 2px; background: currentColor; }
+.hero .eyebrow { color: #a9caff; }
+.hero h1 { margin-top: 18px; font-size: clamp(40px, 5vw, 72px); line-height: 1.15; letter-spacing: -.07em; font-weight: 900; }
+.hero h1 em { font-style: normal; color: #a4caff; }
+.hero-desc { margin-top: 22px; color: #e0eaff; font-size: clamp(15px, 1.3vw, 17px); line-height: 1.82; }
+.actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 28px; }
+.hero-stats { position: absolute; left: 0; right: 0; bottom: 0; border-top: 1px solid #ffffff1f; background: #08182ca8; }
+.hero-stats dl { display: grid; grid-template-columns: repeat(3, 1fr); }
+.hero-stats div { padding: 16px 0; }
+.hero-stats div + div { padding-left: 28px; border-left: 1px solid #ffffff1f; }
+.hero-stats dt { color: #9fb4d3; font-size: 12px; }
+.hero-stats dd { margin-top: 2px; font-weight: 800; font-size: 16px; }
+.scan { animation: scan 3.2s ease-in-out infinite; transform-origin: center top; }
+@keyframes scan { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .scan { animation: none; } }
+
+/* 공통 섹션 */
+.section { padding-block: clamp(56px, 7vw, 96px); }
+.silver { background: linear-gradient(180deg, #f5f8fc, #eaf1f9); border-block: 1px solid var(--line); }
+[data-nav-section] { scroll-margin-top: calc(var(--header) + 8px); }
+.heading { margin-bottom: 32px; }
+.heading h2 { margin-top: 9px; font-size: clamp(28px, 3.3vw, 46px); line-height: 1.2; letter-spacing: -.07em; font-weight: 900; }
+.heading > p:not(.eyebrow) { margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.72; }
+.split { display: flex; justify-content: space-between; align-items: end; gap: 24px; }
+.split > p { color: var(--muted); font-size: 14px; text-align: right; }
+
+/* 기업 소개 */
+.stories { display: grid; gap: clamp(36px, 5vw, 68px); }
+.story { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(24px, 4vw, 56px); }
+.story.reverse .art { order: -1; }
+.story-copy { color: var(--muted); font-size: clamp(15px, 1.5vw, 17px); line-height: 1.8; }
+.story-copy h3 { margin-bottom: 8px; color: var(--ink); font-size: clamp(20px, 2.2vw, 28px); letter-spacing: -.04em; }
+.story-copy p + p { margin-top: 12px; }
+.art { border-radius: 9px; overflow: hidden; aspect-ratio: 16 / 10; background: linear-gradient(160deg, #dfe8f3, #c9d7e8); border: 1px solid var(--line); }
+.art svg { width: 100%; height: 100%; }
+.values { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 32px; margin: 0; padding-left: 1.25em; color: var(--muted); line-height: 1.7; }
+.values strong { color: var(--ink); }
+.team { margin-top: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.team div { background: #fff; padding: 16px 18px; }
+.team b { display: block; font-size: 16px; }
+.team span { font-size: 14px; color: var(--muted); }
+
+/* 제품 소개 */
+.apps { display: grid; gap: clamp(20px, 3vw, 36px); max-width: 1000px; margin-inline: auto; }
+.app { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(16px, 4vw, 48px); }
+.app:nth-child(even) .art { order: 1; }
+.app + .app { padding-top: clamp(20px, 3vw, 36px); border-top: 1px solid var(--line); }
+.app h3 { font-size: clamp(22px, 3vw, 34px); letter-spacing: -.06em; line-height: 1.2; }
+.app p { margin-top: 8px; max-width: 38ch; color: var(--muted); font-size: clamp(15px, 1.5vw, 17px); line-height: 1.7; }
+.specs { margin-top: 18px; max-width: 380px; border-top: 1px solid var(--line); }
+.specs div { display: grid; grid-template-columns: 110px 1fr; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.specs dt { font-weight: 800; }
+.specs dd { color: var(--muted); }
+.price-line { margin-top: 18px; display: flex; align-items: center; gap: 16px; }
+.price-line strong { font-size: 22px; letter-spacing: -.03em; }
+
+/* 검사 장비 */
+.tech { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+.tech h2 { font-size: clamp(28px, 3.3vw, 44px); line-height: 1.2; letter-spacing: -.07em; font-weight: 900; }
+.tech > div > p { margin-top: 16px; color: var(--muted); font-size: 15px; line-height: 1.75; }
+.tech-panel { border: 1px solid var(--line); border-radius: 9px; background: linear-gradient(160deg, #f3f7fc, #e2ebf6); padding: 18px; }
+.tech-panel b { font-size: 13px; }
+.modules { margin-top: 48px; }
+.modules h3 { font-size: 16px; margin-bottom: 14px; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.card { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.card .thumb { height: 150px; background: radial-gradient(circle at 50% 45%, #fff, #dfe8f4 75%); display: grid; place-items: center; }
+.card .thumb svg { width: 120px; height: 110px; }
+.card-copy { padding: 16px 16px 18px; }
+.card-copy b { display: block; font-size: 16px; }
+.card-copy span { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+/* 주문 방법 */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.step { padding: 26px 24px; border: 1px solid var(--line); border-radius: 8px; background: #ffffffc7; }
+.step .num { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #dbe8fb; color: var(--blue); font-weight: 800; font-size: 14px; }
+.step h3 { margin-top: 14px; font-size: 20px; letter-spacing: -.04em; }
+.step p { margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.after-steps { margin-top: 24px; }
+.after-steps small { display: block; margin-top: 12px; color: var(--muted); font-size: 13px; }
+
+/* 검사 기준 표 */
+.criteria { border-top: 1px solid var(--line); }
+.criteria div { display: grid; grid-template-columns: 260px 1fr 120px; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.criteria dt { font-weight: 800; }
+.criteria dd { color: var(--muted); font-size: 15px; line-height: 1.6; }
+.criteria .verdict { font-size: 13px; font-weight: 800; color: #b3261e; text-align: right; }
+
+/* CTA, 푸터 */
+.cta { color: #fff; background: linear-gradient(110deg, #0b1b31, #11335f); }
+.cta .shell { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-block: 52px; }
+.cta h2 { font-size: clamp(26px, 3vw, 40px); letter-spacing: -.06em; }
+.cta p { margin-top: 8px; color: #c8d6ec; font-size: 15px; }
+footer { border-top: 1px solid var(--line); background: #f7f9fc; }
+footer .shell { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-block: 26px; flex-wrap: wrap; }
+.foot-brand { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.foot-brand .wordmark { color: var(--ink); font-size: 20px; }
+.foot-brand .mark { width: 28px; height: 28px; }
+
+/* 주문 페이지 */
+.page-banner { background: linear-gradient(110deg, #0b1b31, #11335f); color: #fff; }
+.page-banner .shell { padding-block: 52px; }
+.page-banner .eyebrow { color: #a9caff; }
+.page-banner h1 { margin-top: 12px; font-size: clamp(32px, 4vw, 52px); letter-spacing: -.07em; }
+.page-banner p:not(.eyebrow) { margin-top: 10px; color: #c8d6ec; }
+.order-grid { display: grid; grid-template-columns: 1fr 380px; gap: 36px; align-items: start; }
+.order-list { display: grid; gap: 14px; }
+.order-item { display: grid; grid-template-columns: 120px 1fr auto; gap: 20px; align-items: center; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.order-item .mini { height: 96px; border-radius: 6px; background: radial-gradient(circle at 50% 45%, #fff, #dfe8f4 80%); display: grid; place-items: center; }
+.order-item .mini svg { width: 100px; height: 84px; }
+.order-item b { font-size: 17px; }
+.order-item .sub { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; }
+.order-item .won { display: block; margin-top: 6px; font-weight: 800; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.stepper button { width: 38px; height: 38px; border: 0; background: var(--silver); font-size: 18px; }
+.stepper button:hover { background: #dbe6f3; }
+.stepper output { min-width: 42px; text-align: center; font-weight: 800; }
+.summary { position: sticky; top: calc(var(--header) + 20px); border: 1px solid var(--line); border-radius: 9px; background: linear-gradient(180deg, #f8fbff, #eef4fb); padding: 22px; }
+.summary h2 { font-size: 20px; letter-spacing: -.04em; }
+.sum-lines { margin: 14px 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.sum-lines li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.sum-lines .empty { color: var(--muted); }
+.sum-total { display: flex; justify-content: space-between; font-weight: 900; font-size: 20px; }
+.summary form { display: grid; gap: 12px; margin-top: 18px; }
+.summary label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+.summary input, .summary textarea, .summary select { padding: 10px 12px; border: 1px solid #c5d3e3; border-radius: 5px; background: #fff; }
+.summary textarea { min-height: 70px; resize: vertical; }
+.cust-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cust-row label { min-width: 0; }
+.cust-row select { width: 100%; }
+.opt-note { margin: 0; font-size: 12px; color: #5b6b80; font-weight: 400; }
+@media (max-width: 560px) { .cust-row { grid-template-columns: 1fr; } }
+.summary .button { width: 100%; justify-content: center; }
+.form-msg { min-height: 1.5em; font-size: 14px; font-weight: 700; color: var(--pass); }
+.form-msg.err { color: #b3261e; }
+.demo-note { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 20; max-width: min(520px, calc(100% - 40px)); padding: 14px 20px; border-radius: 8px; background: var(--navy); color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 8px 24px #0b1b3140; }
+
+/* 헤더 오른쪽 */
+.header-right { justify-self: end; display: flex; align-items: center; gap: 20px; }
+.text-link { font-size: 14px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.text-link:hover, .text-link[aria-current] { color: var(--blue); }
+
+/* 작은 페이지 공통 (주문 완료, 로그인, 마이페이지, 주문 조회) */
+.narrow { width: min(760px, calc(100% - 48px)); margin-inline: auto; }
+.panel { border: 1px solid var(--line); border-radius: 9px; background: #fff; padding: 28px; }
+.panel + .panel { margin-top: 18px; }
+.panel h2 { font-size: 22px; letter-spacing: -.04em; }
+.panel > p { margin-top: 6px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+.fields { display: grid; gap: 12px; margin-top: 18px; }
+.fields label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+.fields input { padding: 11px 12px; border: 1px solid #c5d3e3; border-radius: 5px; background: #fff; }
+.fields .button { justify-content: center; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.tabs button { flex: 1; padding: 12px; border: 0; border-bottom: 2px solid transparent; background: none; font-weight: 800; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--blue); border-color: var(--blue); }
+.member-box { margin-top: 18px; padding: 12px 14px; border-radius: 6px; background: #e3eefc; font-size: 14px; line-height: 1.6; }
+.member-box a { color: var(--blue); font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.order-no { margin-top: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.order-no strong { font: 700 clamp(22px, 4vw, 30px)/1.2 var(--mono); letter-spacing: .04em; color: var(--blue); }
+.copy { padding: 8px 12px; border: 1px solid #bed1ed; border-radius: 5px; background: #edf4ff; color: #154aa5; font-weight: 800; font-size: 13px; }
+.done-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.ghost { color: var(--blue); border-color: #bed1ed; background: #fff; }
+.ghost:hover { background: #edf4ff; }
+
+/* 주문 카드 */
+.order-card { border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; background: #fff; }
+.order-card + .order-card { margin-top: 12px; }
+.oc-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.oc-no { font: 700 15px var(--mono); color: var(--ink); }
+.oc-date { font-size: 13px; color: var(--muted); }
+.oc-items { margin: 12px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
+.oc-items li { display: flex; justify-content: space-between; padding: 3px 0; }
+.oc-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 900; }
+.oc-meta { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.track { display: grid; grid-template-columns: repeat(4, 1fr); margin: 16px 0 4px; padding: 0; list-style: none; counter-reset: t; }
+.track li { position: relative; padding-top: 22px; font-size: 12px; font-weight: 700; color: #8a9bb0; text-align: center; }
+.track li::before { content: ""; position: absolute; top: 4px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #d3deea; z-index: 1; }
+.track li::after { content: ""; position: absolute; top: 9px; left: -50%; width: 100%; height: 2px; background: #d3deea; }
+.track li:first-child::after { display: none; }
+.track li.on { color: var(--blue); }
+.track li.on::before, .track li.on::after { background: var(--blue); }
+.badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #e3eefc; color: var(--blue); }
+.badge.done { background: #dff3e9; color: var(--pass); }
+.badge.cancel { background: #f3e1e0; color: #b3261e; }
+.oc-actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+.link-btn { border: 0; background: none; color: #b3261e; font-weight: 700; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.info-grid { display: grid; grid-template-columns: 90px 1fr; gap: 8px 12px; margin-top: 14px; font-size: 15px; }
+.info-grid dt { color: var(--muted); }
+.empty-box { padding: 28px; text-align: center; color: var(--muted); border: 1px dashed #c5d3e3; border-radius: 8px; }
+.empty-box a { display: inline-flex; margin-top: 12px; }
+.head-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+/* 고객 문의 */
+.fields select, .fields textarea, .fields input[type=hidden] { padding: 11px 12px; border: 1px solid #c5d3e3; border-radius: 5px; background: #fff; }
+.fields textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+.support-grid { width: min(1080px, calc(100% - 48px)); margin-inline: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.support-grid .panel + .panel { margin-top: 0; }
+.faq { margin-top: 14px; border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary { cursor: pointer; padding: 14px 4px; font-weight: 800; font-size: 15px; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--blue); font-weight: 900; }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { padding: 0 4px 16px; color: var(--muted); font-size: 14px; line-height: 1.75; }
+.qa-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; background: #fff; }
+.qa-card + .qa-card { margin-top: 10px; }
+.qa-q { margin-top: 8px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+.qa-a { margin-top: 10px; padding: 12px 14px; background: #f2f6fc; border-left: 3px solid var(--blue); border-radius: 4px; font-size: 14px; line-height: 1.7; }
+.qa-a b { display: block; font-size: 12px; color: var(--blue); margin-bottom: 4px; }
+.badge.wait { background: #fbefdc; color: #9a5b00; }
+.ask-link { border: 0; background: none; color: var(--blue); font-weight: 700; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; margin-right: auto; }
+@media (max-width: 860px) { .support-grid { grid-template-columns: 1fr; } }
+
+/* 반응형 */
+@media (max-width: 960px) {
+  .header-inner { grid-template-columns: 1fr auto; }
+  .header-inner nav { display: none; }
+  .header-right { gap: 12px; }
+  .story, .app, .tech, .order-grid { grid-template-columns: 1fr; }
+  .story.reverse .art, .app:nth-child(even) .art { order: 0; }
+  .cards { grid-template-columns: 1fr 1fr; }
+  .steps { grid-template-columns: 1fr; }
+  .criteria div { grid-template-columns: 1fr; gap: 6px; }
+  .criteria .verdict { text-align: left; }
+  .hero-art { width: 100%; opacity: .45; }
+  .summary { position: static; }
+}
+@media (max-width: 600px) {
+  .shell { width: calc(100% - 40px); }
+  .values, .team { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
+  .hero-stats dl { grid-template-columns: 1fr; }
+  .hero-stats { position: static; }
+  .hero-stats div + div { padding-left: 0; border-left: 0; border-top: 1px solid #ffffff1f; }
+  .split { display: block; }
+  .split > p { text-align: left; margin-top: 8px; }
+  .cta .shell { display: block; }
+  .cta .button { margin-top: 20px; }
+  .order-item { grid-template-columns: 1fr; }
+  .text-link.hide-sm { display: none; }
+  .panel { padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 공통 그림 부품 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d2e78"/><stop offset=".35" stop-color="#3f6fe6"/><stop offset=".55" stop-color="#2652c4"/><stop offset="1" stop-color="#0b2564"/>
+    </linearGradient>
+    <linearGradient id="gGreen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b4f33"/><stop offset=".35" stop-color="#2fb878"/><stop offset=".55" stop-color="#1a9660"/><stop offset="1" stop-color="#083d27"/>
+    </linearGradient>
+    <linearGradient id="gSteel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7b8aa0"/><stop offset=".35" stop-color="#f3f6fa"/><stop offset=".6" stop-color="#bcc7d5"/><stop offset="1" stop-color="#6c7a90"/>
+    </linearGradient>
+    <linearGradient id="gBeam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7fa8ff" stop-opacity=".75"/><stop offset="1" stop-color="#7fa8ff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- 세워진 AA 건전지 (가로 24, 세로 92) -->
+    <symbol id="cellUp" viewBox="0 0 24 96">
+      <rect x="8" y="0" width="8" height="5" rx="1.5" fill="url(#gSteel)"/>
+      <rect x="0" y="4" width="24" height="92" rx="4" fill="url(#gSteel)"/>
+      <rect x="0" y="30" width="24" height="66" rx="4" fill="url(#gBody)"/>
+      <rect x="0" y="30" width="24" height="4" fill="#0a1f55" opacity=".5"/>
+      <text x="12" y="70" fill="#dbe6ff" font-size="7" font-weight="800" text-anchor="middle" font-family="system-ui,sans-serif" transform="rotate(-90 12 70)">BAREUN</text>
+    </symbol>
+    <symbol id="cellUpG" viewBox="0 0 24 96">
+      <rect x="8" y="0" width="8" height="5" rx="1.5" fill="url(#gSteel)"/>
+      <rect x="0" y="4" width="24" height="92" rx="4" fill="url(#gSteel)"/>
+      <rect x="0" y="30" width="24" height="66" rx="4" fill="url(#gGreen)"/>
+      <text x="12" y="70" fill="#dcffef" font-size="6.5" font-weight="800" text-anchor="middle" font-family="system-ui,sans-serif" transform="rotate(-90 12 70)">RECHARGE</text>
+    </symbol>
+    <!-- 눕힌 AA 건전지 (가로 96, 세로 24) -->
+    <symbol id="cellSide" viewBox="0 0 100 24">
+      <rect x="0" y="0" width="94" height="24" rx="4" fill="url(#gSteelV)"/>
+      <rect x="0" y="0" width="62" height="24" rx="4" fill="url(#gBodyV)"/>
+      <rect x="94" y="7" width="6" height="10" rx="1.5" fill="#c3ccd8"/>
+    </symbol>
+    <linearGradient id="gBodyV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d2e78"/><stop offset=".35" stop-color="#4a78ee"/><stop offset=".6" stop-color="#2652c4"/><stop offset="1" stop-color="#0b2564"/>
+    </linearGradient>
+    <linearGradient id="gSteelV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7b8aa0"/><stop offset=".35" stop-color="#f3f6fa"/><stop offset=".6" stop-color="#bcc7d5"/><stop offset="1" stop-color="#6c7a90"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-inner">
+    <a class="wordmark" href="#home" aria-label="바른전지 홈">
+      <span class="mark" aria-hidden="true"><svg width="20" height="12" viewBox="0 0 20 12"><rect x="0" y="1" width="16" height="10" rx="2" fill="#fff"/><rect x="16" y="4" width="3" height="4" rx="1" fill="#fff"/><rect x="0" y="1" width="9" height="10" rx="2" fill="#9fc0ff"/></svg></span>바른전지
+    </a>
+    <nav aria-label="주 메뉴">
+      <a href="#home" data-link="home">홈</a>
+      <a href="#company" data-link="company">기업 소개</a>
+      <a href="#product" data-link="product">제품 소개</a>
+      <a href="#tech" data-link="tech">검사 기술</a>
+      <a href="#ordering" data-link="ordering">주문 방법</a>
+    </nav>
+    <div class="header-right">
+      <a class="text-link hide-sm" href="#lookup" data-view-link="lookup">비회원 주문 조회</a>
+      <a class="text-link hide-sm" href="#support" data-view-link="support">고객 문의</a>
+      <a class="text-link" href="#login" id="authLink" data-view-link="login">로그인</a>
+      <a class="button nav-order" href="#order" id="headOrder">주문하기 <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="homeView">
+  <!-- 히어로 -->
+  <section class="hero" id="home" data-nav-section>
+    <svg class="hero-art" viewBox="0 0 860 660" preserveAspectRatio="xMaxYMid slice" role="img" aria-label="컨베이어 위 건전지를 위와 옆에서 카메라로 검사하는 장면">
+      <defs>
+        <radialGradient id="hGlow" cx=".6" cy=".45" r=".7"><stop offset="0" stop-color="#1f4c95"/><stop offset="1" stop-color="#0a182b"/></radialGradient>
+        <linearGradient id="hBelt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3d58"/><stop offset="1" stop-color="#141f30"/></linearGradient>
+      </defs>
+      <rect width="860" height="660" fill="url(#hGlow)"/>
+      <!-- 뒤쪽 공장 기둥 -->
+      <g opacity=".22" stroke="#9fc0ff" stroke-width="1">
+        <path d="M140 0V430M300 0V430M460 0V430M620 0V430M780 0V430"/>
+        <path d="M0 110H860M0 230H860" stroke-dasharray="4 8"/>
+      </g>
+      <!-- 컨베이어 -->
+      <path d="M40 470 L860 430 L860 500 L40 560 Z" fill="url(#hBelt)"/>
+      <path d="M40 470 L860 430" stroke="#5b7bb0" stroke-width="2"/>
+      <path d="M40 560 L860 500" stroke="#0b1424" stroke-width="3"/>
+      <g stroke="#3c5378" stroke-width="2" opacity=".7">
+        <path d="M120 466V552M220 461V545M320 456V538M420 451V531M520 446V523M620 441V516M720 436V509"/>
+      </g>
+      <!-- 컨베이어 위 건전지 -->
+      <g>
+        <use href="#cellSide" x="90" y="448" width="112" height="27" transform="rotate(-2.8 140 460)"/>
+        <use href="#cellSide" x="260" y="440" width="112" height="27" transform="rotate(-2.8 316 452)"/>
+        <use href="#cellSide" x="440" y="431" width="112" height="27" transform="rotate(-2.8 496 444)"/>
+        <use href="#cellSide" x="640" y="421" width="112" height="27" transform="rotate(-2.8 696 434)"/>
+      </g>
+      <!-- 검사 부스 -->
+      <g>
+        <path d="M400 160 H600 V300 H400 Z" fill="#172a45" stroke="#3d5a88"/>
+        <rect x="470" y="248" width="60" height="28" rx="5" fill="#25406a"/>
+        <circle cx="500" cy="270" r="9" fill="#0d1a2e" stroke="#7fa8ff" stroke-width="3"/>
+        <path class="scan" d="M488 280 L512 280 L560 430 L440 430 Z" fill="url(#gBeam)"/>
+        <path d="M400 300 V440 M600 300 V430" stroke="#3d5a88" stroke-width="6"/>
+        <!-- 측면 카메라 -->
+        <rect x="355" y="372" width="38" height="24" rx="4" fill="#25406a"/>
+        <circle cx="392" cy="384" r="6" fill="#0d1a2e" stroke="#7fa8ff" stroke-width="2"/>
+        <path class="scan" d="M396 380 L470 420 L470 448 L396 390 Z" fill="#7fa8ff" opacity=".35"/>
+        <text x="500" y="200" fill="#a9caff" font-size="13" font-family="IBM Plex Mono, monospace" text-anchor="middle" letter-spacing="2">VISION CHECK</text>
+        <text x="500" y="226" fill="#fff" font-size="20" font-weight="800" font-family="Pretendard, system-ui, sans-serif" text-anchor="middle">검사 통과 ✓</text>
+      </g>
+      <!-- 로봇팔 -->
+      <g transform="translate(700 150)">
+        <rect x="-40" y="230" width="80" height="22" rx="4" fill="#d9e2ee"/>
+        <rect x="-26" y="190" width="52" height="44" rx="8" fill="#eef3f9"/>
+        <rect x="-12" y="70" width="24" height="130" rx="12" fill="#e6edf6" transform="rotate(-12 0 200)"/>
+        <circle cx="20" cy="80" r="17" fill="#2f5fd8"/>
+        <rect x="8" y="64" width="22" height="120" rx="11" fill="#eef3f9" transform="rotate(62 20 80)"/>
+        <circle cx="-86" cy="26" r="13" fill="#2f5fd8"/>
+        <rect x="-96" y="30" width="20" height="40" rx="5" fill="#cfd9e6"/>
+        <path d="M-100 70 v18 M-72 70 v18" stroke="#cfd9e6" stroke-width="6" stroke-linecap="round"/>
+      </g>
+    </svg>
+    <div class="shell hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow"><i></i>VISION-INSPECTED BATTERIES</p>
+        <h1>한 알씩 바르게 검사한<br><em>AA 건전지</em></h1>
+        <p class="hero-desc">로봇팔이 팔레트에서 건전지를 하나씩 꺼내고,<br>카메라 세 대가 윗면과 양옆을 검사한 뒤에만 포장합니다.</p>
+        <div class="actions">
+          <a class="button primary" href="#product">제품 알아보기 <span aria-hidden="true">↓</span></a>
+          <a class="button light-outline" href="#order">주문하기 <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <dl class="shell">
+        <div><dt>검사 카메라</dt><dd>상단 1대, 측면 2대</dd></div>
+        <div><dt>검사 항목</dt><dd>찌그러짐, 녹, 라벨 불량</dd></div>
+        <div><dt>불량품 처리</dt><dd>자동 분류 후 기록</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 기업 소개 -->
+  <section id="company" class="section silver" data-nav-section>
+    <div class="shell">
+      <div class="heading">
+        <p class="eyebrow"><i></i>ABOUT BAREUN</p>
+        <h2>바른전지 기업 소개</h2>
+        <p>머신비전과 로봇으로 건전지 품질을 지키는 팀입니다.</p>
+      </div>
+      <div class="stories">
+        <div class="story">
+          <div class="story-copy">
+            <p>바른전지은 사람이 눈으로 하던 건전지 외관 검사를 카메라와 AI로 바꾸는 팀입니다. 검사하는 사람이나 날에 따라 기준이 달라지지 않도록, 모든 건전지를 같은 기준으로 봅니다.</p>
+            <p>팔레트 운반부터 집기, 검사, 분류까지 한 라인에서 자동으로 이어지며, 검사 결과는 건전지마다 데이터베이스에 남습니다.</p>
+          </div>
+          <div class="art">
+            <svg viewBox="0 0 480 300" aria-label="팔레트에 세워진 건전지 그림" role="img">
+              <rect width="480" height="300" fill="#dce6f2"/>
+              <path d="M70 230 L410 230 L440 262 L40 262 Z" fill="#fff" stroke="#b8c7da"/>
+              <g>
+                <use href="#cellUp" x="204" y="118" width="26" height="104"/><use href="#cellUp" x="250" y="118" width="26" height="104"/>
+                <use href="#cellUp" x="296" y="118" width="26" height="104"/>
+              </g>
+              <rect x="246" y="60" width="34" height="22" rx="5" fill="#25406a"/>
+              <path d="M255 82 L271 82 L300 116 L226 116 Z" fill="#7fa8ff" opacity=".35"/>
+              <text x="40" y="44" fill="#1456c7" font-size="13" font-weight="800" font-family="Pretendard, system-ui, sans-serif">2 × 3 팔레트</text>
+            </svg>
+          </div>
+        </div>
+        <div class="story reverse">
+          <div class="art">
+            <svg viewBox="0 0 480 300" aria-label="검사 결과 화면 그림" role="img">
+              <rect width="480" height="300" fill="#0f2038"/>
+              <rect x="30" y="30" width="420" height="240" rx="10" fill="#132a4a" stroke="#2c4a78"/>
+              <text x="54" y="66" fill="#a9caff" font-size="13" font-family="IBM Plex Mono, monospace">INSPECTION LOG</text>
+              <g font-family="Pretendard, system-ui, sans-serif" font-size="14">
+                <text x="54" y="104" fill="#c8d6ec">칸 [0,0]</text><text x="300" y="104" fill="#7fe0ae" font-weight="800">정상</text>
+                <text x="54" y="138" fill="#c8d6ec">칸 [0,1]</text><text x="300" y="138" fill="#7fe0ae" font-weight="800">정상</text>
+                <text x="54" y="172" fill="#c8d6ec">칸 [0,2]</text><text x="300" y="172" fill="#ff9b93" font-weight="800">불량 · 찌그러짐</text>
+                <text x="54" y="206" fill="#c8d6ec">칸 [1,0]</text><text x="300" y="206" fill="#7fe0ae" font-weight="800">정상</text>
+                <text x="54" y="240" fill="#c8d6ec">칸 [1,1]</text><text x="300" y="240" fill="#7fe0ae" font-weight="800">정상</text>
+              </g>
+              <path d="M54 118H426M54 152H426M54 186H426M54 220H426" stroke="#2c4a78"/>
+            </svg>
+          </div>
+          <div class="story-copy">
+            <h3>우리가 일하는 방식</h3>
+            <p>검사 기준은 숫자로 정합니다. 어떤 크기의 찌그러짐부터 불량인지, 녹이 어느 정도면 빼는지 미리 정해 두고 카메라가 그대로 판정합니다. 판정이 애매한 건전지는 출고하지 않습니다.</p>
+          </div>
+        </div>
+        <div>
+          <div class="story-copy"><h3>핵심 가치</h3></div>
+          <ul class="values">
+            <li><strong>모두 검사</strong>: 일부만 뽑아 보지 않고, 건전지 한 알 한 알을 모두 검사합니다.</li>
+            <li><strong>같은 기준</strong>: 사람과 시간에 따라 기준이 바뀌지 않습니다.</li>
+            <li><strong>기록이 남는 품질</strong>: 언제 어떤 불량이 몇 개 나왔는지 바로 확인할 수 있습니다.</li>
+            <li><strong>손대지 않는 라인</strong>: 운반부터 분류까지 사람 손을 거치지 않습니다.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 제품 소개 -->
+  <section id="product" class="section" data-nav-section>
+    <div class="shell">
+      <div class="heading split">
+        <div><p class="eyebrow"><i></i>PRODUCT</p><h2>바른전지 제품 소개</h2></div>
+        <p>모든 제품은 외관 검사를 통과한 건전지만 담습니다.<br>가격은 예시입니다.</p>
+      </div>
+      <div class="apps" id="apps"></div>
+    </div>
+  </section>
+
+  <!-- 검사 기술 -->
+  <section id="tech" class="section silver" data-nav-section>
+    <div class="shell">
+      <div class="tech">
+        <div>
+          <p class="eyebrow"><i></i>INSPECTION LINE</p>
+          <h2 style="margin-top:9px">세 방향에서 보고<br>한 번에 판정합니다.</h2>
+          <p>윗면은 상단 카메라가, 옆면은 양쪽 측면 카메라가 봅니다. 세 장의 사진을 AI가 함께 판단해 정상과 불량을 나눕니다.</p>
+          <dl class="specs">
+            <div><dt>카메라</dt><dd>상단 1대, 측면 2대</dd></div>
+            <div><dt>판정</dt><dd>정상 / 찌그러짐 / 녹 / 라벨 불량</dd></div>
+            <div><dt>기록</dt><dd>건전지마다 데이터베이스 저장</dd></div>
+          </dl>
+        </div>
+        <div class="tech-panel">
+          <b>검사 부스 구조</b>
+          <svg viewBox="0 0 460 300" role="img" aria-label="검사 부스 안에서 카메라 세 대가 건전지를 보는 구조">
+            <rect x="80" y="40" width="300" height="200" rx="6" fill="#1b2c47"/>
+            <rect x="80" y="40" width="300" height="200" rx="6" fill="none" stroke="#3d5a88" stroke-width="2"/>
+            <rect x="200" y="20" width="60" height="30" rx="5" fill="#2f5fd8"/>
+            <path d="M218 50 L242 50 L290 170 L170 170 Z" fill="url(#gBeam)"/>
+            <rect x="40" y="160" width="40" height="28" rx="5" fill="#2f5fd8"/>
+            <path d="M80 168 L170 178 L170 196 L80 182 Z" fill="#7fa8ff" opacity=".45"/>
+            <rect x="380" y="160" width="40" height="28" rx="5" fill="#2f5fd8"/>
+            <path d="M380 168 L290 178 L290 196 L380 182 Z" fill="#7fa8ff" opacity=".45"/>
+            <rect x="60" y="200" width="340" height="14" fill="#16824f" opacity=".8"/>
+            <use href="#cellSide" x="175" y="174" width="112" height="27"/>
+            <g font-family="Pretendard, system-ui, sans-serif" font-size="12" font-weight="700" fill="#102238">
+              <text x="270" y="18">상단 카메라</text>
+              <text x="0" y="214">측면 카메라</text>
+              <text x="388" y="214">측면 카메라</text>
+              <text x="190" y="262">컨베이어</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="modules">
+        <h3>라인을 이루는 장비</h3>
+        <div class="cards">
+          <div class="card"><div class="thumb"><svg viewBox="0 0 120 110"><rect x="18" y="40" width="84" height="40" rx="8" fill="#2f5fd8"/><rect x="24" y="30" width="72" height="14" rx="3" fill="#c9d7ea"/><circle cx="34" cy="84" r="9" fill="#24324a"/><circle cx="86" cy="84" r="9" fill="#24324a"/><rect x="30" y="50" width="30" height="8" rx="2" fill="#9fc0ff"/></svg></div><div class="card-copy"><b>AGV</b><span>바닥의 선을 따라 건전지 팔레트를 라인까지 옮깁니다.</span></div></div>
+          <div class="card"><div class="thumb"><svg viewBox="0 0 120 110"><rect x="40" y="88" width="40" height="12" rx="3" fill="#c9d7ea"/><rect x="50" y="56" width="20" height="36" rx="8" fill="#eef3f9" stroke="#b8c7da"/><circle cx="60" cy="54" r="9" fill="#2f5fd8"/><rect x="56" y="22" width="16" height="40" rx="8" fill="#eef3f9" stroke="#b8c7da" transform="rotate(40 60 54)"/><circle cx="82" cy="28" r="7" fill="#2f5fd8"/><path d="M80 36 v12 M88 36 v12" stroke="#7b8aa0" stroke-width="4" stroke-linecap="round"/></svg></div><div class="card-copy"><b>로봇팔</b><span>칸마다 건전지를 하나씩 집어 컨베이어에 올립니다.</span></div></div>
+          <div class="card"><div class="thumb"><svg viewBox="0 0 120 110"><rect x="30" y="30" width="60" height="36" rx="7" fill="#2f5fd8"/><circle cx="60" cy="48" r="12" fill="#0d1a2e" stroke="#9fc0ff" stroke-width="3"/><path d="M50 66 L70 66 L84 100 L36 100 Z" fill="#7fa8ff" opacity=".4"/></svg></div><div class="card-copy"><b>상단 카메라</b><span>윗면의 찌그러짐과 녹을 찾습니다.</span></div></div>
+          <div class="card"><div class="thumb"><svg viewBox="0 0 120 110"><rect x="10" y="40" width="30" height="24" rx="5" fill="#2f5fd8"/><rect x="80" y="40" width="30" height="24" rx="5" fill="#2f5fd8"/><use href="#cellSide" x="38" y="44" width="46" height="12"/><path d="M40 48 L60 52 L40 58 Z M80 48 L60 52 L80 58 Z" fill="#7fa8ff" opacity=".45"/></svg></div><div class="card-copy"><b>측면 카메라 2대</b><span>라벨 찢김과 옆면 흠집을 양쪽에서 봅니다.</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 주문 방법 -->
+  <section id="ordering" class="section" data-nav-section>
+    <div class="shell">
+      <div class="heading">
+        <p class="eyebrow"><i></i>HOW TO ORDER</p>
+        <h2>바른전지 주문 방법</h2>
+        <p>필요한 제품과 수량을 고르고 주문을 요청하면 담당자가 연락드립니다.</p>
+      </div>
+      <div class="steps">
+        <div class="step"><span class="num">1</span><h3>제품을 고릅니다.</h3><p>필요한 알카라인 구성을 고르세요. 많이 쓰는 곳이라면 24개입이 개당 가격이 가장 낮습니다.</p></div>
+        <div class="step"><span class="num">2</span><h3>수량을 정합니다.</h3><p>주문 페이지에서 제품마다 수량을 정하면 합계가 바로 계산됩니다.</p></div>
+        <div class="step"><span class="num">3</span><h3>주문을 요청합니다.</h3><p>이름과 연락처를 남기면 담당자가 확인 후 연락드립니다. 대량 주문은 따로 상담합니다.</p></div>
+      </div>
+      <div class="after-steps">
+        <a class="button primary" href="#order">주문 시작 <span aria-hidden="true">↗</span></a>
+        <small>실제 결제 없이 주문 요청만 보냅니다.</small>
+      </div>
+
+      <div class="heading" style="margin-top:72px">
+        <p class="eyebrow"><i></i>QUALITY STANDARD</p>
+        <h2>이런 건전지는 내보내지 않습니다</h2>
+        <p>카메라가 아래 불량을 찾으면 그 건전지는 포장 라인에서 빠집니다.</p>
+      </div>
+      <dl class="criteria">
+        <div><dt>찌그러짐</dt><dd>몸통이나 양 끝이 눌리거나 패인 건전지</dd><dd class="verdict">불량 처리</dd></div>
+        <div><dt>녹, 누액</dt><dd>양극·음극 단자에 녹이 슬었거나 액이 새어 나온 자국이 있는 건전지</dd><dd class="verdict">불량 처리</dd></div>
+        <div><dt>라벨 불량</dt><dd>겉 라벨이 찢어지거나 벗겨져 금속이 드러난 건전지</dd><dd class="verdict">불량 처리</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="shell">
+      <div>
+        <h2>검사를 통과한 건전지만 받아 보세요.</h2>
+        <p>제품과 수량을 고르면 합계가 바로 계산됩니다.</p>
+      </div>
+      <a class="button primary" href="#order">주문 페이지로 이동 <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
+</main>
+
+<!-- 주문 페이지 -->
+<main id="orderView" hidden>
+  <section class="page-banner">
+    <div class="shell">
+      <p class="eyebrow"><i></i>ORDER</p>
+      <h1>바른전지 주문</h1>
+      <p>제품과 수량을 고르고, 연락처를 남겨 주문을 요청하세요.</p>
+    </div>
+  </section>
+  <section class="section">
+    <div class="shell order-grid">
+      <div class="order-list" id="orderList"></div>
+      <aside class="summary" aria-labelledby="sumTitle">
+        <h2 id="sumTitle">주문 내역</h2>
+        <ul class="sum-lines" id="sumLines"></ul>
+        <div class="sum-total"><span>합계</span><span id="sumTotal">0원</span></div>
+        <div class="member-box" id="memberBox"></div>
+        <form id="orderForm" novalidate>
+          <label>이름<input name="name" autocomplete="name"></label>
+          <label>연락처<input name="phone" type="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+          <label>배송지 (필수)<input name="addr" autocomplete="street-address"></label>
+          <div class="cust-row">
+            <label>고객 유형<select name="ctype"><option value="personal">개인</option><option value="company">기업</option></select></label>
+            <label data-age>연령대 (선택)<select name="age"></select></label>
+            <label>지역 (선택)<select name="region"></select></label>
+          </div>
+          <p class="opt-note">연령대·지역은 주문 통계에만 씁니다. 지역은 배송지를 적으면 자동으로 골라집니다.</p>
+          <label>요청 사항<textarea name="memo" placeholder="배송 희망일, 대량 구매 문의 등"></textarea></label>
+          <button class="button primary" id="submitBtn" type="submit" disabled>주문하기</button>
+          <p class="form-msg" id="formMsg" role="status"></p>
+        </form>
+        <p class="demo-note" id="orderNote"></p>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<!-- 주문 완료 -->
+<main id="doneView" hidden>
+  <section class="page-banner"><div class="shell"><p class="eyebrow"><i></i>ORDER COMPLETE</p><h1>주문이 접수됐습니다</h1><p>검사를 통과한 건전지로 포장해서 보내드릴게요.</p></div></section>
+  <section class="section"><div class="narrow" id="doneBody"></div></section>
+</main>
+
+<!-- 로그인 / 회원가입 -->
+<main id="loginView" hidden>
+  <section class="page-banner"><div class="shell"><p class="eyebrow"><i></i>MEMBER</p><h1>로그인</h1><p>로그인하고 주문하면 마이페이지에서 주문 내역을 모아 볼 수 있습니다.</p></div></section>
+  <section class="section">
+    <div class="narrow">
+      <div class="panel">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tabLogin" aria-selected="true">로그인</button>
+          <button type="button" role="tab" id="tabJoin" aria-selected="false">회원가입</button>
+        </div>
+        <form id="loginForm" class="fields" novalidate>
+          <label>이메일<input name="email" type="email" autocomplete="email"></label>
+          <label>비밀번호<input name="pw" type="password" autocomplete="current-password"></label>
+          <button class="button primary" type="submit">로그인</button>
+          <p class="form-msg" id="loginMsg" role="status"></p>
+        </form>
+        <form id="joinForm" class="fields" novalidate hidden>
+          <label>이름<input name="name" autocomplete="name"></label>
+          <label>이메일<input name="email" type="email" autocomplete="email"></label>
+          <label>연락처<input name="phone" type="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+          <div class="cust-row">
+            <label>고객 유형<select name="ctype"><option value="personal">개인</option><option value="company">기업</option></select></label>
+            <label data-age>연령대 (선택)<select name="age"></select></label>
+            <label>지역 (선택)<select name="region"></select></label>
+          </div>
+          <p class="opt-note">연령대·지역은 주문 통계에만 씁니다. 주문할 때 자동으로 채워집니다.</p>
+          <label>비밀번호 (4자 이상)<input name="pw" type="password" autocomplete="new-password"></label>
+          <button class="button primary" type="submit">가입하고 로그인</button>
+          <p class="form-msg" id="joinMsg" role="status"></p>
+        </form>
+        <p class="demo-note">발표용 데모라서 회원 정보는 이 브라우저에만 저장됩니다. 실제 비밀번호는 쓰지 마세요.</p>
+      </div>
+      <div class="panel">
+        <h2>회원가입 없이 주문하셨나요?</h2>
+        <p>주문 완료 화면에서 받은 주문번호와 연락처로 주문을 조회할 수 있습니다.</p>
+        <div class="done-actions"><a class="button ghost" href="#lookup">비회원 주문 조회</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 마이페이지 -->
+<main id="mypageView" hidden>
+  <section class="page-banner"><div class="shell"><p class="eyebrow"><i></i>MY PAGE</p><h1 id="myTitle">마이페이지</h1><p>회원 정보와 주문 내역을 확인하세요.</p></div></section>
+  <section class="section">
+    <div class="narrow">
+      <div class="panel">
+        <div class="head-row"><h2>회원 정보</h2><button class="button ghost" type="button" id="logoutBtn" style="min-height:38px">로그아웃</button></div>
+        <dl class="info-grid" id="myInfo"></dl>
+      </div>
+      <div class="panel">
+        <h2>주문 내역</h2>
+        <p>최근 주문이 위에 나옵니다. 주문 접수 상태일 때만 취소할 수 있습니다.</p>
+        <div id="myOrders" style="margin-top:18px"></div>
+      </div>
+      <div class="panel">
+        <div class="head-row"><h2>내 문의</h2><a class="button ghost" href="#support" style="min-height:38px">문의하기</a></div>
+        <div id="myQna" style="margin-top:18px"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 비회원 주문 조회 -->
+<main id="lookupView" hidden>
+  <section class="page-banner"><div class="shell"><p class="eyebrow"><i></i>ORDER LOOKUP</p><h1>비회원 주문 조회</h1><p>주문 완료 화면에서 받은 주문번호와 주문할 때 적은 연락처를 넣어 주세요.</p></div></section>
+  <section class="section">
+    <div class="narrow">
+      <div class="panel">
+        <form id="lookupForm" class="fields" novalidate>
+          <label>주문번호<input name="no" placeholder="예: BR-20261111-7K3Q" autocapitalize="characters"></label>
+          <label>연락처<input name="phone" type="tel" placeholder="010-0000-0000"></label>
+          <button class="button primary" type="submit">주문 조회</button>
+          <p class="form-msg err" id="lookupMsg" role="status"></p>
+        </form>
+      </div>
+      <div id="lookupResult" style="margin-top:18px"></div>
+    </div>
+  </section>
+</main>
+
+<!-- 고객 문의 -->
+<main id="supportView" hidden>
+  <section class="page-banner"><div class="shell"><p class="eyebrow"><i></i>SUPPORT</p><h1>고객 문의</h1><p>자주 묻는 질문을 먼저 확인하고, 해결되지 않으면 문의를 남겨 주세요. 답변은 이 화면에서 연락처로 확인할 수 있습니다.</p></div></section>
+  <section class="section">
+    <div class="support-grid">
+      <div>
+        <div class="panel">
+          <h2>자주 묻는 질문</h2>
+          <div class="faq">
+            <details><summary>건전지는 어떻게 검사하나요?</summary><p>컨베이어 위에서 상단·측면 카메라로 외관과 극 방향을 보고, 무부하·부하 전압과 내부저항을 잽니다. 모든 기준을 통과한 A 등급만 포장해서 보내드립니다.</p></details>
+            <details><summary>주문하면 언제 받을 수 있나요?</summary><p>주문 접수 후 출고 검사를 거쳐 보통 1~2일 안에 출고됩니다. 출고되면 주문 조회에서 택배사와 송장번호를 볼 수 있습니다.</p></details>
+            <details><summary>주문을 취소하고 싶어요.</summary><p>주문 접수 상태일 때는 주문 조회나 마이페이지에서 바로 취소할 수 있습니다. 출고 검사가 시작된 뒤에는 문의를 남겨 주세요.</p></details>
+            <details><summary>받은 건전지가 이상해요. 교환되나요?</summary><p>받은 날부터 7일 안에 주문번호와 함께 문의를 남겨 주시면 확인 후 교환해 드립니다. 출고 검사 성적서로 어떤 검사를 거쳤는지도 확인해 드립니다.</p></details>
+            <details><summary>대량 구매도 되나요?</summary><p>24개입을 여러 개 주문하시거나, 문의 유형을 '대량 구매'로 골라 수량을 남겨 주세요.</p></details>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:18px">
+          <h2>내 문의 확인</h2>
+          <p>문의할 때 적은 연락처를 넣으면 답변을 볼 수 있습니다.</p>
+          <form id="qaLookupForm" class="fields" novalidate>
+            <label>연락처<input name="phone" type="tel" placeholder="010-0000-0000"></label>
+            <button class="button ghost" type="submit">문의 내역 보기</button>
+            <p class="form-msg err" id="qaLookupMsg" role="status"></p>
+          </form>
+          <div id="qaLookupResult" style="margin-top:14px"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>문의하기</h2>
+        <p>주문에 대한 문의는 주문번호를 함께 적어 주시면 더 빨리 확인할 수 있습니다.</p>
+        <form id="qaForm" class="fields" novalidate>
+          <label>이름<input name="name" autocomplete="name"></label>
+          <label>연락처<input name="phone" type="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+          <label>문의 유형
+            <select name="type">
+              <option>주문·배송</option><option>취소·교환</option><option>제품</option><option>대량 구매</option><option>기타</option>
+            </select>
+          </label>
+          <label>주문번호 (선택)<input name="orderNo" placeholder="예: BR-20261111-7K3Q" autocapitalize="characters"></label>
+          <label>문의 내용<textarea name="question" placeholder="궁금한 점을 적어 주세요."></textarea></label>
+          <button class="button primary" type="submit">문의 남기기</button>
+          <p class="form-msg" id="qaMsg" role="status"></p>
+        </form>
+        <p class="demo-note" id="qaNote"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot-brand">
+      <span class="wordmark"><span class="mark" aria-hidden="true"><svg width="18" height="11" viewBox="0 0 20 12"><rect x="0" y="1" width="16" height="10" rx="2" fill="#fff"/><rect x="16" y="4" width="3" height="4" rx="1" fill="#fff"/><rect x="0" y="1" width="9" height="10" rx="2" fill="#9fc0ff"/></svg></span>바른전지</span>
+      <span>© 2026 바른전지 · 1팀 프로젝트</span>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <a class="text-link" href="#lookup">주문 조회</a>
+      <a class="text-link" href="#support">고객 문의</a>
+      <a class="button nav-order" href="#order">주문하기 <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="mqtt.min.js"></script>
+<script>
+// ───── 바꿀 값 (주문 통신 규약 v1.0) ─────
+const USE_MQTT = true;                              // false: 서버 없이 이 브라우저에만 저장하는 발표용 데모 (v6과 같음)
+const BROKER_URL = "ws://192.168.0.158:9001";       // 서버 PC Mosquitto WebSocket
+const MQTT_USER = "web";
+const MQTT_PASS = "1234";                           // 홈페이지 코드에 보이는 공개 값 (규약 1-2)
+const ACK_WAIT_MS = 5000;                           // 주문·문의 받음 확인(ack) 기다리는 시간
+const CANCEL_WAIT_MS = 5000;                        // 취소 요청 후 '취소' 상태를 기다리는 시간
+const LOOKUP_WAIT_MS = 3000;                        // 다른 기기 주문 조회 때 상태를 기다리는 시간
+// mqtt.min.js가 없으면(파일을 같은 폴더에 안 둠) 데모로 동작
+const MQTT_ON = USE_MQTT && typeof mqtt !== "undefined";
+if (USE_MQTT && !MQTT_ON) console.warn("mqtt.min.js를 불러오지 못해 데모 모드로 동작합니다.");
+
+// 제품 — 이름, 설명, 가격은 여기서 바꾸면 됩니다
+const PRODUCTS = [
+  { id: "aa4",  name: "AA 알카라인 4개입",  short: "리모컨, 시계처럼 조금씩 쓰는 곳", desc: "집에서 가장 많이 쓰는 기본 구성입니다. 리모컨, 벽시계, 무선 마우스에 맞습니다.", volt: "1.5V", type: "일회용 알카라인", n: 4,  price: 3200,  green: false },
+  { id: "aa6",  name: "AA 알카라인 6개입",  short: "가족이 함께 쓰는 집, 작은 사무실", desc: "검사 라인의 팔레트 한 판(2×3)과 같은 크기의 6개 구성입니다. 4개입보다 넉넉하고 개당 가격이 낮습니다.", volt: "1.5V", type: "일회용 알카라인", n: 6,  price: 4700,  green: false },
+  { id: "aa12", name: "AA 알카라인 12개입", short: "장난감, 게임 패드처럼 자주 바꾸는 곳", desc: "건전지를 자주 바꾸는 집이나 사무실을 위한 구성입니다. 4개입보다 개당 가격이 낮습니다.", volt: "1.5V", type: "일회용 알카라인", n: 12, price: 8900,  green: false },
+  { id: "aa24", name: "AA 알카라인 24개입", short: "사무실, 매장, 학교의 비품용", desc: "여러 기기에 한꺼번에 쓰는 곳을 위한 대용량 구성입니다. 개당 가격이 가장 낮습니다.", volt: "1.5V", type: "일회용 알카라인", n: 24, price: 15900, green: false },
+  // aa6 (AA 6개입)은 11/21 추가: 팔레트 한 판(2×3)과 같은 크기 (11/21 aa8 → aa6 변경)
+  // aar2 (AA 충전지 2개입)는 11/20 판매 중지: 라인이 알카라인만 검사함. 지난 주문 기록은 주문 관리 쪽에 남아 있음
+];
+const won = v => v.toLocaleString("ko-KR") + "원";
+const qty = {};
+
+function packSvg(p, w = 300, h = 200) {
+  // 4개입: 1줄, 6개입: 2×3, 12·24개입: 뒷줄이 보이게 2줄로 그림
+  const sym = p.green ? "#cellUpG" : "#cellUp";
+  const per = p.n === 6 ? 3 : Math.min(p.n, 6), rows = p.n >= 6 ? 2 : 1;
+  const cw = Math.min(34, (w * 0.8) / (per * 1.3)), gap = cw * 0.3;
+  const total = per * cw + (per - 1) * gap, x0 = (w - total) / 2;
+  const ch = h * (rows === 2 ? 0.52 : 0.62);
+  let out = "";
+  for (let r = rows - 1; r >= 0; r--) {
+    const dx = r ? cw * 0.55 : 0, y = h * 0.2 + (r ? -h * 0.07 : 0);
+    if (r) out += `<g opacity=".72">`;
+    for (let i = 0; i < per; i++) out += `<use href="${sym}" x="${x0 + dx + i * (cw + gap)}" y="${y + (rows === 2 && !r ? h * 0.07 : 0)}" width="${cw}" height="${ch}"/>`;
+    if (r) out += `</g>`;
+  }
+  const label = p.n > 6 ? `<text x="${w - 14}" y="${h * 0.14}" text-anchor="end" font-size="${Math.max(11, w / 30)}" font-weight="800" fill="#1456c7" font-family="Pretendard, system-ui, sans-serif">총 ${p.n}개</text>` : "";
+  return `<svg viewBox="0 0 ${w} ${h}" aria-hidden="true"><ellipse cx="${w / 2}" cy="${h * 0.86}" rx="${total / 2 + 20}" ry="${h * 0.04}" fill="#9fb2c9" opacity=".35"/>${out}${label}</svg>`;
+}
+
+// 홈: 제품 소개 줄
+document.getElementById("apps").innerHTML = PRODUCTS.map(p => `
+  <div class="app">
+    <div class="art">${packSvg(p, 480, 300)}</div>
+    <div>
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <dl class="specs">
+        <div><dt>전압</dt><dd>${p.volt}</dd></div>
+        <div><dt>종류</dt><dd>${p.type}</dd></div>
+        <div><dt>추천</dt><dd>${p.short}</dd></div>
+      </dl>
+      <div class="price-line"><strong>${won(p.price)}</strong><a class="button nav-order" href="#order" data-pick="${p.id}">주문에 담기 <span aria-hidden="true">↗</span></a></div>
+    </div>
+  </div>`).join("");
+
+// 주문 페이지
+document.getElementById("orderList").innerHTML = PRODUCTS.map(p => `
+  <div class="order-item">
+    <div class="mini">${packSvg(p, 200, 168)}</div>
+    <div><b>${p.name}</b><span class="sub">${p.volt} · ${p.type}</span><span class="won">${won(p.price)}</span></div>
+    <div class="stepper" role="group" aria-label="${p.name} 수량">
+      <button type="button" data-dec="${p.id}" aria-label="하나 빼기">−</button>
+      <output id="q-${p.id}">0</output>
+      <button type="button" data-inc="${p.id}" aria-label="하나 더하기">+</button>
+    </div>
+  </div>`).join("");
+
+function renderSummary() {
+  const picked = PRODUCTS.filter(p => qty[p.id] > 0);
+  PRODUCTS.forEach(p => (document.getElementById("q-" + p.id).textContent = qty[p.id] || 0));
+  document.getElementById("sumLines").innerHTML = picked.length
+    ? picked.map(p => `<li><span>${p.name} × ${qty[p.id]}</span><span>${won(p.price * qty[p.id])}</span></li>`).join("")
+    : '<li class="empty">왼쪽에서 제품 수량을 정하면 여기에 표시됩니다.</li>';
+  document.getElementById("sumTotal").textContent = won(picked.reduce((s, p) => s + p.price * qty[p.id], 0));
+  document.getElementById("submitBtn").disabled = !picked.length;
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-inc],[data-dec],[data-pick]");
+  if (!b) return;
+  const d = b.dataset;
+  if (d.inc) qty[d.inc] = (qty[d.inc] || 0) + 1;
+  if (d.dec) qty[d.dec] = Math.max(0, (qty[d.dec] || 0) - 1);
+  if (d.pick) qty[d.pick] = Math.max(1, qty[d.pick] || 0);
+  renderSummary();
+});
+
+
+// ───── 저장소 (이 브라우저에만 저장) ─────
+// MQTT 모드에서도 내 주문·문의 목록은 이 브라우저에 두고, 상태·답변만 서버에서 받는다.
+const mem = {};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return k in mem ? mem[k] : d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { mem[k] = v; } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { delete mem[k]; } },
+};
+const K = { users: "bareun_users", orders: "bareun_orders", session: "bareun_session", qna: "bareun_inquiries" };
+const digits = t => String(t || "").replace(/\D/g, "");
+const esc = t => String(t || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const me = () => { const em = store.get(K.session, null); return em ? store.get(K.users, {})[em] || null : null; };
+
+// ───── 시각·번호 (규약 2장) ─────
+const NO_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // 헷갈리는 0 O 1 I 제외
+const ymdOf = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+const rand4 = () => Array.from({ length: 4 }, () => NO_CHARS[Math.floor(Math.random() * NO_CHARS.length)]).join("");
+/** 규약 시각: 한국 시간 "YYYY-MM-DD HH:MM:SS.mmm" */
+const kstTs = (d = new Date()) => new Date(d.getTime() + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 23);
+/** 규약 시각 또는 ISO 시각 → Date */
+const toDate = s => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/.test(s) ? new Date(s.replace(" ", "T") + "+09:00") : new Date(s));
+function newOrderNo() {
+  let no;
+  do { no = "BR-" + ymdOf(new Date()) + "-" + rand4(); } while (store.get(K.orders, []).some(o => o.no === no));
+  return no;
+}
+function newQnaNo() {
+  let no;
+  do { no = "Q-" + ymdOf(new Date()) + "-" + rand4(); } while (store.get(K.qna, []).some(q => q.no === no));
+  return no;
+}
+function fmtDate(s) {
+  const d = toDate(s);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// ───── 서버 연결 (MQTT over WebSocket) ─────
+const bus = { client: null, online: false, watched: new Set(), waiters: new Set(), remote: {} };
+
+function busStart() {
+  if (!MQTT_ON) return;
+  // 내가 한 주문의 상태, 내가 남긴 문의의 답변을 구독할 목록 (재접속 때마다 다시 구독)
+  store.get(K.orders, []).forEach(o => bus.watched.add("order/status/" + o.no));
+  store.get(K.qna, []).forEach(q => bus.watched.add("inquiry/answer/" + q.no));
+  bus.client = mqtt.connect(BROKER_URL, {
+    username: MQTT_USER, password: MQTT_PASS,
+    clientId: "web-" + Math.random().toString(36).slice(2, 10),
+    clean: true, reconnectPeriod: 3000, connectTimeout: 5000,
+  });
+  bus.client.on("connect", () => {
+    bus.online = true;
+    bus.client.subscribe(["order/ack", "inquiry/ack", ...bus.watched], { qos: 1 });
+    showConn();
+  });
+  bus.client.on("close", () => { if (bus.online) { bus.online = false; showConn(); } });
+  bus.client.on("error", e => console.warn("MQTT:", e.message));
+  bus.client.on("message", onBusMessage);
+}
+
+function watch(topic) {
+  if (!MQTT_ON || bus.watched.has(topic)) return;
+  bus.watched.add(topic);
+  if (bus.online) bus.client.subscribe(topic, { qos: 1 });
+}
+
+/** 조건에 맞는 메시지를 ms 동안 기다림 → 메시지 또는 null. 보내기 전에 먼저 불러 둔다. */
+function waitFor(test, ms) {
+  return new Promise(resolve => {
+    const w = { test, resolve };
+    w.timer = setTimeout(() => { bus.waiters.delete(w); resolve(null); }, ms);
+    bus.waiters.add(w);
+  });
+}
+
+/** QoS 1로 보내고 브로커가 받았는지(PUBACK) → true / false */
+function publish1(topic, body) {
+  return new Promise(resolve => {
+    if (!bus.online) return resolve(false);
+    const t = setTimeout(() => resolve(false), ACK_WAIT_MS);
+    bus.client.publish(topic, JSON.stringify(body), { qos: 1 }, err => { clearTimeout(t); resolve(!err); });
+  });
+}
+
+function onBusMessage(topic, payload) {
+  if (!payload.length) return;               // retained 기록을 지운 것
+  let m;
+  try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+  bus.waiters.forEach(w => {
+    if (w.test(topic, m)) { clearTimeout(w.timer); bus.waiters.delete(w); w.resolve(m); }
+  });
+  if (topic.startsWith("order/status/")) {
+    const no = topic.slice("order/status/".length);
+    bus.remote[no] = m;
+    const list = store.get(K.orders, []), o = list.find(x => x.no === no);
+    if (o) {
+      Object.assign(o, { status: m.status, courier: m.courier || null, tracking: m.tracking || null, certNo: m.cert_no || null, statusAt: m.ts });
+      store.set(K.orders, list);
+    }
+    refreshView();
+  } else if (topic === "inquiry/ack" && m.ok) {
+    // 늦게 온 받음 확인: '접수 확인 중' → '답변 대기'
+    const list = store.get(K.qna, []), q = list.find(x => x.no === m.no && x.pending);
+    if (q) { q.pending = false; store.set(K.qna, list); refreshView(); }
+  } else if (topic.startsWith("inquiry/answer/")) {
+    const no = topic.slice("inquiry/answer/".length);
+    const list = store.get(K.qna, []), q = list.find(x => x.no === no);
+    if (q) { q.answer = m.answer; q.answeredAt = m.ts; store.set(K.qna, list); refreshView(); }
+  }
+}
+
+function showConn() {
+  const text = !MQTT_ON
+    ? null
+    : bus.online ? "● 주문 서버에 연결됨" : "○ 주문 서버에 연결하는 중… (연결되지 않으면 주문·문의를 보낼 수 없습니다)";
+  document.getElementById("orderNote").textContent = text
+    ? text + " · 실제 결제는 없습니다."
+    : "발표용 데모입니다. 실제 결제는 없고, 주문 정보는 이 브라우저에만 저장됩니다.";
+  document.getElementById("qaNote").textContent = text
+    ? text
+    : "발표용 데모입니다. 문의는 이 브라우저에 저장되고, 몇 분 뒤 예시 답변이 달립니다.";
+}
+
+let toastTimer = null;
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text; el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 4500);
+}
+
+// ───── 주문 상태 ─────
+const STEPS = ["주문 접수", "출고 검사", "배송 중", "배송 완료"];
+const STATUS_IDX = { received: 0, inspect: 1, shipping: 2, delivered: 3 };
+/** -1 취소, 0~3 단계, null 접수 확인 중(서버 상태가 아직 없음) */
+function stepOf(o) {
+  if (o.canceled || o.status === "canceled") return -1;
+  if (MQTT_ON) return o.status in STATUS_IDX ? STATUS_IDX[o.status] : null;
+  const min = (Date.now() - new Date(o.date).getTime()) / 60000;   // 데모: 주문 후 지난 시간으로 진행
+  return min < 1 ? 0 : min < 3 ? 1 : min < 6 ? 2 : 3;
+}
+function orderCard(o, canCancel) {
+  const st = stepOf(o);
+  const badge = st === null ? '<span class="badge wait">접수 확인 중</span>'
+    : st < 0 ? '<span class="badge cancel">주문 취소</span>'
+    : `<span class="badge${st === 3 ? " done" : ""}">${STEPS[st]}</span>`;
+  const track = st === null || st < 0 ? "" : `<ol class="track">${STEPS.map((t, i) => `<li class="${i <= st ? "on" : ""}">${t}</li>`).join("")}</ol>`;
+  const ship = o.tracking ? `<p class="oc-meta">택배 ${esc(o.courier)} · 송장번호 <span class="oc-no" style="font-size:13px">${esc(o.tracking)}</span></p>` : "";
+  const cert = o.certNo ? `<p class="oc-meta">검사 성적서 ${esc(o.certNo)}</p>` : "";
+  const body = o.remote
+    ? `<p class="oc-meta">이 기기에서 한 주문이 아니어서 상태와 송장만 보여 드립니다.</p>`
+    : `<ul class="oc-items">${o.items.map(i => `<li><span>${esc(i.name)} × ${i.qty}</span><span>${won(i.price * i.qty)}</span></li>`).join("")}</ul>
+    <div class="oc-total"><span>합계</span><span>${won(o.total)}</span></div>
+    <p class="oc-meta">받는 분 ${esc(o.name)} · ${esc(o.phone)}${o.addr ? "<br>배송지 " + esc(o.addr) : ""}${o.memo ? "<br>요청 사항 " + esc(o.memo) : ""}</p>`;
+  const pending = st === null ? `<p class="oc-meta">주문 서버의 접수 확인을 기다리는 중입니다. 잠시 뒤 이 화면이 저절로 바뀝니다.</p>` : "";
+  return `<article class="order-card">
+    <div class="oc-head"><span><span class="oc-no">${o.no}</span> ${badge}</span><span class="oc-date">${o.date ? fmtDate(o.date) + " 주문" : ""}</span></div>
+    ${track}${pending}${ship}${cert}${body}
+    <div class="oc-actions"><a class="ask-link" href="#support" data-ask="${o.no}">이 주문 문의하기</a>${canCancel && st === 0 ? `<button class="link-btn" type="button" data-cancel="${o.no}">주문 취소</button>` : ""}</div>
+  </article>`;
+}
+
+let lastOrderNo = null;
+
+// ───── 고객 정보: 고객 유형·연령대·지역 (주문 통계용, 선택 항목) ─────
+const AGE_GROUPS = [["none", "선택 안 함"], ["10s", "10대"], ["20s", "20대"], ["30s", "30대"], ["40s", "40대"], ["50s+", "50대 이상"]];
+const REGIONS = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
+const REGION_ALIAS = { "충청북": "충북", "충청남": "충남", "전라북": "전북", "전라남": "전남", "경상북": "경북", "경상남": "경남" };
+const CTYPE_KO = { personal: "개인", company: "기업" };
+const AGE_KO = Object.fromEntries(AGE_GROUPS);
+function regionFromAddr(addr) {
+  const a = addr.replace(/\s/g, "");
+  for (const k in REGION_ALIAS) if (a.startsWith(k)) return REGION_ALIAS[k];
+  return REGIONS.find(r => a.startsWith(r)) || "";
+}
+function setupCustFields(f) {
+  f.age.innerHTML = AGE_GROUPS.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  f.region.innerHTML = `<option value="none">선택 안 함</option>` + REGIONS.map(r => `<option value="${r}">${r}</option>`).join("");
+  const sync = () => {
+    const company = f.ctype.value === "company";
+    f.querySelector("[data-age]").hidden = company;
+    if (company) f.age.value = "none";
+  };
+  f.ctype.addEventListener("change", sync);
+  f.region.addEventListener("change", () => { f.region.dataset.picked = "1"; });
+  if (f.addr) f.addr.addEventListener("input", () => {
+    if (f.region.dataset.picked) return;            // 손님이 직접 고른 값은 덮어쓰지 않음
+    f.region.value = regionFromAddr(f.addr.value) || "none";
+  });
+  f.addEventListener("reset", () => setTimeout(() => { delete f.region.dataset.picked; sync(); }));
+  sync();
+}
+function custValues(f) {
+  return { customer_type: f.ctype.value, age_group: f.ctype.value === "company" ? "none" : f.age.value, region: f.region.value };
+}
+setupCustFields(document.getElementById("orderForm"));
+setupCustFields(document.getElementById("joinForm"));
+
+// ───── 주문하기 ─────
+function renderMemberBox() {
+  const u = me(), box = document.getElementById("memberBox"), f = document.getElementById("orderForm");
+  if (u) {
+    box.innerHTML = `<b>${esc(u.name)}</b>님으로 주문합니다. 주문 내역은 <a href="#mypage">마이페이지</a>에 저장됩니다.`;
+    if (!f.name.value) f.name.value = u.name;
+    if (!f.phone.value) f.phone.value = u.phone;
+    if (u.customer_type && !f.region.dataset.picked) {
+      f.ctype.value = u.customer_type; f.ctype.dispatchEvent(new Event("change"));
+      f.age.value = u.age_group || "none";
+      if (u.region && u.region !== "none") { f.region.value = u.region; f.region.dataset.picked = "1"; }
+    }
+  } else {
+    box.innerHTML = `비회원으로 주문하면 <b>주문번호</b>를 드립니다. 주문번호와 연락처로 조회할 수 있어요.<br>회원이라면 <a href="#login" data-after="order">로그인</a>하고 주문하세요.`;
+  }
+}
+
+// 보냈는데 실패해서 다시 누르면 같은 주문번호·시각으로 다시 보낸다 → 주문 관리가 같은 주문으로 보고 중복 접수하지 않음
+let pendingOrder = null;
+
+async function sendOrder(p) {
+  const body = { no: p.no, ts: kstTs(p.date), name: p.base.name, phone: p.base.phone, addr: p.base.addr, memo: p.base.memo,
+                 items: p.base.items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price })), total: p.base.total,
+                 customer_type: p.base.customer_type, age_group: p.base.age_group, region: p.base.region };
+  const ackWait = waitFor((t, m) => t === "order/ack" && m.no === p.no, ACK_WAIT_MS);
+  if (!(await publish1("order/new", body))) return { sent: false };
+  return { sent: true, ack: await ackWait };
+}
+
+document.getElementById("orderForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("formMsg"), btn = document.getElementById("submitBtn");
+  const fail = t => { msg.className = "form-msg err"; msg.textContent = t; };
+  const picked = PRODUCTS.filter(p => qty[p.id] > 0);
+  if (!picked.length) return fail("제품 수량을 1개 이상 정해 주세요.");
+  if (!f.name.value.trim() || digits(f.phone.value).length < 9) return fail("이름과 연락처를 적어 주세요. 연락처는 주문 조회할 때 필요합니다.");
+  if (!f.addr.value.trim()) return fail("배송지를 적어 주세요.");
+  const u = me();
+  const base = {
+    items: picked.map(p => ({ id: p.id, name: p.name, qty: qty[p.id], price: p.price })),
+    total: picked.reduce((s, p) => s + p.price * qty[p.id], 0),
+    name: f.name.value.trim(), phone: f.phone.value.trim(), addr: f.addr.value.trim(), memo: f.memo.value.trim(),
+    ...custValues(f),
+  };
+  let status;   // MQTT: "received"(접수 확인됨) 또는 undefined(확인 중)
+
+  if (MQTT_ON) {
+    if (!bus.online) return fail("주문 서버에 연결되지 않았습니다. 잠시 후 다시 눌러 주세요.");
+    const sig = JSON.stringify(base);
+    if (!pendingOrder || pendingOrder.sig !== sig) pendingOrder = { sig, base, no: newOrderNo(), date: new Date() };
+    btn.disabled = true; msg.className = "form-msg"; msg.textContent = "주문을 보내는 중…";
+    let r = await sendOrder(pendingOrder);
+    if (r.ack && r.ack.error === "DUPLICATE_NO") {      // 다른 브라우저와 번호가 겹침 → 새 번호로 한 번 더
+      pendingOrder.no = newOrderNo();
+      r = await sendOrder(pendingOrder);
+    }
+    btn.disabled = false;
+    if (!r.sent) return fail("전송에 실패했습니다. 다시 눌러 주세요 (같은 주문으로 다시 보냅니다).");
+    if (r.ack && !r.ack.ok) {
+      pendingOrder = null;
+      return fail({
+        PRICE_MISMATCH: "가격이 바뀌었습니다. 페이지를 새로 고친 뒤 다시 주문해 주세요.",
+        BAD_FORMAT: "주문 내용을 확인해 주세요 (이름·연락처·배송지).",
+        DUPLICATE_NO: "주문번호가 겹쳤습니다. 한 번 더 눌러 주세요.",
+      }[r.ack.error] || `주문이 접수되지 않았습니다 (${r.ack.error}).`);
+    }
+    status = r.ack ? "received" : undefined;           // ack가 없으면 '접수 확인 중' (다시 주문하게 하지 않음)
+  }
+
+  const order = {
+    no: MQTT_ON ? pendingOrder.no : newOrderNo(),
+    date: (MQTT_ON ? pendingOrder.date : new Date()).toISOString(),
+    ...base, member: u ? u.email : null, canceled: false, status,
+  };
+  pendingOrder = null;
+  store.set(K.orders, [order, ...store.get(K.orders, [])]);
+  watch("order/status/" + order.no);
+  msg.textContent = "";
+  f.reset();
+  Object.keys(qty).forEach(k => delete qty[k]);
+  renderSummary();
+  lastOrderNo = order.no;
+  location.hash = "#done";
+});
+
+function renderDone() {
+  const o = store.get(K.orders, []).find(x => x.no === lastOrderNo);
+  const body = document.getElementById("doneBody");
+  if (!o) { body.innerHTML = `<div class="empty-box">표시할 주문이 없습니다.<br><a class="button primary" href="#order">주문하러 가기</a></div>`; return; }
+  const guest = !o.member;
+  body.innerHTML = `
+    <div class="panel">
+      <h2>${guest ? "주문번호를 꼭 저장해 두세요" : "주문이 마이페이지에 저장됐습니다"}</h2>
+      <p>${guest ? "비회원 주문은 이 주문번호와 연락처로만 조회할 수 있습니다." : "마이페이지에서 주문 상태를 언제든 확인할 수 있습니다."}</p>
+      <div class="order-no"><strong id="doneNo">${o.no}</strong><button class="copy" type="button" id="copyNo">주문번호 복사</button></div>
+      <div class="done-actions">
+        ${guest ? '<a class="button primary" href="#lookup" data-fill="1">이 주문 조회하기</a>' : '<a class="button primary" href="#mypage">마이페이지에서 보기</a>'}
+        <a class="button ghost" href="#home">홈으로</a>
+      </div>
+    </div>
+    <div class="panel">${orderCard(o, false)}</div>`;
+  document.getElementById("copyNo").onclick = async ev => {
+    try { await navigator.clipboard.writeText(o.no); ev.target.textContent = "복사됨"; }
+    catch (err) { ev.target.textContent = "직접 적어 두세요"; }
+  };
+  const fill = body.querySelector("[data-fill]");
+  if (fill) fill.onclick = () => { const lf = document.getElementById("lookupForm"); lf.no.value = o.no; lf.phone.value = o.phone; setTimeout(() => lf.requestSubmit(), 0); };
+}
+
+// ───── 로그인 / 회원가입 (이 브라우저에만 저장, 규약 범위 밖) ─────
+let afterLogin = "#mypage";
+function showTab(join) {
+  document.getElementById("tabLogin").setAttribute("aria-selected", String(!join));
+  document.getElementById("tabJoin").setAttribute("aria-selected", String(join));
+  document.getElementById("loginForm").hidden = join;
+  document.getElementById("joinForm").hidden = !join;
+}
+document.getElementById("tabLogin").onclick = () => showTab(false);
+document.getElementById("tabJoin").onclick = () => showTab(true);
+document.getElementById("loginForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("loginMsg");
+  const u = store.get(K.users, {})[f.email.value.trim().toLowerCase()];
+  if (!u || u.pw !== f.pw.value) { msg.className = "form-msg err"; msg.textContent = "이메일이나 비밀번호가 맞지 않습니다. 처음이라면 회원가입 탭을 눌러 주세요."; return; }
+  store.set(K.session, u.email);
+  f.reset(); msg.textContent = "";
+  location.hash = afterLogin;
+});
+document.getElementById("joinForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("joinMsg");
+  const email = f.email.value.trim().toLowerCase();
+  msg.className = "form-msg err";
+  if (!f.name.value.trim()) return (msg.textContent = "이름을 적어 주세요.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return (msg.textContent = "이메일 형식을 확인해 주세요.");
+  if (digits(f.phone.value).length < 9) return (msg.textContent = "연락처를 적어 주세요.");
+  if (f.pw.value.length < 4) return (msg.textContent = "비밀번호는 4자 이상으로 정해 주세요.");
+  const users = store.get(K.users, {});
+  if (users[email]) return (msg.textContent = "이미 가입된 이메일입니다. 로그인 탭에서 로그인해 주세요.");
+  users[email] = { name: f.name.value.trim(), email, phone: f.phone.value.trim(), pw: f.pw.value, joined: new Date().toISOString(), ...custValues(f) };
+  store.set(K.users, users);
+  store.set(K.session, email);
+  f.reset(); msg.textContent = "";
+  location.hash = afterLogin;
+});
+document.getElementById("logoutBtn").onclick = () => { store.del(K.session); location.hash = "#home"; };
+
+// ───── 마이페이지 ─────
+function renderMypage() {
+  const u = me();
+  document.getElementById("myTitle").textContent = `${u.name}님의 마이페이지`;
+  document.getElementById("myInfo").innerHTML = `<dt>이름</dt><dd>${esc(u.name)}</dd><dt>이메일</dt><dd>${esc(u.email)}</dd><dt>연락처</dt><dd>${esc(u.phone)}</dd><dt>고객 유형</dt><dd>${CTYPE_KO[u.customer_type] || "-"}</dd>${u.customer_type === "company" ? "" : `<dt>연령대</dt><dd>${AGE_KO[u.age_group] || "선택 안 함"}</dd>`}<dt>지역</dt><dd>${u.region && u.region !== "none" ? esc(u.region) : "선택 안 함"}</dd><dt>가입일</dt><dd>${fmtDate(u.joined).slice(0, 10)}</dd>`;
+  const mine = store.get(K.orders, []).filter(o => o.member === u.email);
+  document.getElementById("myOrders").innerHTML = mine.length
+    ? mine.map(o => orderCard(o, true)).join("")
+    : `<div class="empty-box">아직 주문 내역이 없습니다.<br><a class="button primary" href="#order">첫 주문하기</a></div>`;
+  const qs = store.get(K.qna, []).filter(q => q.member === u.email || digits(q.phone) === digits(u.phone));
+  document.getElementById("myQna").innerHTML = qs.length
+    ? qs.map(qaCard).join("")
+    : `<div class="empty-box">남긴 문의가 없습니다.</div>`;
+}
+
+// ───── 고객 문의 (규약 4장) ─────
+const TYPE_CODE = { "주문·배송": "delivery", "취소·교환": "cancel", "제품": "product", "대량 구매": "bulk", "기타": "etc" };
+const DEMO_ANSWER = {   // 데모 모드(USE_MQTT=false)에서만 씀
+  "주문·배송": "문의 주셔서 감사합니다. 확인해 보니 출고 검사를 마치고 오늘 중 출고될 예정입니다. 출고되면 주문 조회에서 송장번호를 보실 수 있습니다.",
+  "취소·교환": "불편을 드려 죄송합니다. 주문번호 확인 후 교환 절차를 안내해 드리겠습니다. 받으신 건전지는 보내실 필요 없이 사진만 문의에 남겨 주세요.",
+  "제품": "바른전지 건전지는 외관·극 방향·전압·내부저항 검사를 모두 통과한 A 등급만 출고합니다. 기기에 맞는 제품을 추천해 드릴게요.",
+  "대량 구매": "대량 구매 문의 감사합니다. 수량과 희망 날짜를 알려 주시면 라인 일정에 맞춰 견적을 드리겠습니다.",
+  "기타": "문의 주셔서 감사합니다. 확인 후 답변드리겠습니다.",
+};
+function answerOf(q) {
+  if (q.answer) return { text: q.answer, at: q.answeredAt };
+  if (MQTT_ON) return null;
+  const min = (Date.now() - new Date(q.date).getTime()) / 60000;   // 데모: 2분 뒤 예시 답변
+  return min >= 2 ? { text: DEMO_ANSWER[q.type] || DEMO_ANSWER["기타"], at: new Date(new Date(q.date).getTime() + 120000).toISOString() } : null;
+}
+function qaCard(q) {
+  const a = answerOf(q);
+  const state = a ? '<span class="badge done">답변 완료</span>'
+    : q.pending ? '<span class="badge wait">접수 확인 중</span>' : '<span class="badge wait">답변 대기</span>';
+  return `<article class="qa-card">
+    <div class="oc-head"><span><span class="oc-no">${q.no}</span> ${state} <span class="badge">${esc(q.type)}</span></span><span class="oc-date">${fmtDate(q.date)}</span></div>
+    ${q.orderNo ? `<p class="oc-meta">주문번호 <span class="oc-no" style="font-size:13px">${esc(q.orderNo)}</span></p>` : ""}
+    <p class="qa-q">${esc(q.question)}</p>
+    ${a ? `<div class="qa-a"><b>바른전지 답변 · ${fmtDate(a.at)}</b>${esc(a.text)}</div>` : ""}
+  </article>`;
+}
+let askOrderNo = null;
+function renderSupport() {
+  const f = document.getElementById("qaForm"), u = me();
+  if (u) { if (!f.name.value) f.name.value = u.name; if (!f.phone.value) f.phone.value = u.phone; }
+  if (askOrderNo) { f.orderNo.value = askOrderNo; f.type.value = "주문·배송"; askOrderNo = null; }
+  document.getElementById("qaMsg").textContent = "";
+}
+
+async function sendInquiry(q) {
+  const body = { no: q.no, ts: kstTs(new Date(q.date)), name: q.name, phone: q.phone, type: TYPE_CODE[q.type] || "etc",
+                 order_no: q.orderNo, question: q.question };
+  const ackWait = waitFor((t, m) => t === "inquiry/ack" && m.no === q.no, ACK_WAIT_MS);
+  if (!(await publish1("inquiry/new", body))) return { sent: false };
+  return { sent: true, ack: await ackWait };
+}
+
+document.getElementById("qaForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("qaMsg"), btn = f.querySelector("button[type=submit]");
+  msg.className = "form-msg err";
+  if (!f.name.value.trim() || digits(f.phone.value).length < 9) { msg.textContent = "이름과 연락처를 넣어 주세요."; return; }
+  const question = f.question.value.trim();
+  if (question.length < 5) { msg.textContent = "문의 내용을 5자 이상 적어 주세요."; return; }
+  if (question.length > 1000) { msg.textContent = "문의 내용은 1000자 이하로 적어 주세요."; return; }
+  const orderNo = f.orderNo.value.trim().toUpperCase();
+  if (orderNo && !/^BR-\d{8}-[A-Z0-9]{4}$/.test(orderNo)) { msg.textContent = "주문번호 형식을 확인해 주세요 (예: BR-20261117-7K3Q)."; return; }
+  const u = me();
+  const q = { no: newQnaNo(), date: new Date().toISOString(), name: f.name.value.trim(), phone: f.phone.value.trim(),
+              type: f.type.value, orderNo: orderNo || null, question, member: u ? u.email : null };
+
+  if (MQTT_ON) {
+    if (!bus.online) { msg.textContent = "주문 서버에 연결되지 않았습니다. 잠시 후 다시 눌러 주세요."; return; }
+    btn.disabled = true; msg.className = "form-msg"; msg.textContent = "문의를 보내는 중…";
+    let r = await sendInquiry(q);
+    if (r.ack && r.ack.error === "DUPLICATE_NO") { q.no = newQnaNo(); r = await sendInquiry(q); }
+    btn.disabled = false;
+    msg.className = "form-msg err";
+    if (!r.sent) { msg.textContent = "전송에 실패했습니다. 다시 눌러 주세요."; return; }
+    if (r.ack && !r.ack.ok) { msg.textContent = "문의가 접수되지 않았습니다. 내용을 확인해 주세요."; return; }
+    q.pending = !r.ack;
+  }
+
+  const list = store.get(K.qna, []); list.unshift(q); store.set(K.qna, list);
+  watch("inquiry/answer/" + q.no);
+  f.question.value = ""; f.orderNo.value = "";
+  msg.className = "form-msg";
+  msg.textContent = `문의가 접수됐습니다 (${q.no}). 아래 '내 문의 확인'에서 연락처로 답변을 볼 수 있습니다.`;
+  const lf = document.getElementById("qaLookupForm"); lf.phone.value = q.phone; lf.requestSubmit();
+});
+
+let lastQaPhone = null;
+function renderQaLookup() {
+  const out = document.getElementById("qaLookupResult"), msg = document.getElementById("qaLookupMsg");
+  if (!lastQaPhone) { out.innerHTML = ""; return; }
+  const qs = store.get(K.qna, []).filter(q => digits(q.phone) === lastQaPhone);
+  msg.textContent = qs.length ? "" : "이 브라우저에서 이 연락처로 남긴 문의가 없습니다.";
+  out.innerHTML = qs.map(qaCard).join("");
+}
+document.getElementById("qaLookupForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("qaLookupMsg");
+  if (digits(f.phone.value).length < 9) { lastQaPhone = null; renderQaLookup(); msg.textContent = "연락처를 넣어 주세요."; return; }
+  lastQaPhone = digits(f.phone.value);
+  renderQaLookup();
+});
+
+// ───── 비회원 주문 조회 ─────
+let lastLookup = null;   // { no, phone, remote }
+function renderLookup() {
+  const out = document.getElementById("lookupResult");
+  if (!lastLookup) { out.innerHTML = ""; return; }
+  const local = store.get(K.orders, []).find(x => x.no === lastLookup.no && digits(x.phone) === lastLookup.phone);
+  if (local) { out.innerHTML = orderCard(local, true); return; }
+  const m = bus.remote[lastLookup.no];
+  out.innerHTML = m ? orderCard({ no: m.no, remote: true, status: m.status, courier: m.courier, tracking: m.tracking,
+                                  certNo: m.cert_no, phone: lastLookup.phone }, true) : "";
+}
+document.getElementById("lookupForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, msg = document.getElementById("lookupMsg");
+  const no = f.no.value.trim().toUpperCase(), phone = digits(f.phone.value);
+  lastLookup = null; renderLookup();
+  if (!no || !phone) { msg.textContent = "주문번호와 연락처를 모두 넣어 주세요."; return; }
+  const notFound = "일치하는 주문이 없습니다. 주문번호(예: BR-20261117-7K3Q)와 주문할 때 적은 연락처를 확인해 주세요.";
+  const local = store.get(K.orders, []).find(x => x.no === no && digits(x.phone) === phone);
+  if (local) { watch("order/status/" + no); msg.textContent = ""; lastLookup = { no, phone }; renderLookup(); return; }
+  if (!MQTT_ON) { msg.textContent = notFound; return; }
+  // 다른 기기에서 한 주문: 서버에 남은 마지막 상태(retained)를 받아 상태·송장만 보여 준다
+  if (!bus.online) { msg.textContent = "주문 서버에 연결되지 않았습니다. 잠시 후 다시 조회해 주세요."; return; }
+  if (!bus.remote[no]) {
+    msg.className = "form-msg"; msg.textContent = "조회 중…";
+    const got = waitFor((t, m) => t === "order/status/" + no, LOOKUP_WAIT_MS);
+    watch("order/status/" + no);
+    await got;
+    msg.className = "form-msg err";
+  }
+  if (!bus.remote[no]) { msg.textContent = notFound; return; }
+  msg.textContent = "";
+  lastLookup = { no, phone, remote: true };
+  renderLookup();
+});
+
+// 주문 취소 (마이페이지, 조회 결과 공통)
+async function cancelOrder(no) {
+  const list = store.get(K.orders, []), o = list.find(x => x.no === no);
+  if (!MQTT_ON) {
+    if (o && stepOf(o) === 0) { o.canceled = true; store.set(K.orders, list); }
+    refreshView();
+    return;
+  }
+  if (!bus.online) { toast("주문 서버에 연결되지 않아 취소 요청을 보낼 수 없습니다."); return; }
+  const phone = o ? o.phone : lastLookup && lastLookup.no === no ? lastLookup.phone : "";
+  const done = waitFor((t, m) => t === "order/status/" + no && m.status === "canceled", CANCEL_WAIT_MS);
+  watch("order/status/" + no);
+  if (!(await publish1("order/cancel", { no, phone, ts: kstTs() }))) { toast("취소 요청을 보내지 못했습니다. 다시 눌러 주세요."); return; }
+  toast("취소 요청을 보냈습니다…");
+  toast((await done) ? "주문이 취소됐습니다." : "출고 검사가 시작돼 바로 취소할 수 없습니다. 고객 문의로 남겨 주세요.");
+}
+
+document.addEventListener("click", e => {
+  const c = e.target.closest("[data-cancel]");
+  if (c) cancelOrder(c.dataset.cancel);
+  const ask = e.target.closest("[data-ask]");
+  if (ask) askOrderNo = ask.dataset.ask;
+  const a = e.target.closest("[data-after]");
+  if (a) afterLogin = "#" + a.dataset.after;
+});
+
+// ───── 화면 전환 ─────
+const VIEWS = { order: "orderView", done: "doneView", login: "loginView", mypage: "mypageView", lookup: "lookupView", support: "supportView" };
+const homeView = document.getElementById("homeView");
+const navLinks = [...document.querySelectorAll("[data-link]")];
+function setCurrent(id) { navLinks.forEach(a => a.toggleAttribute("aria-current", a.dataset.link === id)); }
+function renderHeader() {
+  const u = me(), auth = document.getElementById("authLink");
+  auth.textContent = u ? "마이페이지" : "로그인";
+  auth.href = u ? "#mypage" : "#login";
+}
+/** 서버에서 상태·답변이 오면 지금 보고 있는 화면만 다시 그린다 (스크롤은 그대로) */
+function refreshView() {
+  const key = location.hash.slice(1);
+  if (key === "mypage" && me()) renderMypage();
+  if (key === "done") renderDone();
+  if (key === "lookup") renderLookup();
+  if (key === "support") renderQaLookup();
+}
+function route() {
+  let key = location.hash.slice(1);
+  if (key === "mypage" && !me()) { afterLogin = "#mypage"; location.replace("#login"); return; }
+  if (key === "login" && me()) { location.replace("#mypage"); return; }
+  if (key === "done" && !lastOrderNo) key = "order";
+  const view = VIEWS[key];
+  homeView.hidden = !!view;
+  Object.entries(VIEWS).forEach(([k, id]) => (document.getElementById(id).hidden = id !== view));
+  document.getElementById("headOrder").toggleAttribute("aria-current", key === "order");
+  document.getElementById("authLink").toggleAttribute("aria-current", key === "login" || key === "mypage");
+  document.querySelectorAll("[data-view-link=lookup]").forEach(x => x.toggleAttribute("aria-current", key === "lookup"));
+  document.querySelectorAll("[data-view-link=support]").forEach(x => x.toggleAttribute("aria-current", key === "support"));
+  renderHeader();
+  if (view) {
+    window.scrollTo(0, 0); setCurrent(null);
+    if (key === "order") renderMemberBox();
+    if (key === "done") renderDone();
+    if (key === "mypage") renderMypage();
+    if (key === "login") showTab(false);
+    if (key === "support") renderSupport();
+  } else {
+    const t = location.hash && document.querySelector(location.hash);
+    if (t) t.scrollIntoView();
+  }
+}
+window.addEventListener("hashchange", route);
+const io = new IntersectionObserver(entries => {
+  if (!homeView.hidden) entries.forEach(en => en.isIntersecting && setCurrent(en.target.id));
+}, { rootMargin: "-45% 0px -50% 0px" });
+document.querySelectorAll("[data-nav-section]").forEach(x => io.observe(x));
+renderSummary();
+showConn();
+busStart();
+route();
+</script>
+</body>
+</html>
