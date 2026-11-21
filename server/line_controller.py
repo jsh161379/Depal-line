@@ -55,6 +55,8 @@ USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조�
 AGV_BATCH = 6                   # A 몇 개마다 출발 (🟡 11/21 팀 결정: 팔레트 한 판 6개 = 6개입 한 팩)
 
 WATCH_DEVICES = ["arm1", "mega", "yolo"]   # 끊기면 일시정지할 장치
+DEVICE_KO = {"arm1": "로봇팔 1", "mega": "Mega", "yolo": "YOLO"}   # 시작 거부 안내 문장용
+STATE_KO = {"warn": "지연", "offline": "끊김", "unknown": "확인 전"}
 # ====================================================================
 
 import asyncio
@@ -579,7 +581,10 @@ class LineController:
                 return
             down = [d for d in WATCH_DEVICES if self.devices.get(d) not in (None, "ok")]
             if down:
-                await self.event("WARN", f"start 거부: 장치 상태 이상 {down}")
+                # 관리자 패널이 "start 거부" 글자로 찾으므로 앞부분은 바꾸지 않는다
+                what = ", ".join(f"{DEVICE_KO.get(d, d)} {STATE_KO.get(self.devices.get(d), self.devices.get(d))}"
+                                 for d in down)
+                await self.event("WARN", f"start 거부: 장치 상태 이상 — {what} (장치·서버 프로그램 확인 후 다시 시작)")
                 return
             self.cycle = asyncio.create_task(self.run_cycle())
         elif a == "pause":

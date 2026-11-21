@@ -18,7 +18,14 @@ run_all.py - 서버 쪽 프로그램을 한 번에 켜고 끄는 실행기
   --yolo        가짜 YOLO 대신 실제 YOLO 프로그램(..\yolo\yolo_vision.py)을 켬. 카메라·모델은 그 파일 맨 위 CAMERAS
   --yolo-fake   가짜 YOLO 대신 yolo_vision.py --fake (카메라 없이 실제 프로그램의 합치기·전송을 시험)
   --hidden      창 없이 실행 (start_all.vbs가 붙임)
-  --stop        실행 중인 실행기를 끔 (stop_all.bat가 붙임)
+  --stop        실행 중인 실행기를 끔 (stop_all.bat가 붙임). 실행기 없이 남은 서버 프로그램도 찾아서 끔
+
+남은 프로그램 막기 (11/21, 포트폴리오 ㊲)
+  - 실행기가 켠 프로그램은 Windows 작업 개체(Job Object)에 넣어서, 실행기가 어떻게 꺼지든
+    (창 X로 닫기, 작업 관리자에서 강제 종료 포함) Windows가 같이 끈다
+  - 켤 때 OUR_SCRIPTS 이름으로 이미 떠 있는 python이 있으면 알려 준다
+    (창 1개 모드: 끄고 계속할지 물음 / 창 없는 모드: 알림 창을 띄우고 시작하지 않음)
+    같은 client_id로 두 개가 붙으면 브로커가 서로를 끊어 "지연"이 반복되고 라인이 멈추기 때문
 
 서버 UI와 주고받는 파일 (logs 폴더)
   run_all.status.json   실행기가 1초마다 씀: 프로그램별 상태(실행/꺼짐, PID, 시작 시각, 종료 코드)
@@ -48,6 +55,9 @@ BROKER_PORT = 1883
 BROKER_WAIT_SEC = 10        # 브로커 포트가 열릴 때까지 기다리는 최대 시간
 ESTOP_TEST_AT_SEC = 40      # --estop-test 때 비상정지 버튼을 누르는 시각
 STOP_WAIT_SEC = 15          # stop_all이 실행기가 꺼지기를 기다리는 최대 시간
+# 실행기가 켜는 프로그램 파일 이름. 이 이름으로 이미 떠 있는 python이 있으면 "남은 프로그램"으로 본다
+OUR_SCRIPTS = ["central_server.py", "line_controller.py", "mqtt_db_writer.py", "fake_arm1.py", "fake_mega.py",
+               "fake_yolo.py", "fake_agv.py", "env_relay.py", "yolo_vision.py", "monitor.py", "run_all.py"]
 # ====================
 
 HERE = Path(__file__).resolve().parent
@@ -145,6 +155,108 @@ def port_open(host, port):
         return False
 
 
+# ---------- 남은 프로그램 찾기 / 같이 꺼지게 하기 ----------
+def find_leftovers():
+    """OUR_SCRIPTS 이름으로 떠 있는 python 목록 [(pid, 파일 이름, 명령줄)].
+       나 자신과 나를 띄운 쪽(부모·조부모…)은 뺌 — Python 설치 관리자의 `python`은 대리 프로그램이
+       진짜 python.exe를 자식으로 띄우므로, 부모도 같은 명령줄(python run_all.py)을 가짐.
+       Windows만 (PowerShell로 프로세스 목록을 읽음). 못 읽으면 빈 목록"""
+    if not IS_WIN:
+        return []
+    ps = ("Get-CimInstance Win32_Process | "
+          "Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+                             timeout=20, creationflags=NO_WINDOW).stdout
+        rows = json.loads(out.decode("utf-8", "replace") or "[]")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+    if isinstance(rows, dict):
+        rows = [rows]
+    parent = {r.get("ProcessId"): r.get("ParentProcessId") for r in rows}
+    mine = set()                      # 나 + 나를 띄운 쪽 전부
+    pid = os.getpid()
+    while pid and pid not in mine:
+        mine.add(pid)
+        pid = parent.get(pid)
+    found = []
+    for r in rows:
+        pid, cmd = r.get("ProcessId"), r.get("CommandLine") or ""
+        if not pid or pid in mine or (r.get("Name") or "").lower() not in ("python.exe", "pythonw.exe"):
+            continue
+        low = cmd.lower()
+        name = next((n for n in OUR_SCRIPTS if n in low), None)
+        if name and not (name == "run_all.py" and "--stop" in low):  # 다른 stop_all은 뺌
+            found.append((pid, name, cmd))
+    # 대리 프로그램과 진짜 python이 한 쌍으로 잡히면 바깥쪽(부모)만 남김 → taskkill /T로 같이 꺼짐
+    pids = {f[0] for f in found}
+    return [f for f in found if parent.get(f[0]) not in pids]
+
+
+def kill_leftovers(found):
+    for pid, name, _ in found:
+        print(f"  {name} (PID {pid}) 종료", flush=True)
+        kill_pid(pid)
+
+
+class KillJob:
+    """Windows 작업 개체: 여기 넣은 프로그램은 실행기 핸들이 닫히면(실행기가 꺼지면) 같이 꺼짐.
+       JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (0x2000). 만들 수 없으면 아무 일도 안 함"""
+
+    def __init__(self):
+        self.k32 = self.job = None
+        if not IS_WIN:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class IoCounters(ctypes.Structure):
+                _fields_ = [(n, ctypes.c_ulonglong) for n in (
+                    "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                    "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+            class BasicLimit(ctypes.Structure):
+                _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                            ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                            ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                            ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                            ("SchedulingClass", wintypes.DWORD)]
+
+            class ExtLimit(ctypes.Structure):
+                _fields_ = [("BasicLimitInformation", BasicLimit), ("IoInfo", IoCounters),
+                            ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                            ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.CreateJobObjectW.restype = wintypes.HANDLE
+            k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+            k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+            k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+            job = k32.CreateJobObjectW(None, None)
+            if not job:
+                return
+            info = ExtLimit()
+            info.BasicLimitInformation.LimitFlags = 0x2000
+            if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):  # 9 = Extended
+                return
+            self.k32, self.job = k32, job
+        except (OSError, AttributeError):
+            self.k32 = self.job = None
+
+    def add(self, proc):
+        """방금 켠 프로그램을 작업 개체에 넣음. 실패하면 False (그래도 실행은 계속)"""
+        if not self.job:
+            return False
+        try:
+            return bool(self.k32.AssignProcessToJobObject(self.job, int(proc._handle)))
+        except (OSError, AttributeError):
+            return False
+
+
+_job = None   # main()에서 만듦. 실행기가 끝날 때까지 들고 있어야 함 (닫히면 자식이 꺼짐)
+
+
 # ---------- 끄기 (stop_all.bat) ----------
 def kill_pid(pid):
     if IS_WIN:
@@ -158,6 +270,16 @@ def kill_pid(pid):
 
 
 def do_stop():
+    code = _do_stop()
+    time.sleep(0.5)
+    left = find_leftovers()
+    if left:
+        print(f"실행기 밖에 남은 서버 프로그램 {len(left)}개를 끕니다:", flush=True)
+        kill_leftovers(left)
+    return code
+
+
+def _do_stop():
     info = read_pid_file()
     if not info or not pid_alive(info.get("pid", 0)):
         # 실행기는 없는데 자식만 남은 경우(실행기가 강제로 꺼짐)를 정리
@@ -226,6 +348,8 @@ class Prog:
         self.log.write(time.strftime("=== %Y-%m-%d %H:%M:%S 시작: ") + " ".join(self.args) + "\n")
         self.proc = subprocess.Popen(self.args, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL,
                                      stdout=self.log, stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+        if _job and not _job.add(self.proc):
+            say(f"{self.name}: 작업 개체에 넣지 못함 (실행기가 강제로 꺼지면 남을 수 있음)")
         self.started = time.strftime("%Y-%m-%d %H:%M:%S")
         self.stopped_by_user = False
         self.reported = False
@@ -300,7 +424,7 @@ def handle_request(progs):
 
 
 def main():
-    global _main_log, _hidden
+    global _main_log, _hidden, _job
     ap = argparse.ArgumentParser(description="서버 쪽 프로그램을 한 번에 켜고 끄는 실행기")
     ap.add_argument("--no-fake", action="store_true", help="가짜 로봇팔·가짜 Mega·가짜 YOLO·가짜 AGV를 켜지 않음")
     ap.add_argument("--no-fake-agv", action="store_true", help="가짜 AGV만 켜지 않음")
@@ -334,8 +458,29 @@ def main():
         else:
             print(msg)
         return 1
+    # 실행기 없이 남은 프로그램 (예전 실행기가 강제로 꺼졌거나 손으로 켠 것)
+    left = find_leftovers()
+    if left:
+        names = ", ".join(f"{n}(PID {pid})" for pid, n, _ in left)
+        if _hidden:
+            popup(f"이미 떠 있는 서버 프로그램이 있어 시작하지 않았습니다:\n{names}\n\n"
+                  "stop_all.bat로 끈 뒤 다시 켜세요.", warn=True)
+            time.sleep(15)
+            return 1
+        print("이미 떠 있는 서버 프로그램이 있습니다 (같은 이름으로 두 개가 붙으면 서로 끊어 '지연'이 반복됨):")
+        for pid, n, _ in left:
+            print(f"  {n}  PID {pid}")
+        ans = input("모두 끄고 계속할까요? [Y/n] ").strip().lower()
+        if ans not in ("", "y", "yes", "ㅛ"):
+            print("시작하지 않았습니다.")
+            return 1
+        kill_leftovers(left)
+        time.sleep(1.0)
     STOP_FILE.unlink(missing_ok=True)
     _main_log = open_log("run_all")
+    _job = KillJob()
+    if IS_WIN and not _job.job:
+        say("작업 개체를 만들지 못함 → 실행기가 강제로 꺼지면 프로그램이 남을 수 있음 (stop_all로 정리)")
 
     # MySQL 비밀번호: 한 번만 받아서 DB 저장 프로그램에 환경변수로 넘김
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
@@ -420,6 +565,8 @@ def main():
                 say(f"라인 시작 {ESTOP_TEST_AT_SEC}초쯤 뒤 비상정지 → 버튼 복귀 후 관리자 프로그램에서 해제(reset)")
             print("-" * 60, flush=True)
             monitor = subprocess.Popen([py, "monitor.py"], cwd=HERE, env=env)
+            if _job:
+                _job.add(monitor)
 
         write_pid_file(progs, started)
         write_status()
