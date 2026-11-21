@@ -20,15 +20,17 @@ public static class CertificateCsvExporter {
         var staff = string.IsNullOrWhiteSpace(operatorName) ? "담당자" : operatorName.Trim();
         var sb = new StringBuilder();
         var issueText = string.IsNullOrEmpty(order.CertNo) ? "미발급 (미리보기)" : "발급 완료";
+        var recipientText = $"{order.Name} ({CustomerInfo.TypeText(order.CustomerType)})";
 
         // ── 기본 정보 ──
         Row(sb, "건전지 출고 검사 성적서");
         Row(sb, "항목", "내용", "항목", "내용");
         Row(sb, "성적서 번호", data.CertNo, "주문번호", order.No);
-        Row(sb, "받는 분", order.Name, "총 주문 수량", $"{data.TotalPacks:N0}팩 ({data.Count:N0}개)");
+        Row(sb, "받는 분", recipientText, "총 주문 수량", $"{data.TotalPacks:N0}팩 ({data.Count:N0}개)");
         Row(sb, "검사 일시", data.InspectedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), "검사 회차", data.RunId);
-        Row(sb, "발급 상태", issueText, "종합 판정", data.VerdictText);
-        Row(sb, "검사자 / 승인자", staff, "발행일", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        Row(sb, "기준 버전", data.RuleVersion, "발급 상태", issueText);
+        Row(sb, "종합 판정", data.VerdictText, "발행일", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        Row(sb, "검사자 / 승인자", staff, "", "");
         sb.AppendLine();
 
         // ── 주문 상품 내역 ──

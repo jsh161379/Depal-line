@@ -92,12 +92,13 @@ public static class CertificatePrinter {
 
         // ── 기본 정보 (고객용 정제) ──
         var issueText = string.IsNullOrEmpty(order.CertNo) ? "미발급 (미리보기)" : "발급 완료";
+        var recipientText = $"{order.Name} ({CustomerInfo.TypeText(order.CustomerType)})";
         doc.Blocks.Add(MakeMetaTable(new[]
         {
             new[] { "성적서 번호", data.CertNo, "주문번호", order.No },
-            new[] { "받는 분", order.Name, "총 주문 수량", $"{data.TotalPacks:N0}팩 ({data.Count:N0}개)" },
+            new[] { "받는 분", recipientText, "총 주문 수량", $"{data.TotalPacks:N0}팩 ({data.Count:N0}개)" },
             new[] { "검사 일시", $"{data.InspectedAt:yyyy-MM-dd HH:mm}", "검사 회차", data.RunId },
-            new[] { "발급 상태", issueText, "발행일", $"{DateTime.Now:yyyy-MM-dd}" },
+            new[] { "기준 버전", data.RuleVersion, "발급 상태", issueText },
         }));
 
         // ── 주문 상품 내역 ──
@@ -173,6 +174,13 @@ public static class CertificatePrinter {
 
         // ── 책임자 확인란 (검사자 / 승인자) ──
         doc.Blocks.Add(MakeResponsibilityTable(staff));
+        doc.Blocks.Add(new Paragraph(new Run($"발행일: {DateTime.Now:yyyy-MM-dd}")) {
+            Foreground = Sub,
+            FontFamily = Mono,
+            FontSize = 10,
+            TextAlignment = TextAlignment.Right,
+            Margin = new Thickness(0, 6, 0, 0),
+        });
 
         return doc;
     }
@@ -203,6 +211,7 @@ public static class CertificatePrinter {
                 tr.Cells.Add(new TableCell(new Paragraph(new Run(r[i])) {
                     Margin = new Thickness(0),
                     FontFamily = isLabel ? Font : Mono,
+                    TextAlignment = TextAlignment.Left,
                 }) {
                     Padding = new Thickness(4, 3, 4, 3),
                     Foreground = isLabel ? Sub : Ink,

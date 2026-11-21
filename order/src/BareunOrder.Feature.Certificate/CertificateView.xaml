@@ -252,6 +252,7 @@
                                                         <RowDefinition Height="26" />
                                                         <RowDefinition Height="26" />
                                                         <RowDefinition Height="26" />
+                                                        <RowDefinition Height="26" />
                                                     </Grid.RowDefinitions>
                                                     <TextBlock Text="성적서 번호" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="1" Text="{Binding Data.CertNo}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
@@ -259,7 +260,7 @@
                                                     <TextBlock Grid.Column="3" Text="{Binding Selected.No}" FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
 
                                                     <TextBlock Grid.Row="1" Text="받는 분" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Name}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RecipientText}" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Row="1" Grid.Column="2" Text="총 주문 수량" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Row="1" Grid.Column="3" FontFamily="{StaticResource Mono}" VerticalAlignment="Center">
                                                         <Run Text="{Binding Data.TotalPacks, Mode=OneWay}" /><Run Text="팩 (" /><Run Text="{Binding Data.Count, Mode=OneWay}" /><Run Text="개)" />
@@ -271,6 +272,12 @@
                                                     <TextBlock Grid.Row="2" Grid.Column="2" Text="검사 회차" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding Data.RunId}" FontFamily="{StaticResource Mono}"
                                                                FontSize="12" VerticalAlignment="Center" />
+
+                                                    <TextBlock Grid.Row="3" Text="기준 버전" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Data.RuleVersion}" FontFamily="{StaticResource Mono}"
+                                                               FontSize="12" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="발급 상태" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Row="3" Grid.Column="3" Text="{Binding IssueStatusText}" VerticalAlignment="Center" />
                                                 </Grid>
 
                                                 <!-- 주문 상품 내역 표 -->
@@ -507,6 +514,8 @@
                                                 <TextBlock Text="관리자 참고 정보 (내부용 · 고객 인쇄 제외)" FontSize="11.5" FontWeight="SemiBold"
                                                            Foreground="{StaticResource Ink2}" Margin="0,0,0,4" />
                                                 <TextBlock Text="{Binding Data.AdminInfo.SourceLabel}" Style="{StaticResource Caption}" />
+                                                <TextBlock Text="{Binding Data.AdminInfo.RuleSourceText}" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                                           Visibility="{Binding Data.AdminInfo.RuleSourceText, Converter={StaticResource NullToCollapsed}}" />
                                                 <TextBlock Text="{Binding Data.AdminInfo.VisualConfidenceText}" Style="{StaticResource Caption}"
                                                            Visibility="{Binding Data.AdminInfo.VisualConfidenceText, Converter={StaticResource NullToCollapsed}}" />
                                                 <TextBlock Text="{Binding Data.AdminInfo.CameraPolarityText}" Style="{StaticResource Caption}"

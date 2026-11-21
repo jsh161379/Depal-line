@@ -35,6 +35,7 @@ public sealed record RunTotalSummary(
 public sealed record AdminDetailInfo(
     string SourceLabel,
     int LinkedRunCount,
+    string? RuleSourceText,
     string? VisualConfidenceText,
     string? CameraPolarityText,
     string? MissingText);
@@ -50,6 +51,7 @@ public sealed record CertificateData(
     string CertNo,
     DateTime InspectedAt,
     string RunId,
+    string RuleVersion,
     int Count,
     int TotalPacks,
     int LinkedACount,
@@ -75,9 +77,10 @@ public sealed record CertificateData(
 /// 담당: 유동호 — F6 검사 성적서 및 주문 관리 기간 보고서(일일/주간/월간)
 /// </summary>
 public sealed partial class CertificateViewModel : ObservableObject {
-    // TODO(유동호): 하드웨어 실측 후 서버 grading_rules A등급 확정 기준과 동기화 (현재 최신 구성도 임시 기준: 1.50 V / 0.35 Ω)
-    private const double AGradeVOpenMin = 1.50;
-    private const double AGradeRIntMax = 0.35;
+    // DB grading_rules 조회 불가·미등록 시 사용하는 폴백 기준 (11/20 임시 기준: A 무부하 ≥ 1.50 V · 내부저항 ≤ 1.20 Ω)
+    private const double FallbackAGradeVOpenMin = 1.50;
+    private const double FallbackAGradeRIntMax = 1.20;
+    private const string FallbackRuleVersion = "임시 기준";
 
     private readonly OrderStore _store;
     private readonly AppSettings _settings;
@@ -319,6 +322,8 @@ public sealed partial class CertificateViewModel : ObservableObject {
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IssueButtonText))]
+    [NotifyPropertyChangedFor(nameof(IssueStatusText))]
+    [NotifyPropertyChangedFor(nameof(RecipientText))]
     [NotifyPropertyChangedFor(nameof(StatusBannerText))]
     [NotifyPropertyChangedFor(nameof(IsWarningBanner))]
     private Order? _selected;
@@ -387,6 +392,12 @@ public sealed partial class CertificateViewModel : ObservableObject {
     public string IssueButtonText =>
         Selected != null && !string.IsNullOrEmpty(Selected.CertNo) ? "성적서 재발급" : "성적서 발급";
 
+    public string IssueStatusText =>
+        Selected != null && !string.IsNullOrEmpty(Selected.CertNo) ? "발급 완료" : "미발급 (미리보기)";
+
+    public string RecipientText =>
+        Selected == null ? "" : $"{Selected.Name} ({CustomerInfo.TypeText(Selected.CustomerType)})";
+
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private Task RefreshAsync() => LoadSelectedAsync(Selected);
 
@@ -429,6 +440,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
             await _store.SetCertNoAsync(Selected, certNo);
             Data = Data with { CertNo = certNo };
             OnPropertyChanged(nameof(IssueButtonText));
+            OnPropertyChanged(nameof(IssueStatusText));
             OnPropertyChanged(nameof(StatusBannerText));
             Shipped.Refresh();
             RefreshReportBundle();
@@ -499,6 +511,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
             if (!string.IsNullOrEmpty(summary.DbCertNo) && order.CertNo != summary.DbCertNo) {
                 order.CertNo = summary.DbCertNo;
                 OnPropertyChanged(nameof(IssueButtonText));
+                OnPropertyChanged(nameof(IssueStatusText));
                 Shipped.Refresh();
                 RefreshReportBundle();
             }
@@ -526,9 +539,20 @@ public sealed partial class CertificateViewModel : ObservableObject {
                 BatteryCount: i.BatteryCount))
             .ToList();
 
+    private static string BuildRuleSourceText(string ruleVersion, double vOpenMin, double rIntMax, bool isFromDb, string? notice) {
+        var prefix = isFromDb
+            ? $"판정 기준: DB grading_rules ({ruleVersion} · 무부하 ≥ {vOpenMin:0.00} V, 내부저항 ≤ {rIntMax:0.00} Ω)"
+            : $"판정 기준: 임시 기본값 ({ruleVersion} · 무부하 ≥ {vOpenMin:0.00} V, 내부저항 ≤ {rIntMax:0.00} Ω)";
+        return string.IsNullOrWhiteSpace(notice) ? prefix : $"{prefix} — {notice}";
+    }
+
     private static CertificateData BuildFromDb(Order o, string certNo, CertificateDbSummary s) {
+        var vOpenMin = s.RuleVOpenMin ?? FallbackAGradeVOpenMin;
+        var rIntMax = s.RuleRIntMax ?? FallbackAGradeRIntMax;
+        var ruleVersion = !string.IsNullOrWhiteSpace(s.RuleVersion) ? s.RuleVersion! : FallbackRuleVersion;
+
         if (s.Runs.Count == 0)
-            return MakeEmpty(o, certNo);
+            return MakeEmpty(o, certNo, s);
 
         var runText = s.Runs.Count == 1
             ? s.Runs[0].SourceRunId
@@ -547,7 +571,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
             visualOk = s.VisualFail == 0 && s.VisualError == 0;
         }
 
-        // 극 방향 (고객용: "-상" 오해 방지를 위해 "정상 N/N"으로 명확 표기)
+        // 극 방향 (고객용: "정상 N/N"으로 명확 표기)
         string polarityResult;
         bool polarityOk;
         if (s.VisualInspected == 0 && s.MeasuredCount == 0) {
@@ -570,17 +594,14 @@ public sealed partial class CertificateViewModel : ObservableObject {
             }
         }
 
-        var vOpenResult = s.VOpenAvg.HasValue
-            ? $"{s.VOpenAvg.Value:0.000} V ({s.VOpenMin:0.00}~{s.VOpenMax:0.00})"
-            : "미측정";
-        var vOpenOk = s.VOpenAvg is >= AGradeVOpenMin;
+        // 11/20 결정 ⑧: 연결 회차 A 평균값만 표시 (최소~최대 / 최대 표기 제거)
+        var vOpenResult = s.VOpenAvg.HasValue ? $"{s.VOpenAvg.Value:0.000} V" : "미측정";
+        var vOpenOk = s.VOpenAvg.HasValue && s.VOpenAvg.Value >= vOpenMin;
 
         var vLoadResult = s.VLoadAvg.HasValue ? $"{s.VLoadAvg.Value:0.000} V" : "미측정";
 
-        var rIntResult = s.RIntAvg.HasValue
-            ? $"{s.RIntAvg.Value:0.000} Ω (최대 {s.RIntMax:0.000})"
-            : "미측정";
-        var rIntOk = s.RIntAvg is <= AGradeRIntMax;
+        var rIntResult = s.RIntAvg.HasValue ? $"{s.RIntAvg.Value:0.000} Ω" : "미측정";
+        var rIntOk = s.RIntAvg.HasValue && s.RIntAvg.Value <= rIntMax;
 
         var qtyOk = s.ACount >= o.BatteryCount;
         var gradeText = s.ACount > 0
@@ -591,9 +612,9 @@ public sealed partial class CertificateViewModel : ObservableObject {
         {
             new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", visualResult, visualOk),
             new("극 방향 (외관·전기)", "정극성 / 방향 정상", polarityResult, polarityOk),
-            new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", vOpenResult, vOpenOk),
+            new("무부하 전압 (평균)", $"{vOpenMin:0.00} V 이상", vOpenResult, vOpenOk),
             new("부하 전압 (평균)", "참고 측정", vLoadResult, true, IsReference: true),
-            new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", rIntResult, rIntOk),
+            new("내부저항 (평균)", $"{rIntMax:0.00} Ω 이하", rIntResult, rIntOk),
             new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", gradeText, s.ACount > 0 && qtyOk),
         };
 
@@ -616,8 +637,9 @@ public sealed partial class CertificateViewModel : ObservableObject {
             : null;
 
         var adminInfo = new AdminDetailInfo(
-            SourceLabel: $"라인 DB 실측 (order_runs {s.Runs.Count}개 회차 집계)",
+            SourceLabel: $"라인 DB 실측 (LINE 회차 {s.Runs.Count}건 · 분류 완료 A등급 집계)",
             LinkedRunCount: s.Runs.Count,
+            RuleSourceText: BuildRuleSourceText(ruleVersion, vOpenMin, rIntMax, s.IsRuleFromDb, s.RuleNotice),
             VisualConfidenceText: s.VisualConfidence.HasValue ? $"YOLO 외관 평균 신뢰도 {s.VisualConfidence.Value:P1}" : null,
             CameraPolarityText: camParts.Count > 0 ? $"카메라 극 방향 상세: {string.Join(" · ", camParts)}" : null,
             MissingText: missingText);
@@ -626,6 +648,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
             CertNo: certNo,
             InspectedAt: inspectedAt,
             RunId: runText,
+            RuleVersion: ruleVersion,
             Count: o.BatteryCount,
             TotalPacks: o.PackCount,
             LinkedACount: s.ACount,
@@ -638,20 +661,26 @@ public sealed partial class CertificateViewModel : ObservableObject {
             HasRuns: true);
     }
 
-    private static CertificateData MakeEmpty(Order o, string certNo) {
+    private static CertificateData MakeEmpty(Order o, string certNo, CertificateDbSummary? s = null) {
+        var vOpenMin = s?.RuleVOpenMin ?? FallbackAGradeVOpenMin;
+        var rIntMax = s?.RuleRIntMax ?? FallbackAGradeRIntMax;
+        var ruleVersion = !string.IsNullOrWhiteSpace(s?.RuleVersion) ? s!.RuleVersion! : FallbackRuleVersion;
+        var isFromDb = s?.IsRuleFromDb ?? false;
+
         var rows = new List<CheckRow>
         {
             new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", "-", false),
             new("극 방향 (외관·전기)", "정극성 / 방향 정상", "-", false),
-            new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", "-", false),
+            new("무부하 전압 (평균)", $"{vOpenMin:0.00} V 이상", "-", false),
             new("부하 전압 (평균)", "참고 측정", "-", true, IsReference: true),
-            new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", "-", false),
+            new("내부저항 (평균)", $"{rIntMax:0.00} Ω 이하", "-", false),
             new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", "-", false),
         };
         return new CertificateData(
             CertNo: certNo,
             InspectedAt: o.ReceivedAt,
             RunId: "연결 없음",
+            RuleVersion: ruleVersion,
             Count: o.BatteryCount,
             TotalPacks: o.PackCount,
             LinkedACount: 0,
@@ -659,7 +688,13 @@ public sealed partial class CertificateViewModel : ObservableObject {
             Rows: rows,
             Runs: Array.Empty<RunSummaryRow>(),
             RunTotal: null,
-            AdminInfo: new AdminDetailInfo("연결된 회차 없음 (order_runs 미등록)", 0, null, null, null),
+            AdminInfo: new AdminDetailInfo(
+                SourceLabel: "연결된 LINE 회차 없음 (order_runs 미등록)",
+                LinkedRunCount: 0,
+                RuleSourceText: BuildRuleSourceText(ruleVersion, vOpenMin, rIntMax, isFromDb, s?.RuleNotice),
+                VisualConfidenceText: null,
+                CameraPolarityText: null,
+                MissingText: null),
             IsExample: false,
             HasRuns: false);
     }
@@ -675,9 +710,9 @@ public sealed partial class CertificateViewModel : ObservableObject {
         {
             new("외관 (스크래치·스티커·훼손·부식)", "불량 없음", $"{o.BatteryCount}/{o.BatteryCount} 통과", true),
             new("극 방향 (외관·전기)", "정극성 / 방향 정상", $"정상 {o.BatteryCount}/{o.BatteryCount}", true),
-            new("무부하 전압 (평균)", $"{AGradeVOpenMin:0.00} V 이상", $"{vOpen:0.000} V", vOpen >= AGradeVOpenMin),
+            new("무부하 전압 (평균)", $"{FallbackAGradeVOpenMin:0.00} V 이상", $"{vOpen:0.000} V", vOpen >= FallbackAGradeVOpenMin),
             new("부하 전압 (평균)", "참고 측정", $"{vLoad:0.000} V", true, IsReference: true),
-            new("내부저항 (평균)", $"{AGradeRIntMax:0.00} Ω 이하", $"{rInt:0.000} Ω", rInt <= AGradeRIntMax),
+            new("내부저항 (평균)", $"{FallbackAGradeRIntMax:0.00} Ω 이하", $"{rInt:0.000} Ω", rInt <= FallbackAGradeRIntMax),
             new("등급 및 검사 수량", $"A ({o.BatteryCount:N0}개 이상)", $"A ({o.BatteryCount:N0}개 / 주문 {o.BatteryCount:N0}개)", true),
         };
 
@@ -685,6 +720,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
             CertNo: certNo,
             InspectedAt: at,
             RunId: $"{at:yyyyMMdd-HHmmss}-{rnd.Next(0x1000, 0xFFFF):x4}",
+            RuleVersion: $"{FallbackRuleVersion} (예시)",
             Count: o.BatteryCount,
             TotalPacks: o.PackCount,
             LinkedACount: o.BatteryCount,
@@ -692,7 +728,13 @@ public sealed partial class CertificateViewModel : ObservableObject {
             Rows: rows,
             Runs: Array.Empty<RunSummaryRow>(),
             RunTotal: null,
-            AdminInfo: new AdminDetailInfo("예시 데이터 (Fake 모드 또는 DB 미연결)", 0, null, null, null),
+            AdminInfo: new AdminDetailInfo(
+                SourceLabel: "예시 데이터 (Fake 모드 또는 DB 미연결)",
+                LinkedRunCount: 0,
+                RuleSourceText: BuildRuleSourceText(FallbackRuleVersion, FallbackAGradeVOpenMin, FallbackAGradeRIntMax, isFromDb: false, notice: null),
+                VisualConfidenceText: null,
+                CameraPolarityText: null,
+                MissingText: null),
             IsExample: true,
             HasRuns: true);
     }
