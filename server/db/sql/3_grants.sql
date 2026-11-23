@@ -17,10 +17,3 @@ GRANT SELECT ON `aa_battery_inspection`.`inquiries`        TO 'ui_reader'@'%';
 -- 11-18: 검사 성적서 탭이 외관·극 방향 결과를 읽음 (DB 담당 수정본)
 GRANT SELECT ON `aa_battery_inspection`.`visual_inspections` TO 'ui_reader'@'localhost';
 GRANT SELECT ON `aa_battery_inspection`.`visual_inspections` TO 'ui_reader'@'%';
--- 11-21: F6 검사 성적서가 판정 기준값(server/rules → grading_rules)을 읽음 / 관리자 프로그램 인수인계 탭 (DB 담당)
-GRANT SELECT ON `aa_battery_inspection`.`grading_rules`  TO 'ui_reader'@'localhost';
-GRANT SELECT ON `aa_battery_inspection`.`grading_rules`  TO 'ui_reader'@'%';
-GRANT SELECT ON `aa_battery_inspection`.`handover_notes` TO 'ui_reader'@'localhost';
-GRANT SELECT ON `aa_battery_inspection`.`handover_notes` TO 'ui_reader'@'%';
-GRANT SELECT ON `aa_battery_inspection`.`handover_reads` TO 'ui_reader'@'localhost';
-GRANT SELECT ON `aa_battery_inspection`.`handover_reads` TO 'ui_reader'@'%';
