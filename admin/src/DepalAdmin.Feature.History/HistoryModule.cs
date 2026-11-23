@@ -13,6 +13,7 @@ public static class HistoryModule
 {
     public static IServiceCollection AddHistoryFeature(this IServiceCollection services)
     {
+        services.AddSingleton<HistoryDetailReader>();   // 상세 패널 (외관·불량·전기 측정·판정 기준)
         services.AddSingleton<RecordsViewModel>();
         services.AddSingleton<IPage, RecordsPage>();
         return services;
