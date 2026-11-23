@@ -30,6 +30,9 @@ public partial class App : Application
         };
 
         var settings = AppSettings.Load(AppContext.BaseDirectory);
+        if (settings.LoadWarning != null)   // 설정 파일이 깨졌으면 켜자마자 알림 (포트폴리오 ㊳)
+            MessageBox.Show(settings.LoadWarning + "\n\n고친 뒤 프로그램을 다시 켜세요.", "설정 파일 확인",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         var services = new ServiceCollection();
 
         // ── 공통 ──
@@ -64,7 +67,10 @@ public partial class App : Application
         MainWindow = window;
         window.Show();
 
-        await _services.GetRequiredService<OrderStore>().StartAsync();
+        var store = _services.GetRequiredService<OrderStore>();
+        store.Write($"설정: {settings.LoadedFrom}{(settings.UseFakeOrders ? " (가짜 모드)" : "")}" +
+                    (settings.LoadWarning != null ? " — 설정 파일 경고 있음" : ""), "시스템");
+        await store.StartAsync();
         await _services.GetRequiredService<ChatStore>().StartAsync();
         await _services.GetRequiredService<LineSupplyReader>().StartAsync();
     }

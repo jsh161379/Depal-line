@@ -89,3 +89,9 @@
   - DB `stock` 읽기·손 입고(`order/stock`)·입고 기록 삭제, [새로 고침]은 라인 A 다시 읽기. 안내 `StockNote`, `PendingNeedA`·`FreeA`·`SupplyText` 추가
 - F3 화면(입고 카드 삭제·머리글)은 김하균, 배송 완료 `stock` 차감 끄기는 장성찬 (DB 저장 프로그램)
 - `OrderStore.PublishStockAsync`(order/stock)는 지우지 않고 남김 (안 B를 나중에 할 때 쓸 수 있게, 지금은 부르는 곳 없음)
+
+## v5.1 (11/23, 조시현) — 설정 파일이 깨졌을 때 알리기 (포트폴리오 ㊳)
+- 11/23 재시험 중 settings.local.json 줄 끝 쉼표가 빠져 파일 전체가 조용히 무시됨 → settings.json으로 켜져 DB 연결 없이 예시 라인 A(43개)가 보이고, F2 출고가 예시 회차 번호로 order/run을 보내 DB에서 버려짐(성적서 발급 불가)
+- Core `AppSettings`: 못 읽은 파일과 줄 번호를 `LoadWarning`에, 읽은 파일을 `LoadedFrom`에 남김. 마지막 줄 뒤 쉼표는 봐 줌(AllowTrailingCommas)
+- Shell `App`: 켤 때 `LoadWarning`이 있으면 경고 창, 작업 기록에 "설정: settings.local.json"처럼 어느 설정으로 켰는지 남김
+- Core `LineSupplyReader`: 실제 모드인데 DB 연결 설정이 없으면 예시 값 대신 0개 + 아래 줄 빨간 글씨("DB 연결 설정이 없습니다") → 예시 회차로 출고되지 않음 (가짜 모드는 예시 값 그대로)

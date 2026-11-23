@@ -93,6 +93,14 @@ public sealed partial class LineSupplyReader : ObservableObject
         if (Interlocked.Exchange(ref _loading, 1) == 1) return;
         try
         {
+            if (IsExample && !_settings.UseFakeOrders)
+            {
+                // 실제 모드인데 DB 설정이 없음 (settings.local.json을 못 읽은 경우 등, 포트폴리오 ㊳).
+                // 예시 값을 보이면 F2가 예시 회차 번호로 order/run을 보내 DB에서 버려진다 → 0개 + 빨간 글씨
+                Apply(Array.Empty<LineRun>(), today: 0,
+                      error: "DB 연결 설정이 없습니다 (settings.local.json의 MySqlConnection 확인)");
+                return;
+            }
             if (IsExample)
             {
                 Apply(MakeExample(), today: 37, error: null);
