@@ -139,8 +139,22 @@ public sealed partial class LineSupplyReader : ObservableObject
         return left == 0 ? takes : null;
     }
 
-    /// <summary>A 등급 수로 포장할 수 있는 팩 수 (F3 입고 안내용)</summary>
+    /// <summary>A 등급 남은 수로 만들 수 있는 팩 수 (주문 대기분을 빼기 전)</summary>
     public int PacksFor(Product product) => product.PackSize <= 0 ? 0 : Available / product.PackSize;
+
+    /// <summary>
+    /// 주문 대기(접수·출고 검사)가 가져갈 A 등급 수. 결정 ⑪ 안 A (11/23):
+    /// 재고 = 라인 A. 출고(F2) 때 회차를 연결하면 Available에서 이미 빠지므로 배송 중·배송 완료는 넣지 않는다.
+    /// </summary>
+    public int PendingNeed => _store.Orders
+        .Where(o => o.Status is OrderStatus.Received or OrderStatus.Inspect)
+        .Sum(o => o.BatteryCount);
+
+    /// <summary>새 주문에 쓸 수 있는 A 등급 수 = 남음 − 주문 대기분 (0 아래로 안 내려감)</summary>
+    public int Free => Math.Max(0, Available - PendingNeed);
+
+    /// <summary>새 주문에 더 팔 수 있는 팩 수 (F3 "판매 가능"). 상품끼리 같은 A를 나눠 쓰므로 합계가 아니라 "이 상품만 판다면"의 값</summary>
+    public int FreePacksFor(Product product) => product.PackSize <= 0 ? 0 : Free / product.PackSize;
 
     // ───────────────────────── 내부 ─────────────────────────
 
