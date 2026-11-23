@@ -32,27 +32,121 @@
 
         <TabControl SelectedIndex="{Binding TabIndex}" Background="{StaticResource Brush.Panel}" BorderBrush="{StaticResource Brush.Rule}">
             <TabItem Header="건전지별">
-                <DataGrid ItemsSource="{Binding Rows}" BorderThickness="0">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="끝난 시각" Binding="{Binding FinishedAt, StringFormat='yyyy-MM-dd HH:mm:ss'}" Width="145"/>
-                        <DataGridTextColumn Header="회차" Binding="{Binding RunId}" Width="165"/>
-                        <DataGridTextColumn Header="번호" Binding="{Binding BatteryId}" Width="50" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTextColumn Header="칸" Binding="{Binding PalletSlot}" Width="40" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTemplateColumn Header="등급" Width="90">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource GradeTag}" Background="{Binding Grade, Converter={StaticResource GradeToBrush}}">
-                                        <TextBlock Text="{Binding GradeText}" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                    </Border>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="무부하(V)" Binding="{Binding VOpen, StringFormat='0.000'}" Width="80" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTextColumn Header="내부저항(Ω)" Binding="{Binding RInt, StringFormat='0.000'}" Width="85" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTextColumn Header="배출 위치" Binding="{Binding DestText}" Width="90"/>
-                        <DataGridTextColumn Header="사유" Binding="{Binding Reason}" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="480"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="380" MinWidth="300"/>
+                    </Grid.ColumnDefinitions>
+
+                    <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" SelectionMode="Single" BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="끝난 시각" Binding="{Binding FinishedAt, StringFormat='yyyy-MM-dd HH:mm:ss'}" Width="145"/>
+                            <DataGridTextColumn Header="회차" Binding="{Binding RunId}" Width="165"/>
+                            <DataGridTextColumn Header="번호" Binding="{Binding BatteryId}" Width="50" ElementStyle="{StaticResource NumCell}"/>
+                            <DataGridTextColumn Header="칸" Binding="{Binding PalletSlot}" Width="40" ElementStyle="{StaticResource NumCell}"/>
+                            <DataGridTemplateColumn Header="등급" Width="90">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource GradeTag}" Background="{Binding Grade, Converter={StaticResource GradeToBrush}}">
+                                            <TextBlock Text="{Binding GradeText}" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="무부하(V)" Binding="{Binding VOpen, StringFormat='0.000'}" Width="80" ElementStyle="{StaticResource NumCell}"/>
+                            <DataGridTextColumn Header="내부저항(Ω)" Binding="{Binding RInt, StringFormat='0.000'}" Width="85" ElementStyle="{StaticResource NumCell}"/>
+                            <DataGridTextColumn Header="배출 위치" Binding="{Binding DestText}" Width="90"/>
+                            <DataGridTextColumn Header="사유" Binding="{Binding Reason}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Brush.RuleSoft}"/>
+
+                    <!-- 상세: 표에서 고른 건전지 -->
+                    <DockPanel Grid.Column="2" Background="{StaticResource Brush.Panel}">
+                        <Border DockPanel.Dock="Top" Background="{StaticResource Brush.PanelHead}" BorderBrush="{StaticResource Brush.Rule}" BorderThickness="0,0,0,1" Padding="12,8">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Right" Style="{StaticResource GradeTag}" Background="{Binding DetailGrade, Converter={StaticResource GradeToBrush}}"
+                                        Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding DetailGradeText}" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Text="건전지 상세" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                                    <TextBlock Text="{Binding DetailTitle}" Style="{StaticResource Label}" Margin="0,2,0,0"
+                                               Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding DetailStatus}" Style="{StaticResource Hint}" Margin="12,10,12,0"
+                                   Visibility="{Binding DetailStatus, Converter={StaticResource TextToVis}}"/>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding DetailSections}" Margin="12,0,12,12">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,12,0,0">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                                            <Border BorderBrush="{StaticResource Brush.Rule}" BorderThickness="0,0,0,1" Margin="0,3,0,4"/>
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="104"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Label}" Style="{StaticResource Label}"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Value}" FontWeight="{Binding Weight}" TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource Brush.Text}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- 외관 불량 목록 (외관 검사 묶음에만) -->
+                                            <Border Margin="0,6,0,0" BorderBrush="{StaticResource Brush.RuleSoft}" BorderThickness="1"
+                                                    Visibility="{Binding HasDefects, Converter={StaticResource BoolToVis}}">
+                                                <StackPanel>
+                                                    <Grid Background="{StaticResource Brush.PanelHead}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="60"/>
+                                                            <ColumnDefinition Width="70"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="불량 종류" Style="{StaticResource Label}" Margin="8,3"/>
+                                                        <TextBlock Grid.Column="1" Text="카메라" Style="{StaticResource Label}" Margin="0,3" HorizontalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="신뢰도" Style="{StaticResource Label}" Margin="0,3,8,3" HorizontalAlignment="Right"/>
+                                                    </Grid>
+                                                    <ItemsControl ItemsSource="{Binding Defects}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="60"/>
+                                                                        <ColumnDefinition Width="70"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding TypeText}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Alarm}" Margin="8,3"/>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding CameraText}" Margin="0,3" HorizontalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="2" Text="{Binding ConfidenceText}" Margin="0,3,8,3" HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Text="{Binding DefectNote}" Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                                       Visibility="{Binding DefectNote, Converter={StaticResource TextToVis}}"/>
+                                            <TextBlock Text="{Binding Note}" Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                                       Visibility="{Binding Note, Converter={StaticResource TextToVis}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
             </TabItem>
             <TabItem Header="회차별">
                 <DataGrid ItemsSource="{Binding Runs}" BorderThickness="0">

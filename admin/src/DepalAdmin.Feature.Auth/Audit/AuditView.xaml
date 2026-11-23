@@ -10,7 +10,7 @@
     <DockPanel>
         <Border DockPanel.Dock="Top" Style="{StaticResource Box}" Margin="0,0,0,10">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="CSV로 저장" Command="{Binding ExportCommand}" Style="{StaticResource Cmd}" Margin="0"/>
+                <Button DockPanel.Dock="Right" Content="엑셀로 저장" Command="{Binding ExportCommand}" Style="{StaticResource Cmd}" Margin="0"/>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="기간" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <DatePicker SelectedDate="{Binding From}" Width="125"/>
