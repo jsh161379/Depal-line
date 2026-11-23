@@ -578,8 +578,11 @@ public sealed partial class CertificateViewModel : ObservableObject {
             polarityResult = "미측정";
             polarityOk = false;
         } else {
-            polarityOk = s.VisualPolarityUnknown == 0
-                         && (s.MeasuredCount == 0 || s.ElecPolarityNormal == s.MeasuredCount);
+            // 11/23: 카메라가 unknown이면 측정 자리에서 전기로 극성을 다시 확인하고 정극성일 때만 A가 됨 (통신 규약 4장)
+            //        → 전기 측정이 있으면 전기 극성으로만 판정, 카메라 unknown은 참고(내부 참고 정보에 표시)
+            polarityOk = s.MeasuredCount > 0
+                ? s.ElecPolarityNormal == s.MeasuredCount
+                : s.VisualPolarityUnknown == 0;
             if (polarityOk) {
                 var okCount = s.MeasuredCount > 0 ? s.ElecPolarityNormal : (s.VisualInspected - s.VisualPolarityUnknown);
                 var totalCount = s.MeasuredCount > 0 ? s.MeasuredCount : s.VisualInspected;
@@ -588,7 +591,7 @@ public sealed partial class CertificateViewModel : ObservableObject {
                 var issues = new List<string>();
                 if (s.MeasuredCount > 0 && s.ElecPolarityNormal < s.MeasuredCount)
                     issues.Add($"전기 정극성 {s.ElecPolarityNormal}/{s.MeasuredCount}");
-                if (s.VisualPolarityUnknown > 0)
+                if (s.MeasuredCount == 0 && s.VisualPolarityUnknown > 0)
                     issues.Add($"방향 미확인 {s.VisualPolarityUnknown}건");
                 polarityResult = $"확인 필요 ({string.Join(", ", issues)})";
             }
