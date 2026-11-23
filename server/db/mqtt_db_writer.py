@@ -39,6 +39,10 @@ HANDOVER_TABLES = ("handover_notes", "handover_reads")
 LEGACY_ORDER_TOPICS = ("order/new", "inquiry/new", "inquiry/answer")
 ORDER_TABLES = ("orders", "order_items", "order_status_log", "order_runs", "stock", "stock_log", "inquiries")
 FINAL_ORDER_STATUSES = ("delivered", "canceled")
+# Stock is not taken off when an order is delivered (team decision 11/23 ⑪-A): the line A count already drops
+# when an order is linked to it at shipping, so a second deduction here would count the same batteries twice.
+# The stock and stock_log tables and their past rows stay; set True again if packed stock (plan B) comes back.
+DEDUCT_STOCK_ON_DELIVERY = False
 # Customer region (2026-11-20): the 17 시·도 and the address prefixes that belong to each.
 REGIONS = {
     "서울": ("서울",), "부산": ("부산",), "대구": ("대구",), "인천": ("인천",), "광주": ("광주",),
@@ -629,7 +633,7 @@ def update_order_status(cursor, change):
         """, (change.status, change.courier or None, change.tracking or None, change.cert_no or None,
               change.ts, change.no))
 
-    if change.status == "delivered" and current != "delivered":
+    if DEDUCT_STOCK_ON_DELIVERY and change.status == "delivered" and current != "delivered":
         cursor.execute("""
             SELECT product_id, SUM(quantity) FROM order_items WHERE order_no = %s
             GROUP BY product_id ORDER BY product_id
