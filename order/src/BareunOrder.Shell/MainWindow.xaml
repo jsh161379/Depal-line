@@ -82,6 +82,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="56" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="48" />
             <RowDefinition Height="*" />
             <RowDefinition Height="30" />
         </Grid.RowDefinitions>
@@ -220,90 +221,48 @@
         </Border>
 
         <!-- ═══ 탭 화면 ═══ -->
-        <ContentControl Grid.Row="2" Content="{Binding Selected.Page.View}" Focusable="False" />
+        <ContentControl x:Name="PageContent" Grid.Row="3" Content="{Binding Selected.Page.View}" Focusable="False" />
 
-        <!-- ═══ 오른쪽 아래 알림: 위 = 라인 메시지, 아래 = 새 주문 ═══ -->
-        <StackPanel Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,20" Width="360">
-
-        <!-- 라인 메시지 알림. 나를 부른 메시지면 노란색 -->
-        <Border Margin="0,0,0,12" CornerRadius="4" BorderThickness="0,4,0,0"
-                Visibility="{Binding ToastChat, Converter={StaticResource NullToCollapsed}}">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Background" Value="{StaticResource Surface}" />
-                    <Setter Property="BorderBrush" Value="{StaticResource Green}" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding ToastChat.MentionsMe}" Value="True">
-                            <Setter Property="Background" Value="{StaticResource AmberSoft}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.25" />
-            </Border.Effect>
-            <StackPanel Margin="18,14,18,16">
-                <Grid>
-                    <TextBlock FontSize="15" FontWeight="Bold">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="라인 메시지" />
-                                <Setter Property="Foreground" Value="{StaticResource Green}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ToastChat.MentionsMe}" Value="True">
-                                        <Setter Property="Text" Value="나를 부른 메시지" />
-                                        <Setter Property="Foreground" Value="{StaticResource Amber}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
+        <!-- 고정된 알림 전용 줄: 본문·출고 버튼을 덮거나 화면을 밀지 않는다. -->
+        <Border x:Name="NotificationArea" Grid.Row="2" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,5">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="알림 · 새 주문과 라인 메시지는 이 줄에 표시됩니다." Foreground="{StaticResource Ink3}" VerticalAlignment="Center" FontSize="12">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                        <DataTrigger Binding="{Binding ToastOrder, Converter={StaticResource NullToCollapsed}}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                        <DataTrigger Binding="{Binding ToastChat, Converter={StaticResource NullToCollapsed}}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                </TextBlock>
+                <DockPanel Margin="0,0,14,0" Visibility="{Binding ToastOrder, Converter={StaticResource NullToCollapsed}}">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="10,0,0,0">
+                        <Button Content="주문 보기" Style="{StaticResource Btn.Small}" MinHeight="32" Command="{Binding OpenToastOrderCommand}"/>
+                        <Button Content="✕" ToolTip="주문 알림 닫기" Style="{StaticResource Btn.Small}" MinHeight="32" Padding="8,0" Margin="6,0,0,0" Command="{Binding CloseToastCommand}"/>
+                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToastOrder.ItemsSummary}">
+                        <Run Text="새 주문 " Foreground="{StaticResource Blue}" FontWeight="Bold"/>
+                        <Run Text="{Binding ToastOrder.No, Mode=OneWay}" FontFamily="{StaticResource Mono}"/>
+                        <Run Text=" · "/><Run Text="{Binding ToastOrder.Name, Mode=OneWay}"/>
+                        <Run Text=" · "/><Run Text="{Binding ToastOrder.Total, Mode=OneWay, StringFormat={}{0:N0}원}"/>
                     </TextBlock>
-                    <Button Content="✕" HorizontalAlignment="Right" Style="{StaticResource Btn.Small}" MinHeight="26"
-                            Padding="8,0" BorderThickness="0" Command="{Binding CloseChatToastCommand}" />
-                </Grid>
-                <TextBlock Foreground="{StaticResource Ink2}" FontSize="12" Margin="0,6,0,2">
-                    <Run Text="{Binding ToastChat.Who, Mode=OneWay}" FontWeight="SemiBold" />
-                    <Run Text="{Binding ToastChat.Station, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock Text="{Binding ToastChat.Text}" TextWrapping="Wrap" MaxHeight="60" TextTrimming="CharacterEllipsis" />
-                <Button Content="메시지 보기" HorizontalAlignment="Right" Margin="0,10,0,0" Style="{StaticResource Btn}"
-                        Command="{Binding OpenToastChatCommand}" />
-            </StackPanel>
+                </DockPanel>
+                <DockPanel Grid.Column="1" Visibility="{Binding ToastChat, Converter={StaticResource NullToCollapsed}}">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="10,0,0,0">
+                        <Button Content="메시지 보기" Style="{StaticResource Btn.Small}" MinHeight="32" Command="{Binding OpenToastChatCommand}"/>
+                        <Button Content="✕" ToolTip="메시지 알림 닫기" Style="{StaticResource Btn.Small}" MinHeight="32" Padding="8,0" Margin="6,0,0,0" Command="{Binding CloseChatToastCommand}"/>
+                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToastChat.Text}">
+                        <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Ink2}"/><Style.Triggers>
+                            <DataTrigger Binding="{Binding ToastChat.MentionsMe}" Value="True"><Setter Property="Foreground" Value="{StaticResource Amber}"/><Setter Property="FontWeight" Value="Bold"/></DataTrigger>
+                        </Style.Triggers></Style></TextBlock.Style>
+                        <Run Text="라인 메시지 · " FontWeight="Bold"/><Run Text="{Binding ToastChat.Who, Mode=OneWay}"/>
+                        <Run Text=" · "/><Run Text="{Binding ToastChat.Text, Mode=OneWay}"/>
+                    </TextBlock>
+                </DockPanel>
+            </Grid>
         </Border>
-
-        <!-- 새 주문 알림 -->
-        <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Blue}"
-                BorderThickness="0,4,0,0" CornerRadius="4"
-                Visibility="{Binding ToastOrder, Converter={StaticResource NullToCollapsed}}">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.25" />
-            </Border.Effect>
-            <StackPanel Margin="18,14,18,16">
-                <Grid>
-                    <TextBlock Text="새 주문이 들어왔습니다" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Blue}" />
-                    <Button Content="✕" HorizontalAlignment="Right" Style="{StaticResource Btn.Small}" MinHeight="26"
-                            Padding="8,0" BorderThickness="0" Command="{Binding CloseToastCommand}" />
-                </Grid>
-                <TextBlock Text="{Binding ToastOrder.No}" FontFamily="{StaticResource Mono}" FontSize="16"
-                           FontWeight="Bold" Margin="0,8,0,2" />
-                <TextBlock Foreground="{StaticResource Ink2}">
-                    <Run Text="{Binding ToastOrder.Name, Mode=OneWay}" />
-                    <Run Text=" · " />
-                    <Run Text="{Binding ToastOrder.ItemsSummary, Mode=OneWay}" />
-                </TextBlock>
-                <Grid Margin="0,12,0,0">
-                    <TextBlock Text="{Binding ToastOrder.Total, StringFormat={}{0:N0}원}" FontSize="20" FontWeight="Bold"
-                               FontFamily="{StaticResource Mono}" VerticalAlignment="Center" />
-                    <Button Content="주문 보기" HorizontalAlignment="Right" Style="{StaticResource Btn.Primary}"
-                            Command="{Binding OpenToastOrderCommand}" />
-                </Grid>
-            </StackPanel>
-        </Border>
-        </StackPanel>
 
         <!-- ═══ 아래 줄 ═══ -->
-        <Border Grid.Row="3" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="4" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
             <Grid Margin="16,0">
                 <TextBlock Text="{Binding LineText}" FontSize="12" FontFamily="{StaticResource Mono}"
                            HorizontalAlignment="Left" VerticalAlignment="Center"

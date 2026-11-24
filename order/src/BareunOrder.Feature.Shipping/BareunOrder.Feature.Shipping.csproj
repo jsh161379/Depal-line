@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 담당: (미정) — F2 출고·배송 -->
+  <!-- 담당: 노원종 — F2 출고·배송 -->
   <ItemGroup>
     <ProjectReference Include="..\BareunOrder.Core\BareunOrder.Core.csproj" />
   </ItemGroup>

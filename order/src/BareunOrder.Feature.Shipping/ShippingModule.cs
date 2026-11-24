@@ -3,11 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BareunOrder.Feature.Shipping;
 
-/// <summary>담당: (미정) — F2 출고·배송</summary>
+/// <summary>담당: 노원종 — F2 출고·배송</summary>
 public static class ShippingModule
 {
     public static IServiceCollection AddShippingFeature(this IServiceCollection services)
     {
+        services.AddSingleton<IShippingDialogs, ShippingDialogs>();
         services.AddSingleton<ShippingViewModel>();
         services.AddSingleton<IPage, ShippingPage>();
         return services;

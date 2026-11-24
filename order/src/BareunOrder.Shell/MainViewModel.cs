@@ -130,7 +130,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (index >= 0 && index < Tabs.Count) Selected = Tabs[index];
     }
 
-    // ── 새 주문 알림 (오른쪽 아래, 8초 뒤 사라짐) ──
+    // ── 새 주문 알림 (상단 알림 전용 줄, 8초 뒤 사라짐) ──
     [ObservableProperty] private Order? _toastOrder;
 
     private void ShowToast(Order o)
@@ -158,7 +158,7 @@ public sealed partial class MainViewModel : ObservableObject
         CloseToast();
     }
 
-    // ── 라인 메시지 알림 (오른쪽 아래, 주문 알림 위, 8초 뒤 사라짐) ──
+    // ── 라인 메시지 알림 (상단 알림 전용 줄, 8초 뒤 사라짐) ──
     [ObservableProperty] private ChatLine? _toastChat;
 
     [RelayCommand]

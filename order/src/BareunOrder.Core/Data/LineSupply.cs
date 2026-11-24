@@ -38,6 +38,8 @@ public sealed partial class LineSupplyReader : ObservableObject
     private readonly OrderStore _store;
     private string? _lastLog;   // 같은 기록을 반복해서 남기지 않게
     private readonly Dictionary<string, int> _fakeLinked = new();   // 가짜 모드에서 연결한 수
+    private int _exampleAdded;
+    private DateTime? _exampleAddedAt;
     private readonly Dispatcher _ui = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     private DispatcherTimer? _timer;
     private int _loading;   // 0/1 — 동시에 두 번 읽지 않게
@@ -103,7 +105,7 @@ public sealed partial class LineSupplyReader : ObservableObject
             }
             if (IsExample)
             {
-                Apply(MakeExample(), today: 37, error: null);
+                Apply(MakeExample(), today: 37 + _exampleAdded, error: null);
                 return;
             }
             var (runs, today) = await Task.Run(() => LoadAsync(_settings.MySqlConnection!, _settings.DbLoadDays));
@@ -168,6 +170,18 @@ public sealed partial class LineSupplyReader : ObservableObject
     /// <summary>새 주문에 더 팔 수 있는 팩 수 (F3 "판매 가능"). 상품끼리 같은 A를 나눠 쓰므로 합계가 아니라 "이 상품만 판다면"의 값</summary>
     public int FreePacksFor(Product product) => product.PackSize <= 0 ? 0 : Free / product.PackSize;
 
+    /// <summary>연습 모드에서만 가짜 검사 완료 수량을 추가한다. DB·MQTT에는 쓰지 않으며 재시작하면 초기화된다.</summary>
+    public async Task AddExampleBatteriesAsync(int count)
+    {
+        if (!_settings.UseFakeOrders) throw new InvalidOperationException("실제 모드에서는 연습 수량을 추가할 수 없습니다.");
+        if (count is < 1 or > 10000 || _exampleAdded > 1000000 - count)
+            throw new ArgumentOutOfRangeException(nameof(count), "한 번에 1~10,000개, 누적 1,000,000개까지 추가할 수 있습니다.");
+        _exampleAddedAt ??= DateTime.Now;
+        _exampleAdded += count;
+        await RefreshAsync();
+        _store.Write($"연습용 A 등급 건전지 +{count:N0}개 (실제 재고에는 반영하지 않음)");
+    }
+
     // ───────────────────────── 내부 ─────────────────────────
 
     private void Apply(IReadOnlyList<LineRun> runs, int today, string? error)
@@ -208,12 +222,14 @@ public sealed partial class LineSupplyReader : ObservableObject
     private IReadOnlyList<LineRun> MakeExample()
     {
         var d = DateTime.Today;
-        var runs = new[]
+        var runs = new List<LineRun>
         {
             new LineRun($"{d.AddDays(-1):yyyyMMdd}-141000-ex01", d.AddDays(-1).AddHours(14).AddMinutes(10), d.AddDays(-1).AddHours(14).AddMinutes(18), 18, 12),
             new LineRun($"{d:yyyyMMdd}-093000-ex02", d.AddHours(9).AddMinutes(30), d.AddHours(9).AddMinutes(38), 21, 0),
             new LineRun($"{d:yyyyMMdd}-110500-ex03", d.AddHours(11).AddMinutes(5), null, 16, 0),
         };
+        if (_exampleAdded > 0)
+            runs.Add(new LineRun($"{d:yyyyMMdd}-demo-add", _exampleAddedAt ?? d, _exampleAddedAt, _exampleAdded, 0));
         return runs.Select(r => r with { Linked = r.Linked + _fakeLinked.GetValueOrDefault(r.RunId) }).ToList();
     }
 
