@@ -153,10 +153,14 @@ public sealed partial class LineSupplyReader : ObservableObject
     /// <summary>
     /// 주문 대기(접수·출고 검사)가 가져갈 A 등급 수. 결정 ⑪ 안 A (11/23):
     /// 재고 = 라인 A. 출고(F2) 때 회차를 연결하면 Available에서 이미 빠지므로 배송 중·배송 완료는 넣지 않는다.
+    /// 판매 중인 상품(라인 알카라인 AA)만 센다 — 판매 중지 충전지(aar2)·목록에 없는 옛 상품은 라인 A를 쓰지 않음 (11/24,
+    /// F3 표의 "주문 대기" 합과 같아지게)
     /// </summary>
     public int PendingNeed => _store.Orders
         .Where(o => o.Status is OrderStatus.Received or OrderStatus.Inspect)
-        .Sum(o => o.BatteryCount);
+        .SelectMany(o => o.Items)
+        .Where(i => Products.Find(i.Id)?.OnSale == true)
+        .Sum(i => i.BatteryCount);
 
     /// <summary>새 주문에 쓸 수 있는 A 등급 수 = 남음 − 주문 대기분 (0 아래로 안 내려감)</summary>
     public int Free => Math.Max(0, Available - PendingNeed);

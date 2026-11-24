@@ -95,3 +95,7 @@
 - Core `AppSettings`: 못 읽은 파일과 줄 번호를 `LoadWarning`에, 읽은 파일을 `LoadedFrom`에 남김. 마지막 줄 뒤 쉼표는 봐 줌(AllowTrailingCommas)
 - Shell `App`: 켤 때 `LoadWarning`이 있으면 경고 창, 작업 기록에 "설정: settings.local.json"처럼 어느 설정으로 켰는지 남김
 - Core `LineSupplyReader`: 실제 모드인데 DB 연결 설정이 없으면 예시 값 대신 0개 + 아래 줄 빨간 글씨("DB 연결 설정이 없습니다") → 예시 회차로 출고되지 않음 (가짜 모드는 예시 값 그대로)
+
+## v5.2 (11/24, 조시현) — 주문 대기 A는 판매 중인 상품만
+- F3 "주문 대기에 필요한 A"(359)가 표의 주문 대기 팩 합(344)보다 15 많았음 → 판매 중지 충전지(aar2)·목록에 없는 옛 상품(aa8 등, 팩당 개수를 몰라 1로 셈)이 든 옛 시험 주문까지 라인 A로 셈
+- Core `LineSupplyReader.PendingNeed`: 접수·출고 검사 주문 중 판매 중인 상품(`Products.OnSale`) 줄만 셈 → F3 표 합계와 같아짐
