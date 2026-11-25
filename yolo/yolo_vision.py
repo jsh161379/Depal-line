@@ -745,13 +745,14 @@ class Vision:
 def check(v: Vision):
     """--check: 카메라·모델 확인 후 종료"""
     v.setup()
-    time.sleep(3.0)
+    warmup_sec = 10
+    time.sleep(warmup_sec)
     for n in CAM_NAMES:
         if n in v.cams:
             c = v.cams[n]
             f, _ = c.latest()
             size = f"{f.shape[1]}x{f.shape[0]}" if f is not None else "-"
-            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, 3초 동안 {c.count}장)"
+            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, {warmup_sec}초 동안 {c.count}장)"
                   f", 모델 {v.models[n].path.name if v.models[n] else 'fake'}")
             if f is not None and v.models[n]:
                 t0 = time.monotonic()
