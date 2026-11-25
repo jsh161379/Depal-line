@@ -5,3 +5,8 @@ captures/
 ## 학습 사진 원본
 raw/
 eval_결과/
+## 학습 자료 묶음 (학습 PC로 옮기는 용도, 크기가 큼)
+/yolo_top.zip
+/yolo_top/
+## ultralytics가 자동으로 받는 기본 모델
+/yolo11n.pt
