@@ -62,7 +62,6 @@ public partial class ProcessViewModel : ObservableObject
     [ObservableProperty] private string? _serverMessage;
 
     [ObservableProperty] private int _countA;
-    [ObservableProperty] private int _countB;
     [ObservableProperty] private int _countNg;
     [ObservableProperty] private int _countResort;
     [ObservableProperty] private int _total;
@@ -153,10 +152,9 @@ public partial class ProcessViewModel : ObservableObject
         }
 
         CountA = s.Count("A");
-        CountB = s.Count("B");
         CountNg = s.Count("NG");
         CountResort = s.Count("RESORT");
-        Total = CountA + CountB + CountNg + CountResort;
+        Total = CountA + CountNg + CountResort;
         ARatio = Total == 0 ? "-" : $"{CountA * 100.0 / Total:0}%";
 
         if (s.Agv != null)

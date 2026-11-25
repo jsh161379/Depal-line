@@ -30,7 +30,7 @@ public sealed class LineStatus
     /// <summary>그 공정에 퍽이 하나라도 있으면 true</summary>
     public bool HasStation(string station) => Stations.TryGetValue(station, out var n) && n.Count > 0;
 
-    /// <summary>키: "A", "B", "NG_VISUAL", "NG_VOLTAGE", "RESORT"</summary>
+    /// <summary>현재 회차 키: "A", "NG_VISUAL", "NG_VOLTAGE", "RESORT"</summary>
     public Dictionary<string, int> Counts { get; set; } = new();
 
     public AgvInfo? Agv { get; set; }

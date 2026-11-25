@@ -46,7 +46,7 @@ public partial class ResultsViewModel : ObservableObject
         while (Rows.Count > _maxRows) Rows.RemoveAt(Rows.Count - 1);
 
         int N(string g) => Rows.Count(r => r.Grade == g);
-        Summary = $"받은 결과 {Rows.Count}건   A {N("A")}   B {N("B")}   불량 {Rows.Count(r => DepalAdmin.Core.Grades.IsNg(r.Grade))}   재분류 {N("RESORT")}";
+        Summary = $"받은 결과 {Rows.Count}건   A {N("A")}   불량 {Rows.Count(r => DepalAdmin.Core.Grades.IsNg(r.Grade))}   재분류 {N("RESORT")}";
     }
 
     [RelayCommand]

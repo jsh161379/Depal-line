@@ -220,7 +220,6 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         LiveRunIdText = string.IsNullOrWhiteSpace(line?.RunId) ? "현재 회차: -" : $"현재 회차: {line.RunId}";
 
         var a = line?.Count(Grades.A) ?? 0;
-        var b = line?.Count(Grades.B) ?? 0;
         var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
         var ngVoltage = line?.Count(Grades.NgVoltage) ?? 0;
         // LineStatus.Count(Grades.Ng)는 NG 전체 합계이므로 실제 구버전 "NG" 키만 별도 조회
@@ -228,8 +227,8 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
         var resort = line?.Count(Grades.Resort) ?? 0;
 
         LiveCountsText = legacyNg > 0
-            ? $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개  (이전 NG: {legacyNg}개)"
-            : $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개";
+            ? $"실시간 분류 — A: {a}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개  (이전 NG: {legacyNg}개)"
+            : $"실시간 분류 — A: {a}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개";
 
         var agvLoaded = line?.Agv?.Loaded ?? 0;
         var agvBatch = line?.Agv?.Batch is > 0 ? line.Agv.Batch : 8;
@@ -397,11 +396,10 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
                      : "회차 완료 후 대기";
         var pallets = ParseNonNegativeInt(RemainingPallets).ToString(CultureInfo.InvariantCulture);
         var a = line?.Count(Grades.A) ?? 0;
-        var b = line?.Count(Grades.B) ?? 0;
         var ngVisual = line?.Count(Grades.NgVisual) ?? 0;
         var ngVoltage = line?.Count(Grades.NgVoltage) ?? 0;
         var resort = line?.Count(Grades.Resort) ?? 0;
-        sb.AppendLine($"[1. 회차/실적] 상태: {runState} | 이월 팔레트: {pallets}판 | 실적(A:{a}, B:{b}, 외관불량:{ngVisual}, 전압불량:{ngVoltage}, 재분류:{resort})");
+        sb.AppendLine($"[1. 회차/실적] 상태: {runState} | 이월 팔레트: {pallets}판 | 실적(A:{a}, 외관불량:{ngVisual}, 전압불량:{ngVoltage}, 재분류:{resort})");
 
         // 2. 설비 · 비전 · 측정 · AGV 상태
         var equipChecks = new List<string>();
@@ -427,7 +425,6 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
 
         // 4. 팔레트 및 분류함 비우기 확인
         var boxChecks = new List<string>();
-        if (BoxBCleared) boxChecks.Add("B 분류함 비움");
         if (BoxNgVisualCleared) boxChecks.Add("외관불량함 비움");
         if (BoxNgVoltageCleared) boxChecks.Add("전압불량함 비움");
         if (BoxResortChecked) boxChecks.Add("재분류함(서보) 확인");

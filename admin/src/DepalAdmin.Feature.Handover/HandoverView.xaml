@@ -198,7 +198,6 @@
                                         <TextBlock Text="4. 팔레트 및 분류함 비우기 확인" FontWeight="SemiBold"/>
                                     </DockPanel>
                                     <UniformGrid Columns="2">
-                                        <CheckBox Content="B 분류함 비움" IsChecked="{Binding BoxBCleared}" Margin="0,0,0,4"/>
                                         <CheckBox Content="외관불량함 비움" IsChecked="{Binding BoxNgVisualCleared}" Margin="0,0,0,4"/>
                                         <CheckBox Content="전압불량함 비움" IsChecked="{Binding BoxNgVoltageCleared}" Margin="0,0,0,4"/>
                                         <CheckBox Content="재분류함(서보) 확인" IsChecked="{Binding BoxResortChecked}" Margin="0,0,0,2"/>

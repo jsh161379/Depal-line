@@ -336,18 +336,17 @@ public sealed class FakeLineClient : LineClientBase
             r.ElectricalStatus = "measured";
             r.Polarity = "normal";
             var v = Math.Round(1.25 + _rnd.NextDouble() * 0.40, 3);
-            var ri = Math.Round(0.10 + Math.Pow(_rnd.NextDouble(), 2), 3);
+            var ri = Math.Round(0.10 + 1.5 * Math.Pow(_rnd.NextDouble(), 2), 3);
             r.VOpen = v;
             r.RInt = ri;
             r.RLoad = 3.31;
             r.VLoad = Math.Round(v * 3.31 / (3.31 + ri), 3);
 
             // 흉내용 임시 기준 (실제 기준은 라인 컨트롤러에 있음)
-            (r.Grade, r.Dest) = v >= 1.50 && ri <= 0.9 ? (Grades.A, "AGV")
-                              : v >= 1.30 && ri <= 1.5 ? (Grades.B, "B_BOX")
+            (r.Grade, r.Dest) = v >= 1.50 && ri <= 1.2 ? (Grades.A, "AGV")
                               : (Grades.NgVoltage, "NG_VOLTAGE_BOX");
             if (r.Grade == Grades.NgVoltage)
-                r.Reason = v < 1.30 && ri > 1.5 ? "전압 낮음, 내부저항 큼" : v < 1.30 ? "전압 낮음" : "내부저항 큼";
+                r.Reason = v < 1.50 ? "전압 낮음" : "내부저항 큼";
         }
         return r;
     }

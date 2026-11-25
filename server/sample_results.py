@@ -1,7 +1,7 @@
 """
 server/results 샘플 발행기 - DB 담당 시험용
 ============================================
-server/results 형식(메시지_형식 v1.4)의 샘플 9건을 발행합니다. 등급 5종이 모두 들어 있습니다.
+server/results 형식의 샘플 9건을 발행합니다. 현재 등급 4종이 모두 들어 있습니다.
 DB 저장 프로그램이 battery_cycles / 검사 테이블에 제대로 넣는지 확인할 때 씁니다.
 
 필요한 것: Python 3.11 이상,  pip install "aiomqtt>=2" pydantic
@@ -15,7 +15,7 @@ DB 저장 프로그램이 battery_cycles / 검사 테이블에 제대로 넣는�
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
 TOPIC = "server/results"
-SAMPLE_RULE_VERSION = "temp-2026-11-10"
+SAMPLE_RULE_VERSION = "temp-2026-11-25-no-b"
 PALLET_ROWS, PALLET_COLS = 2, 3   # 팔레트 한 판 6개 = 2줄 × 3칸 (규약 v1.5.3)
 # 아래 등급 기준은 임시값 (전압 시험 데이터로 확정 예정)
 # ==================================================
@@ -58,9 +58,9 @@ class BatteryResult(BaseModel):
     v_load: float | None                            # 부하 전압 V   (polarity normal일 때만)
     r_int: float | None                             # 내부저항 Ω    (polarity normal일 때만)
     r_load: float | None = None                     # 부하 저항 Ω   (polarity normal일 때만)
-    grade: Literal["A", "B", "NG_VISUAL", "NG_VOLTAGE", "RESORT"]
+    grade: Literal["A", "NG_VISUAL", "NG_VOLTAGE", "RESORT"]
     reason: str | None                              # 고정 문장 (메시지_형식 v1.4)
-    dest: Literal["AGV", "B_BOX", "NG_VISUAL_BOX", "NG_VOLTAGE_BOX", "RESORT_BOX"] | None  # 실제로 넣은 곳 (실패면 null)
+    dest: Literal["AGV", "NG_VISUAL_BOX", "NG_VOLTAGE_BOX", "RESORT_BOX"] | None  # 실제로 넣은 곳 (실패면 null)
     rule_version: str = SAMPLE_RULE_VERSION
     finished_at: str                                # 배출 완료 시각 (battery_id 순서와 다를 수 있음)
 
@@ -85,9 +85,10 @@ def make_samples(run_id: str) -> list[BatteryResult]:
         # 1) A: 측정 완료, AGV
         r(1, [0, 0], 0, vision=v_ok, electrical_status="measured", polarity="normal",
           v_open=1.582, v_load=1.491, r_int=0.203, r_load=3.31, grade="A", reason=None, dest="AGV"),
-        # 2) B: 쓰던 건전지
+        # 2) NG_VOLTAGE: 내부저항은 낮지만 무부하 전압이 A 기준 미달
         r(2, [0, 1], 4, vision=v_ok, electrical_status="measured", polarity="normal",
-          v_open=1.384, v_load=1.142, r_int=0.712, r_load=3.31, grade="B", reason=None, dest="B_BOX"),
+          v_open=1.384, v_load=1.142, r_int=0.712, r_load=3.31, grade="NG_VOLTAGE", reason="전압 낮음",
+          dest="NG_VOLTAGE_BOX"),
         # 3) 외관 불량 2가지 (카메라 2대): 측정 안 함 → 외관불량함
         r(3, [0, 2], 8, vision=VisionResult(status="ok", result="defect", conf=0.91, polarity="minus_up",
                                            defects=[Defect(type="scratch", conf=0.91, cam="front"),

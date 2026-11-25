@@ -43,13 +43,12 @@ TIMEOUT_SEC = {                 # done/failed 응답까지
 }
 
 # 등급 판정 기준 (🟡 임시값, 하드웨어 측정 확정 후 최종) — 바꾸면 RULE_VERSION도 바꿀 것
-#   11/20 팀 결정 ⑩: A ≤ 1.2Ω, B ≤ 2.0Ω, 개방전압(무부하 전압)을 먼저 본다. 전압 값은 이전 임시값 그대로
+#   A 기준을 충족하지 못한 정상 측정은 NG_VOLTAGE로 분류한다. 무부하 전압을 먼저 본다.
 #   이 값은 회차 시작·브로커 연결 때 server/rules(retained)로 발행 → DB 저장 프로그램이 grading_rules에 저장
 #   → 검사 성적서(F6)가 결과의 rule_version으로 그 회차 기준값을 읽음 (성적서 합격 기준 = 라인 A 기준)
-RULE_VERSION = "temp-2026-11-20"
-RULE_EFFECTIVE_AT = "2026-11-20 00:00:00.000"
+RULE_VERSION = "temp-2026-11-25-no-b"
+RULE_EFFECTIVE_AT = "2026-11-25 00:00:00.000"
 GRADE_A = {"v_open_min": 1.50, "r_int_max": 1.2}
-GRADE_B = {"v_open_min": 1.30, "r_int_max": 2.0}
 
 USE_AGV = False                 # AGV가 준비되면 True (False면 출발 조건만 이벤트로 알림). 실행할 때 --agv를 붙여도 True
 AGV_BATCH = 6                   # A 몇 개마다 출발 (🟡 11/21 팀 결정: 팔레트 한 판 6개 = 6개입 한 팩)
@@ -69,9 +68,9 @@ import aiomqtt
 
 from line_common import event_body, estop_body, make_run_id, new_id, now_str, run_main, heartbeat_loop, to_text
 
-GRADES = ["A", "B", "NG_VISUAL", "NG_VOLTAGE", "RESORT"]
-DEST = {"A": "AGV", "B": "B_BOX", "NG_VISUAL": "NG_VISUAL_BOX", "NG_VOLTAGE": "NG_VOLTAGE_BOX", "RESORT": "RESORT_BOX"}
-GRADE_KR = {"A": "A", "B": "B", "NG_VISUAL": "외관이상", "NG_VOLTAGE": "전압이상", "RESORT": "재분류"}
+GRADES = ["A", "NG_VISUAL", "NG_VOLTAGE", "RESORT"]
+DEST = {"A": "AGV", "NG_VISUAL": "NG_VISUAL_BOX", "NG_VOLTAGE": "NG_VOLTAGE_BOX", "RESORT": "RESORT_BOX"}
+GRADE_KR = {"A": "A", "NG_VISUAL": "외관이상", "NG_VOLTAGE": "전압이상", "RESORT": "재분류"}
 FAILED_VISION = {"status": "failed", "result": None, "conf": None, "polarity": None, "defects": []}
 
 
@@ -130,14 +129,10 @@ def judge_measure(m: dict | None):
     v, r = m.get("v_open"), m.get("r_int")
     if v is None or r is None:
         return "RESORT", "측정 실패"
-    # 개방전압 먼저 (11/20 ⑩): B 전압도 안 되면 내부저항과 관계없이 전압 불량
-    if v < GRADE_B["v_open_min"]:
-        return "NG_VOLTAGE", "전압 낮음"
+    # 두 조건을 모두 충족해야 A. 전압과 저항이 둘 다 기준 밖이면 전압 사유를 우선한다.
     if v >= GRADE_A["v_open_min"] and r <= GRADE_A["r_int_max"]:
         return "A", None
-    if r <= GRADE_B["r_int_max"]:
-        return "B", None
-    return "NG_VOLTAGE", "내부저항 큼"
+    return "NG_VOLTAGE", "전압 낮음" if v < GRADE_A["v_open_min"] else "내부저항 큼"
 
 
 def rule_body() -> dict:
@@ -145,7 +140,7 @@ def rule_body() -> dict:
     return {
         "rule_version": RULE_VERSION,
         "effective_at": RULE_EFFECTIVE_AT,
-        "thresholds": {"A": dict(GRADE_A), "B": dict(GRADE_B), "order": "v_open_first"},
+        "thresholds": {"A": dict(GRADE_A), "order": "v_open_first"},
         "ts": now_str(),
     }
 

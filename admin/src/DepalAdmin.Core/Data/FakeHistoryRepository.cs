@@ -7,7 +7,6 @@ public sealed class FakeHistoryRepository : IHistoryRepository
     private const int BatteriesPerRun = 8;    // 팔레트 한 판 2줄 × 4칸 (11/20 변경, 규약 v1.5.1)
 
     // 사유는 메시지_형식 v1.4의 고정 문장
-    private static readonly string[] VoltageReasons = { "전압 낮음", "내부저항 큼", "전압 낮음, 내부저항 큼" };
     private static readonly string[] ResortReasons = { "+극이 위", "측정 극성 반대", "접촉 불량", "외관 검사 실패" };
 
     public async Task<IReadOnlyList<HistoryRow>> GetResultsAsync(DateTime from, DateTime to, string? grade, CancellationToken ct = default)
@@ -70,11 +69,10 @@ public sealed class FakeHistoryRepository : IHistoryRepository
                         var ri = Math.Round(0.10 + Math.Pow(rnd.NextDouble(), 2), 3);
                         row.VOpen = v;
                         row.RInt = ri;
-                        (row.Grade, row.Dest) = v >= 1.50 && ri <= 0.9 ? (Grades.A, "AGV")
-                                              : v >= 1.30 && ri <= 1.5 ? (Grades.B, "B_BOX")
+                        (row.Grade, row.Dest) = v >= 1.50 && ri <= 1.2 ? (Grades.A, "AGV")
                                               : (Grades.NgVoltage, "NG_VOLTAGE_BOX");
                         if (row.Grade == Grades.NgVoltage)
-                            row.Reason = v < 1.30 && ri > 1.5 ? VoltageReasons[2] : v < 1.30 ? VoltageReasons[0] : VoltageReasons[1];
+                            row.Reason = v < 1.50 ? "전압 낮음" : "내부저항 큼";
                     }
                     yield return row;
                 }

@@ -180,7 +180,7 @@ class GradeThreshold(BaseModel):
 
 class GradingThresholds(BaseModel):
     A: GradeThreshold
-    B: GradeThreshold
+    B: GradeThreshold | None = None  # Previously published rules still include B.
     order: Literal["v_open_first"]
 
 
@@ -384,7 +384,7 @@ def defect_rows(vision):
 def save_grading_rule(cursor, rule):
     """Store the thresholds of one rule version. A version never changes its values: the controller must
     publish a new rule_version instead, so different values for a stored version are only logged."""
-    thresholds = rule.thresholds.model_dump()
+    thresholds = rule.thresholds.model_dump(exclude_none=True)
     text = json.dumps(thresholds, default=float)  # numbers stay numbers, like the test data
     cursor.execute("""
         SELECT voltage_and_resistance_thresholds, effective_at FROM grading_rules

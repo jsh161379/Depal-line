@@ -156,7 +156,6 @@
                         <DataGridTextColumn Header="걸린 시간" Binding="{Binding DurationText}" Width="75" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="개수" Binding="{Binding Count}" Width="55" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="A" Binding="{Binding A}" Width="50" ElementStyle="{StaticResource NumCell}"/>
-                        <DataGridTextColumn Header="B" Binding="{Binding B}" Width="50" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="불량" Binding="{Binding Ng}" Width="50" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="재분류" Binding="{Binding Resort}" Width="55" ElementStyle="{StaticResource NumCell}"/>
                         <DataGridTextColumn Header="A 비율" Binding="{Binding ARatio}" Width="*" ElementStyle="{StaticResource NumCell}"/>
