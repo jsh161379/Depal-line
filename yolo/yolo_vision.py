@@ -15,14 +15,13 @@ vision/result를 퍽 하나당 1건 보낸다. 서버 PC에서 돈다. client_id
   - 1초마다 hb/yolo (카메라별 상태 cams 포함), 끊기면 status/yolo offline (LWT)
 
 모델 자리
-  - 카메라마다 모델 파일(best.pt) 또는 "fake"(가짜 판정)를 CAMERAS에 적는다.
-  - 상단 모델이 학습되면 top의 "model"에 파일 경로만 넣으면 된다. 앞·뒤 모델도 같은 방식.
+  - 앞·뒤는 models\side_best.pt (YOLO11n)를 공유한다. 실제 카메라 번호를 CAMERAS의 source에 지정한다.
+  - 상단 모델이 학습되면 top의 "model"에 파일 경로를 넣는다.
   - 학습 클래스 이름 약속 (아래 "클래스 이름" 설정, 학습 설정은 train\top.yaml · train\side.yaml)
       위(top): minus_up, plus_up  (박스 = 위에서 보이는 건전지 윗면)
-      앞·뒤  : 건전지 몸통 박스 = minus_up / plus_up (극 방향을 함께 앎) 또는 battery (방향 모름)
-               불량 부위 박스 = scratch, dent, sticker → 이름 그대로 defects[].type
+      앞·뒤  : 건전지 몸통 박스 = object (극 방향 구분 없음). 기존 모델의 battery, normal도 몸통으로 인식한다.
+               불량 부위 박스 = scratch, damage, corrosion → 이름 그대로 defects[].type
       모델을 열 때 약속에 없는 클래스 이름이 있으면 경고를 띄운다 (대문자·띄어쓰기는 자동으로 맞춤)
-      학습 도구가 처음 넣어 두는 object 클래스는 무시한다
   - 실제 모드에서 모델이 아직 없는 카메라: 위 = 판정 없음(앞·뒤 값으로), 앞·뒤 = 정상·방향 모름 (무작위 가짜 판정 안 씀)
 
 필요한 것: Python 3.11 이상
@@ -32,8 +31,8 @@ vision/result를 퍽 하나당 1건 보낸다. 서버 PC에서 돈다. client_id
 
 사용법
   python yolo_vision.py --fake            카메라·모델 없이 가짜 판정. 로봇팔 1이 퍽을 올리면 BOOTH_SEC 뒤 결과 전송
-                                          (가짜 장치들과 회차 시험용. run_all.py --yolo 가 이것으로 켬)
-  python yolo_vision.py                   CAMERAS 설정대로 실제 카메라·모델 사용 (fake로 적은 카메라만 가짜)
+                                          (가짜 장치들과 회차 시험용. run_all.py --yolo-fake가 이것으로 켬)
+  python yolo_vision.py                   CAMERAS에 설정한 실제 카메라·모델 사용
   python yolo_vision.py --show            기준 카메라 화면에 기준선·박스를 띄움 (기준선 위치 맞출 때)
   python yolo_vision.py --check           카메라·모델만 열어 보고 종료 (MQTT 없이)
   가짜 판정 확률 조절: --defect 0.15 --plus-up 0.1 --fail 0.0 --seed 1
@@ -53,10 +52,10 @@ BROKER_PORT = 1883
 #                model : 모델 파일 경로(이 폴더 기준) 또는 "fake"
 CAMERAS = {
     "top":   {"source": 0,    "model": "fake"},        # 학습 후 예: r"models\top_best.pt"
-    "front": {"source": None, "model": "fake"},        # 측면 모델이 오면 source·model 채우기
-    "back":  {"source": None, "model": "fake"},
+    "front": {"source": None, "model": r"models\side_best.pt"},  # 서버 PC의 앞 카메라 번호 입력
+    "back":  {"source": None, "model": r"models\side_best.pt"},  # 서버 PC의 뒤 카메라 번호 입력
 }
-FRAME_WIDTH, FRAME_HEIGHT = 1280, 720
+FRAME_WIDTH, FRAME_HEIGHT = 640, 480
 USE_DSHOW = True                 # Windows에서 카메라 번호로 열 때 DirectShow 사용
 
 # 기준선 (🟡 실물 시험 후 정함) — 규약 3-2: 앞 카메라 기준
@@ -69,8 +68,11 @@ MAX_JUMP_PX = 150                # 이전 화면의 같은 물체로 볼 최대 
 MIN_GAP_SEC = 1.0                # 🟡 이 시간 안의 두 번째 통과는 같은 퍽으로 보고 버림 (벨트 속도로 계산)
 
 # 판정
-FRAMES_PER_CAM = 3               # 카메라마다 몇 장 찍어 판정할지
-FRAME_GAP_SEC = 0.05             # 그 사이 간격
+FRAMES_PER_CAM = 3               # 상단 및 기본 모드의 촬영 장수
+FRAME_GAP_SEC = 0.05             # 기본 프레임 간격(초)
+# 서버 PC에서 측정한 화면 1/3 → 2/3 이동 시간(초). None이면 기본 촬영을 사용한다.
+# 값을 지정하면 측면만 2장 촬영하고, 앞 카메라 기준선을 이동 방향의 첫 1/3 지점에 둔다.
+SIDE_POSITION_GAP_SEC: float | None = None
 CAM_DELAY_SEC = {"top": 0.0, "front": 0.0, "back": 0.0}  # 기준선 통과 뒤 이 카메라를 찍기까지 (카메라 위치가 다를 때)
 TOP_CONF = 0.50                  # 🟡 위 카메라 극 방향을 믿을 최소 신뢰도
 SIDE_CONF = 0.50                 # 🟡 앞·뒤에서 건전지를 찾았다고 볼 최소 신뢰도
@@ -81,9 +83,9 @@ CAM_TIMEOUT_SEC = 1.0            # 이 시간 넘게 새 화면이 없으면 카
 
 # 클래스 이름 (규약 3-2. 라벨링을 시작한 뒤에는 순서·이름을 바꾸지 않는다)
 POLARITY_CLASSES = {"minus_up", "plus_up"}
-NORMAL_CLASSES = {"battery", "normal"}   # 앞·뒤 모델의 "방향 모르는 건전지 몸통" 클래스
-DEFECT_CLASSES = {"scratch", "dent", "sticker"}
-IGNORE_CLASSES = {"object"}      # 학습 도구가 처음 넣어 두는 클래스. 박스를 안 그렸으면 나오지 않지만, 나와도 버림   # 알려진 불량 종류. 그 밖 이름도 불량으로 보내되 모델을 열 때 경고
+NORMAL_CLASSES = {"object", "battery", "normal"}  # 몸통 클래스 (battery·normal은 기존 모델 호환)
+DEFECT_CLASSES = {"scratch", "damage", "corrosion"}
+IGNORE_CLASSES: set[str] = set()
 
 # 판정 사진 저장 (확인·추가 학습용). captures\날짜\seq번호_카메라.jpg
 SAVE_FRAMES = True
@@ -246,7 +248,7 @@ def judge_top(dets_per_frame):
 def judge_side(cam, dets_per_frame):
     """앞·뒤 카메라: dict(found, result, conf, defects, polarity, pol_conf)"""
     found_conf = 0.0        # 어떤 클래스든 건전지를 찾음 (불량 부위만 보여도 찾은 것)
-    body_conf = 0.0         # 건전지 몸통 박스(battery·minus_up·plus_up)의 신뢰도 → 정상일 때 conf
+    body_conf = 0.0         # 건전지 몸통 박스의 신뢰도 → 정상일 때 conf
     defects: dict[str, float] = {}
     pol = None
     for dets in dets_per_frame:
@@ -350,9 +352,10 @@ def combine(seq, top, sides, cam_error):
 class LineWatcher(threading.Thread):
     """기준 카메라 화면에서 물체가 기준선을 지나면 on_cross() 호출"""
 
-    def __init__(self, cam: Camera, model: Model, on_cross, show=False):
+    def __init__(self, cam: Camera, model: Model, on_cross, show=False, line_pos=LINE_POS):
         super().__init__(daemon=True, name="line-watcher")
         self.cam, self.model, self.on_cross, self.show = cam, model, on_cross, show
+        self.line_pos = line_pos
         self.stop_flag = False
         self.last_fire = 0.0
 
@@ -367,10 +370,10 @@ class LineWatcher(threading.Thread):
                 continue
             last_t = t
             h, w = frame.shape[:2]
-            line = (w if LINE_AXIS == "x" else h) * LINE_POS
+            line = (w if LINE_AXIS == "x" else h) * self.line_pos
             dets = self.model.detect(frame, TRIGGER_CONF)
             # 건전지 몸통 박스만 센다 (앞·뒤 모델은 몸통 + 불량 부위 박스가 같이 나오므로 한 퍽이 두 번 세지지 않게)
-            bodies = [d for d in dets if d[0] in POLARITY_CLASSES | NORMAL_CLASSES] or dets
+            bodies = [d for d in dets if d[0] in POLARITY_CLASSES | NORMAL_CLASSES]
             cur = []
             for _, _, (x1, y1, x2, y2) in bodies:
                 cur.append((x1 + x2) / 2 if LINE_AXIS == "x" else (y1 + y2) / 2)
@@ -432,8 +435,14 @@ class Vision:
         if self.a.fake:
             log("[yolo] --fake: 카메라·모델 없이 가짜 판정 (로봇팔 1이 퍽을 올리면 결과 전송)")
             return
+        if SIDE_POSITION_GAP_SEC is not None and not (0 < SIDE_POSITION_GAP_SEC < float("inf")):
+            raise SystemExit("[yolo] SIDE_POSITION_GAP_SEC에 양수 초 단위의 실측값을 넣으세요.")
         for name in CAM_NAMES:
             cfg = CAMERAS[name]
+            if name in SIDE_CAMS and cfg["source"] is None:
+                self.models[name] = None
+                log(f"[yolo] {name}: 카메라 번호 미설정")
+                continue
             if cfg["model"] == "fake":
                 self.models[name] = None
             else:
@@ -449,6 +458,10 @@ class Vision:
         if self.trigger is None:
             raise SystemExit(f"[yolo] 기준 카메라 {TRIGGER_CAM}(없으면 {TRIGGER_FALLBACK})에 카메라와 모델이 있어야 "
                              f"기준선 통과를 볼 수 있음\n       → CAMERAS를 확인하거나, 시험만 하려면 --fake")
+        if SIDE_POSITION_GAP_SEC is not None and (
+            self.trigger != "front" or not all(self.models[n] is not None for n in SIDE_CAMS)
+        ):
+            raise SystemExit("[yolo] 측면 2장 시험에는 앞 기준 카메라와 앞·뒤 모델을 설정해야 합니다.")
         if self.trigger != TRIGGER_CAM:
             log(f"[yolo] 기준 카메라 {TRIGGER_CAM}에 모델이 없어 {self.trigger}로 기준선을 봄")
         fakes = [n for n in CAM_NAMES if self.models[n] is None]
@@ -474,23 +487,24 @@ class Vision:
 
     # ----- 퍽 하나 판정 -----
     def _shoot(self, name):
-        """카메라 하나로 FRAMES_PER_CAM장 → (화면 목록, 탐지 목록). 카메라 오류면 None"""
+        """카메라 하나로 프레임을 모은 뒤 판정한다. 필요한 프레임이 없으면 None."""
         cam = self.cams[name]
-        frames, dets, last_t = [], [], 0.0
-        deadline = time.monotonic() + CAM_TIMEOUT_SEC + FRAMES_PER_CAM * FRAME_GAP_SEC
-        time.sleep(CAM_DELAY_SEC.get(name, 0.0))
-        while len(frames) < FRAMES_PER_CAM and time.monotonic() < deadline:
-            f, t = cam.latest(newer_than=last_t)
+        side_gap = SIDE_POSITION_GAP_SEC if name in SIDE_CAMS else None
+        frame_count = 2 if side_gap is not None else FRAMES_PER_CAM
+        frame_gap = side_gap if side_gap is not None else FRAME_GAP_SEC
+        frames = []
+        next_capture = time.monotonic() + CAM_DELAY_SEC.get(name, 0.0)
+        while len(frames) < frame_count and time.monotonic() < next_capture + CAM_TIMEOUT_SEC:
+            f, t = cam.latest(newer_than=next_capture)
             if f is None:
                 time.sleep(0.005)
                 continue
-            last_t = t
             frames.append(f)
-            conf = min(TOP_CONF, SIDE_CONF, DEFECT_CONF) * 0.5 if name == "top" else min(SIDE_CONF, DEFECT_CONF) * 0.5
-            dets.append(self.models[name].detect(f, conf))
-            time.sleep(FRAME_GAP_SEC)
-        if not frames:
+            next_capture = t + frame_gap
+        if not frames or (side_gap is not None and len(frames) != frame_count):
             return None
+        conf = min(TOP_CONF, SIDE_CONF, DEFECT_CONF) * 0.5 if name == "top" else min(SIDE_CONF, DEFECT_CONF) * 0.5
+        dets = [self.models[name].detect(f, conf) for f in frames]
         return frames, dets
 
     def _judge_real(self, seq):
@@ -548,11 +562,15 @@ class Vision:
         self.loop = asyncio.get_running_loop()
         self.queue = asyncio.Queue()
         if not self.a.fake and self.watcher is None:
-            self.watcher = LineWatcher(self.cams[self.trigger], self.models[self.trigger], self.on_cross, self.a.show)
+            line_pos = LINE_POS
+            if SIDE_POSITION_GAP_SEC is not None:
+                line_pos = 1 / 3 if LINE_DIR > 0 else 2 / 3
+            self.watcher = LineWatcher(self.cams[self.trigger], self.models[self.trigger], self.on_cross,
+                                       self.a.show, line_pos=line_pos)
             self.watcher.start()
-            log(f"[yolo] 기준선 감시 시작: {self.trigger} 카메라, {LINE_AXIS}={LINE_POS}, 방향 {LINE_DIR:+d}")
+            log(f"[yolo] 기준선 감시 시작: {self.trigger} 카메라, {LINE_AXIS}={line_pos:.3f}, 방향 {LINE_DIR:+d}")
         while True:
-            await self.queue.get()               # 퍽 하나 → 순서대로 처리 (서버는 결과 순서로 퍽을 짝지음)
+            queued_at = await self.queue.get()   # 퍽 하나 → 순서대로 처리 (서버는 결과 순서로 퍽을 짝지음)
             self.seq += 1
             t0 = time.monotonic()
             if self.a.fake:
@@ -565,6 +583,9 @@ class Vision:
                 + (f" ({body.get('error')} {body.get('cams')})" if body.get("error") else "") + f"  [{ms:.0f}ms]")
             with contextlib.suppress(aiomqtt.MqttError):
                 await client.publish("vision/result", json.dumps(body, ensure_ascii=False), qos=1)
+                if not self.a.fake:
+                    elapsed_ms = (time.monotonic() - queued_at) * 1000
+                    log(f"[yolo] seq {body['seq']}: 기준선 감지 → 브로커 발행 확인 {elapsed_ms:.0f}ms")
 
     # ----- MQTT: 다른 장치 메시지 -----
     async def _fake_booth(self):
@@ -622,7 +643,7 @@ def check(v: Vision):
                 d = v.models[n].detect(f, 0.25)
                 print(f"         추론 {(time.monotonic() - t0) * 1000:.0f}ms (첫 실행은 느림), 찾은 것 {[(x[0], round(x[1], 2)) for x in d]}")
         else:
-            print(f"  {n:5s}: 카메라 없음, 가짜 판정")
+            print(f"  {n:5s}: 카메라 미설정")
     os._exit(0)
 
 
