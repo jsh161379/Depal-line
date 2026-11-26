@@ -62,9 +62,9 @@ public sealed class ReportData
             .Take(5)
             .ToList();
 
-    /// <summary>보고서 칸에 쓸 등급: 5종 + 기간에 이전 데이터(NG)가 있으면 NG도</summary>
+    /// <summary>현재 등급과 조회 기간에 실제 기록이 있는 이전 등급</summary>
     public IReadOnlyList<string> GradeColumns =>
-        Rows.Any(r => r.Grade == Grades.Ng) ? Grades.All.Append(Grades.Ng).ToList() : (IReadOnlyList<string>)Grades.All;
+        Grades.ForReport(Rows.Select(r => r.Grade));
 
     /// <summary>회차별: 등급 개수는 GradeColumns 순서</summary>
     public IReadOnlyList<(string RunId, DateTime? Start, int Count, int[] ByGrade)> Runs =>

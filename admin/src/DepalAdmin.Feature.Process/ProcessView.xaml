@@ -168,7 +168,6 @@
                             <RowDefinition Height="34"/>
                             <RowDefinition Height="34"/>
                             <RowDefinition Height="34"/>
-                            <RowDefinition Height="34"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
@@ -176,19 +175,15 @@
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="A  → AGV" VerticalAlignment="Center"/>
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding CountA}" Style="{StaticResource Readout}" FontSize="22"/>
 
-                        <Rectangle Grid.Row="1" Fill="{StaticResource Brush.GradeB}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="B  → B 분류함" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding CountB}" Style="{StaticResource Readout}" FontSize="22"/>
+                        <Rectangle Grid.Row="1" Fill="{StaticResource Brush.GradeNG}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="불량  → 불량함" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding CountNg}" Style="{StaticResource Readout}" FontSize="22"/>
 
-                        <Rectangle Grid.Row="2" Fill="{StaticResource Brush.GradeNG}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="불량  → 불량함" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding CountNg}" Style="{StaticResource Readout}" FontSize="22"/>
+                        <Rectangle Grid.Row="2" Fill="{StaticResource Brush.GradeResort}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="재분류  → 재분류함" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding CountResort}" Style="{StaticResource Readout}" FontSize="22"/>
 
-                        <Rectangle Grid.Row="3" Fill="{StaticResource Brush.GradeResort}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="재분류  → 재분류함" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding CountResort}" Style="{StaticResource Readout}" FontSize="22"/>
-
-                        <Border Grid.Row="4" Grid.ColumnSpan="3" BorderBrush="{StaticResource Brush.Rule}" BorderThickness="0,1,0,0"
+                        <Border Grid.Row="3" Grid.ColumnSpan="3" BorderBrush="{StaticResource Brush.Rule}" BorderThickness="0,1,0,0"
                                 Padding="0,8,0,0" Margin="0,4,0,0">
                             <DockPanel>
                                 <TextBlock DockPanel.Dock="Right" FontFamily="{StaticResource Font.Readout}" FontSize="15">

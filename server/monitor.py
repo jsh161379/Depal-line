@@ -6,7 +6,7 @@ mosquitto_sub 대신 쓰는 프로그램입니다. 서버가 보내는 메시지
   - 이벤트: 시각, 등급(색), 장치, 내용
   - 결과: 건전지 번호, 등급(색), 보낸 곳, 이유, 전압·내부저항
   - 비상정지(event/estop) 항상 표시, 환경 센서(sensor/env)는 --env일 때 표시
-  - 라인 현황(server/line): 운전 상태, 벨트 위 퍽 번호, 등급별 개수(5종), AGV 적재 수 (라인 컨트롤러가 있을 때)
+  - 라인 현황(server/line): 운전 상태, 벨트 위 퍽 번호, 등급별 개수(4종), AGV 적재 수 (라인 컨트롤러가 있을 때)
 
 필요한 것: Python 3.11 이상,  pip install "aiomqtt>=2"
 실행:
@@ -118,7 +118,7 @@ def show_line(d: dict):
         belt = ("벨트 " + ",".join(f"#{n}" for n in on_belt)) if on_belt else "벨트 비었음"
     print(f"{GRAY}{short_time(d.get('ts'))}{RESET}  {MAGENTA}{BOLD}[라인]{RESET} {mc}{BOLD}{mk:<4}{RESET} "
           f"{STEP_KR.get(d.get('step'), d.get('step')):<8} {belt:<12}  "
-          f"{GREEN}A {c.get('A', 0)}{RESET} {CYAN}B {c.get('B', 0)}{RESET} "
+          f"{GREEN}A {c.get('A', 0)}{RESET} "
           f"{RED}외관 {c.get('NG_VISUAL', 0)} 전압 {c.get('NG_VOLTAGE', 0)}{RESET} "
           f"{MAGENTA}재분류 {c.get('RESORT', 0)}{RESET}  AGV {agv.get('loaded', 0)}/{agv.get('batch', '-')}"
           + (f"  {YELLOW}{d['message']}{RESET}" if d.get("message") else ""), flush=True)
@@ -168,7 +168,7 @@ def show_result(r: dict, raw: str, with_json: bool):
 async def main(args):
     print(f"{BOLD}라인 모니터{RESET} {GRAY}({BROKER_HOST}:{BROKER_PORT}){RESET}  "
           f"{GREEN}INFO{RESET} {YELLOW}WARN{RESET} {RED}ERROR{RESET}  |  "
-          f"등급 {GREEN}A{RESET} {CYAN}B{RESET} {RED}NG_VISUAL NG_VOLTAGE{RESET} {MAGENTA}RESORT{RESET}", flush=True)
+          f"등급 {GREEN}A{RESET} {RED}NG_VISUAL NG_VOLTAGE{RESET} {MAGENTA}RESORT{RESET}", flush=True)
     print(GRAY + "─" * 100 + RESET, flush=True)
     async with aiomqtt.Client(BROKER_HOST, BROKER_PORT) as client:
         await client.subscribe("server/events", qos=1)

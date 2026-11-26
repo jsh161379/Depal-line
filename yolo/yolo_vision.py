@@ -5,7 +5,7 @@ YOLO 검사 프로그램 (yolo_vision.py) — 통신 규약 v1.4, 3-2
 vision/result를 퍽 하나당 1건 보낸다. 서버 PC에서 돈다. client_id = yolo
 
   - 퍽이 "기준 카메라" 화면의 기준선을 지나면 → 세 카메라로 몇 장씩 찍어 판정 → 합쳐서 1건 전송
-  - 외관 합치기: 앞·뒤 중 한 대라도 불량이면 불량 (conf는 불량 쪽 최고값), 둘 다 정상이면 정상 (conf는 낮은 값)
+  - 외관 합치기: 앞·뒤를 합쳐 흠이 신뢰도 0.45 이상으로 나온 프레임이 2장 이상이면 불량
   - 극 방향 합치기: 위 카메라 신뢰도 ≥ TOP_CONF → 위 카메라 값
                     아니면 앞·뒤가 같은 값일 때만 채택 → 그 외 unknown
   - 카메라 한 대라도 화면이 안 오면 status failed (error camera_error)
@@ -50,13 +50,26 @@ BROKER_PORT = 1883
 
 # 카메라별 설정. source: 카메라 번호(0, 1, 2) / 동영상 파일 경로 / None(카메라 없음)
 #                model : 모델 파일 경로(이 폴더 기준) 또는 "fake"
+#                backend : "auto", "dshow", "msmf" (Windows 카메라 번호에만 적용)
+#                flip_horizontal : 학습 때 좌우 반전한 L 카메라에만 True
+#                controls : 장치별 gain, auto_exposure, exposure, auto_wb, wb_temperature 실측 설정
 CAMERAS = {
     "top":   {"source": 0,    "model": "fake"},        # 학습 후 예: r"models\top_best.pt"
-    "front": {"source": None, "model": r"models\side_best.pt"},  # 서버 PC의 앞 카메라 번호 입력
-    "back":  {"source": None, "model": r"models\side_best.pt"},  # 서버 PC의 뒤 카메라 번호 입력
+    "front": {"source": None, "model": r"models\side_best.pt", "flip_horizontal": False, "controls": {}},
+    "back":  {"source": None, "model": r"models\side_best.pt", "flip_horizontal": False, "controls": {}},
 }
+# SC-200 시험 PC에서 앞 카메라가 물리적으로 "left"/"right" 중 어느 쪽인지 정한다.
+# None이면 위 CAMERAS를 사용한다. USB를 다시 꽂은 날은 번호를 먼저 확인한다.
+SC200_FRONT_SIDE: str | None = None
+SC200_SOURCES = {"top": 1, "right": 2, "left": 3}
 FRAME_WIDTH, FRAME_HEIGHT = 640, 480
-USE_DSHOW = True                 # Windows에서 카메라 번호로 열 때 DirectShow 사용
+CAMERA_CONTROL_PROPERTIES = {
+    "gain": "CAP_PROP_GAIN",
+    "auto_exposure": "CAP_PROP_AUTO_EXPOSURE",
+    "exposure": "CAP_PROP_EXPOSURE",
+    "auto_wb": "CAP_PROP_AUTO_WB",
+    "wb_temperature": "CAP_PROP_WB_TEMPERATURE",
+}
 
 # 기준선 (🟡 실물 시험 후 정함) — 규약 3-2: 앞 카메라 기준
 TRIGGER_CAM = "front"
@@ -76,7 +89,8 @@ SIDE_POSITION_GAP_SEC: float | None = None
 CAM_DELAY_SEC = {"top": 0.0, "front": 0.0, "back": 0.0}  # 기준선 통과 뒤 이 카메라를 찍기까지 (카메라 위치가 다를 때)
 TOP_CONF = 0.50                  # 🟡 위 카메라 극 방향을 믿을 최소 신뢰도
 SIDE_CONF = 0.50                 # 🟡 앞·뒤에서 건전지를 찾았다고 볼 최소 신뢰도
-DEFECT_CONF = 0.50               # 🟡 불량으로 볼 최소 신뢰도
+DEFECT_CONF = 0.45               # 불량 후보 박스의 최소 신뢰도
+DEFECT_MIN_FRAMES = 2            # 앞·뒤 합산. 같은 프레임의 박스가 여러 개여도 한 장
 TRIGGER_CONF = 0.40              # 기준선 통과를 볼 때 쓰는 최소 신뢰도
 IMGSZ = 640                      # 학습 때 이미지 크기와 같게
 CAM_TIMEOUT_SEC = 1.0            # 이 시간 넘게 새 화면이 없으면 카메라 오류
@@ -129,12 +143,56 @@ def class_name(name) -> str:
 
 # ---------------------------------------------------------------- 카메라
 
+def sc200_configs(front_side):
+    if front_side not in ("left", "right"):
+        raise SystemExit("[yolo] SC200_FRONT_SIDE는 left, right 또는 None이어야 합니다.")
+    if os.name != "nt":
+        raise SystemExit("[yolo] SC-200 DSHOW/MSMF 모드는 Windows에서 지원합니다.")
+    if (any(type(SC200_SOURCES[k]) is not int or SC200_SOURCES[k] < 0 for k in ("top", "left", "right"))
+            or len(set(SC200_SOURCES.values())) != 3):
+        raise SystemExit("[yolo] SC200_SOURCES에 서로 다른 카메라 번호 3개를 넣으세요.")
+    back_side = "right" if front_side == "left" else "left"
+    configs = {}
+    for name, preset in (("top", "top"), ("front", front_side), ("back", back_side)):
+        cfg = dict(CAMERAS[name], source=SC200_SOURCES[preset], backend="msmf",
+                   flip_horizontal=preset == "left", controls={}, preset=preset)
+        if name == "top" and cfg["model"] == "fake":
+            cfg["model"] = r"models\top_best.pt"
+        configs[name] = cfg
+    return configs
+
+
+def apply_sc200_presets(configs):
+    try:
+        from sc200_fixed_settings import open_camera, apply_settings, PRESETS
+    except ModuleNotFoundError as exc:
+        if exc.name != "sc200_fixed_settings":
+            raise
+        raise SystemExit("[yolo] 이 파일과 같은 폴더에 sc200_fixed_settings.py를 넣으세요.") from exc
+    for name, cfg in configs.items():
+        index, preset = cfg["source"], cfg["preset"]
+        cap = open_camera(index)
+        try:
+            if cap is None or not cap.isOpened():
+                raise SystemExit(f"[yolo] {name} ({preset}, 번호 {index}): DSHOW 프리셋 초기화 실패")
+            apply_settings(cap, PRESETS[preset])
+            log(f"[cam {name}] DSHOW 프리셋 요청 완료: {preset}, 번호 {index}")
+        finally:
+            if cap is not None:
+                cap.release()
+        time.sleep(0.3)
+
+
 class Camera(threading.Thread):
     """카메라 하나를 계속 읽어 마지막 화면만 들고 있는다 (끊기면 2초마다 다시 열기)"""
 
-    def __init__(self, name, source):
+    def __init__(self, name, source, *, backend="auto", flip_horizontal=False, controls=None, diagnostic=False):
         super().__init__(daemon=True, name=f"cam-{name}")
         self.cam_name, self.source = name, source
+        self.backend = backend
+        self.flip_horizontal = flip_horizontal
+        self.controls = controls or {}
+        self.diagnostic = diagnostic
         self.lock = threading.Lock()
         self.frame, self.t = None, 0.0
         self.count = 0
@@ -144,42 +202,73 @@ class Camera(threading.Thread):
     def _open(self):
         import cv2
         src = int(self.source) if isinstance(self.source, str) and self.source.isdigit() else self.source
-        if isinstance(src, int) and USE_DSHOW and os.name == "nt":
-            cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
-        else:
-            cap = cv2.VideoCapture(src)
-        if isinstance(src, int):
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-        return cap
+        backends = [("auto", cv2.CAP_ANY)]
+        if isinstance(src, int) and os.name == "nt":
+            backends = [("dshow", cv2.CAP_DSHOW), ("msmf", cv2.CAP_MSMF)]
+            if self.backend != "auto":
+                backends = [(name, api) for name, api in backends if name == self.backend]
+        for name, api in backends:
+            cap = cv2.VideoCapture(src, api)
+            if not cap.isOpened():
+                cap.release()
+                if self.diagnostic:
+                    log(f"[cam {self.cam_name}] {name}: 열기 실패")
+                continue
+            applied = {}
+            if isinstance(src, int):
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+                # 자동 제어 모드를 먼저 설정한 뒤 수동 값을 적용한다.
+                for key in ("auto_exposure", "auto_wb", "gain", "exposure", "wb_temperature"):
+                    if key in self.controls:
+                        prop = getattr(cv2, CAMERA_CONTROL_PROPERTIES[key])
+                        applied[key] = cap.set(prop, self.controls[key])
+            ok, frame = cap.read()
+            if not ok:
+                cap.release()
+                if self.diagnostic:
+                    log(f"[cam {self.cam_name}] {name}: 첫 프레임 읽기 실패")
+                continue
+            log(f"[cam {self.cam_name}] {cap.getBackendName()} 열림 "
+                f"(source={src!r}, {frame.shape[1]}x{frame.shape[0]}, 좌우반전={self.flip_horizontal})")
+            if isinstance(src, int):
+                for key, prop_name in CAMERA_CONTROL_PROPERTIES.items():
+                    if self.diagnostic or key in applied:
+                        value = cap.get(getattr(cv2, prop_name))
+                        requested = f"요청={self.controls[key]}, set={applied[key]}, " if key in applied else ""
+                        log(f"[cam {self.cam_name}] {key}: {requested}읽기값={value:.4g}")
+            return cap, frame
+        return None, None
 
     def run(self):
+        import cv2
         reported = False
         while not self.stop_flag:
-            cap = self._open()
-            if not cap.isOpened():
+            cap, frame = self._open()
+            if cap is None:
                 if not reported:
                     log(f"[cam {self.cam_name}] 열 수 없음 (source={self.source!r}) → 2초마다 다시 시도")
                     reported = True
                 time.sleep(2.0)
                 continue
-            log(f"[cam {self.cam_name}] 열림 (source={self.source!r}, "
-                f"{int(cap.get(3))}x{int(cap.get(4))})")
             reported = False
             fps = cap.get(5) or 30.0
             while not self.stop_flag:
+                if frame is not None:
+                    if self.flip_horizontal:
+                        frame = cv2.flip(frame, 1)
+                    with self.lock:
+                        self.frame, self.t = frame, time.monotonic()
+                        self.count += 1
+                    if self.is_file:
+                        time.sleep(1.0 / max(fps, 1.0))
                 ok, frame = cap.read()
                 if not ok:
-                    if self.is_file:            # 동영상 파일은 끝나면 처음부터 다시
-                        cap.set(1, 0)
-                        continue
-                    log(f"[cam {self.cam_name}] 화면을 읽지 못함 → 다시 열기")
-                    break
-                with self.lock:
-                    self.frame, self.t = frame, time.monotonic()
-                    self.count += 1
-                if self.is_file:
-                    time.sleep(1.0 / max(fps, 1.0))
+                    if not self.is_file:
+                        log(f"[cam {self.cam_name}] 화면을 읽지 못함 → 다시 열기")
+                        break
+                    cap.set(1, 0)               # 동영상 파일은 끝나면 처음부터 다시
+                    frame = None
             cap.release()
             time.sleep(0.5)
 
@@ -201,12 +290,12 @@ class Model:
     """YOLO 모델 하나 (카메라마다 따로). 여러 스레드에서 부를 수 있게 잠금"""
 
     def __init__(self, path):
-        from ultralytics import YOLO
         p = Path(path)
         if not p.is_absolute():
             p = HERE / p
         if not p.exists():
             raise FileNotFoundError(f"모델 파일이 없음: {p}")
+        from ultralytics import YOLO
         self.path = p
         self.yolo = YOLO(str(p))
         self.lock = threading.Lock()
@@ -214,8 +303,8 @@ class Model:
         unknown = [n for n in self.names.values()
                    if n not in POLARITY_CLASSES | NORMAL_CLASSES | DEFECT_CLASSES | IGNORE_CLASSES]
         if unknown:
-            log(f"[yolo] ⚠ {p.name}: 약속에 없는 클래스 {unknown} → 불량 종류로 그대로 보냄. "
-                f"오타라면 학습 설정(train\\*.yaml)과 맞춰 다시 학습")
+            log(f"[yolo] ⚠ {p.name}: 약속에 없는 클래스 {unknown}. "
+                f"학습 설정(train\\*.yaml)과 클래스 이름을 확인하세요.")
 
     def detect(self, frame, conf):
         """[(클래스 이름, 신뢰도, (x1, y1, x2, y2)), ...]"""
@@ -246,12 +335,14 @@ def judge_top(dets_per_frame):
 
 
 def judge_side(cam, dets_per_frame):
-    """앞·뒤 카메라: dict(found, result, conf, defects, polarity, pol_conf)"""
+    """한 카메라의 프레임별 불량과 극 방향을 모은다."""
     found_conf = 0.0        # 어떤 클래스든 건전지를 찾음 (불량 부위만 보여도 찾은 것)
     body_conf = 0.0         # 건전지 몸통 박스의 신뢰도 → 정상일 때 conf
     defects: dict[str, float] = {}
+    defect_frames = 0
     pol = None
     for dets in dets_per_frame:
+        frame_has_defect = False
         for name, conf, _ in dets:
             found_conf = max(found_conf, conf)
             if name in POLARITY_CLASSES or name in NORMAL_CLASSES:
@@ -259,14 +350,16 @@ def judge_side(cam, dets_per_frame):
             if name in POLARITY_CLASSES:
                 if pol is None or conf > pol[1]:
                     pol = (name, conf)
-            elif name not in NORMAL_CLASSES and conf >= DEFECT_CONF:
+            elif name in DEFECT_CLASSES and conf >= DEFECT_CONF:
+                frame_has_defect = True
                 defects[name] = max(defects.get(name, 0.0), conf)
+        defect_frames += int(frame_has_defect)
     found = found_conf >= SIDE_CONF
     d_list = [{"type": t, "conf": round(c, 3), "cam": cam} for t, c in sorted(defects.items(), key=lambda x: -x[1])]
     return {"found": found,
             "result": "defect" if d_list else "normal",
             "conf": round(max(defects.values()) if d_list else (body_conf or found_conf), 3),
-            "defects": d_list,
+            "defects": d_list, "defect_frames": defect_frames, "normal_conf": round(body_conf or found_conf, 3),
             "polarity": pol[0] if pol else None,
             "pol_conf": round(pol[1], 3) if pol else 0.0}
 
@@ -302,13 +395,15 @@ class FakeJudge:
             d = [{"type": c["defect_type"], "conf": round(r.uniform(0.75, 0.97), 3), "cam": cam}]
         return {"found": True, "result": "defect" if d else "normal",
                 "conf": d[0]["conf"] if d else round(r.uniform(0.85, 0.98), 3), "defects": d,
+                "defect_frames": DEFECT_MIN_FRAMES if d else 0,
                 "polarity": c["polarity"] if r.random() < 0.9 else None, "pol_conf": round(r.uniform(0.6, 0.9), 3)}
 
 
 def neutral_side():
     """실제 모드에서 모델이 아직 없는 앞·뒤 카메라: 정상·방향 모름으로 둔다.
     무작위 가짜 판정을 섞으면 실제 건전지가 불량·재분류로 잘못 갈 수 있어서다 (가짜 판정은 --fake 때만)"""
-    return {"found": True, "result": "normal", "conf": 1.0, "defects": [], "polarity": None, "pol_conf": 0.0}
+    return {"found": True, "result": "normal", "conf": 1.0, "defects": [], "defect_frames": 0,
+            "polarity": None, "pol_conf": 0.0}
 
 
 # ---------------------------------------------------------------- 합치기 (규약 3-2)
@@ -324,12 +419,13 @@ def combine(seq, top, sides, cam_error):
         return body | fail | {"error": "low_confidence", "cams": not_found}
 
     # 외관
-    bad = [sides[c] for c in SIDE_CAMS if sides[c]["result"] == "defect"]
-    if bad:
-        result, conf = "defect", max(s["conf"] for s in bad)
+    defect_frames = sum(sides[c]["defect_frames"] for c in SIDE_CAMS)
+    if defect_frames >= DEFECT_MIN_FRAMES:
+        defects = [d for c in SIDE_CAMS for d in sides[c]["defects"]]
+        result, conf = "defect", max(d["conf"] for d in defects)
     else:
-        result, conf = "normal", min(sides[c]["conf"] for c in SIDE_CAMS)
-    defects = [d for c in SIDE_CAMS for d in sides[c]["defects"]]
+        result, conf = "normal", min(sides[c].get("normal_conf", sides[c]["conf"]) for c in SIDE_CAMS)
+        defects = []
 
     # 극 방향: 위 카메라 우선 → 앞·뒤 일치 → unknown
     top_pol, top_conf = top
@@ -344,7 +440,7 @@ def combine(seq, top, sides, cam_error):
     per_cam += [{"cam": c, "result": sides[c]["result"], "conf": sides[c]["conf"],
                  "polarity": sides[c]["polarity"] or "unknown"} for c in SIDE_CAMS]
     return body | {"status": "ok", "result": result, "conf": round(conf, 3), "polarity": polarity,
-                   "defects": defects, "sides": per_cam}
+                   "defects": defects, "sides": per_cam, "defect_frames": defect_frames}
 
 
 # ---------------------------------------------------------------- 기준선 감시 (스레드)
@@ -437,8 +533,12 @@ class Vision:
             return
         if SIDE_POSITION_GAP_SEC is not None and not (0 < SIDE_POSITION_GAP_SEC < float("inf")):
             raise SystemExit("[yolo] SIDE_POSITION_GAP_SEC에 양수 초 단위의 실측값을 넣으세요.")
+        configs = CAMERAS
+        if SC200_FRONT_SIDE is not None:
+            configs = sc200_configs(SC200_FRONT_SIDE)
+            apply_sc200_presets(configs)
         for name in CAM_NAMES:
-            cfg = CAMERAS[name]
+            cfg = configs[name]
             if name in SIDE_CAMS and cfg["source"] is None:
                 self.models[name] = None
                 log(f"[yolo] {name}: 카메라 번호 미설정")
@@ -446,13 +546,27 @@ class Vision:
             if cfg["model"] == "fake":
                 self.models[name] = None
             else:
-                self.models[name] = Model(cfg["model"])
-                log(f"[yolo] {name} 모델: {self.models[name].path.name} 클래스 {list(self.models[name].names.values())}")
+                try:
+                    self.models[name] = Model(cfg["model"])
+                except FileNotFoundError as exc:
+                    if not self.a.check:
+                        raise
+                    self.models[name] = None
+                    log(f"[yolo] {name}: {exc}")
+                else:
+                    log(f"[yolo] {name} 모델: {self.models[name].path.name} 클래스 {list(self.models[name].names.values())}")
             if cfg["source"] is not None:
-                self.cams[name] = Camera(name, cfg["source"])
+                backend = cfg.get("backend", "auto")
+                controls = cfg.get("controls", {})
+                if backend not in ("auto", "dshow", "msmf") or controls.keys() - CAMERA_CONTROL_PROPERTIES.keys():
+                    raise SystemExit(f"[yolo] {name}: CAMERAS의 backend 또는 controls 설정을 확인하세요.")
+                self.cams[name] = Camera(name, cfg["source"], backend=backend, controls=controls,
+                                         flip_horizontal=cfg.get("flip_horizontal", False), diagnostic=self.a.check)
                 self.cams[name].start()
             elif self.models[name] is not None:
                 raise SystemExit(f"[yolo] {name}: 모델은 있는데 카메라(source)가 없음 → CAMERAS 확인")
+        if self.a.check:
+            return
         self.trigger = next((c for c in (TRIGGER_CAM, TRIGGER_FALLBACK)
                              if self.models.get(c) is not None and c in self.cams), None)
         if self.trigger is None:
@@ -580,7 +694,8 @@ class Vision:
             ms = (time.monotonic() - t0) * 1000
             log(f"[yolo] vision/result seq {body['seq']}: {body['status']} {body.get('result')} "
                 f"{body.get('polarity')}" + (f" {[d['type'] for d in body['defects']]}" if body.get("defects") else "")
-                + (f" ({body.get('error')} {body.get('cams')})" if body.get("error") else "") + f"  [{ms:.0f}ms]")
+                + (f" ({body.get('error')} {body.get('cams')})" if body.get("error") else "")
+                + f" 흠 프레임={body.get('defect_frames', '-')} [{ms:.0f}ms]")
             with contextlib.suppress(aiomqtt.MqttError):
                 await client.publish("vision/result", json.dumps(body, ensure_ascii=False), qos=1)
                 if not self.a.fake:
@@ -630,13 +745,14 @@ class Vision:
 def check(v: Vision):
     """--check: 카메라·모델 확인 후 종료"""
     v.setup()
-    time.sleep(3.0)
+    warmup_sec = 10
+    time.sleep(warmup_sec)
     for n in CAM_NAMES:
         if n in v.cams:
             c = v.cams[n]
             f, _ = c.latest()
             size = f"{f.shape[1]}x{f.shape[0]}" if f is not None else "-"
-            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, 3초 동안 {c.count}장)"
+            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, {warmup_sec}초 동안 {c.count}장)"
                   f", 모델 {v.models[n].path.name if v.models[n] else 'fake'}")
             if f is not None and v.models[n]:
                 t0 = time.monotonic()
@@ -644,7 +760,8 @@ def check(v: Vision):
                 print(f"         추론 {(time.monotonic() - t0) * 1000:.0f}ms (첫 실행은 느림), 찾은 것 {[(x[0], round(x[1], 2)) for x in d]}")
         else:
             print(f"  {n:5s}: 카메라 미설정")
-    os._exit(0)
+    for camera in v.cams.values():
+        camera.stop_flag = True
 
 
 def parse(argv=None):
@@ -668,5 +785,6 @@ if __name__ == "__main__":
     vision = Vision(args)
     if args.check:
         check(vision)
-    vision.setup()
-    run_main(vision.run)
+    else:
+        vision.setup()
+        run_main(vision.run)

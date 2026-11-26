@@ -273,7 +273,6 @@ public partial class RecordsViewModel : ObservableObject
                 ("걸린 시간", s => s.DurationText),
                 ("개수", s => s.Count),
                 ("A", s => s.A),
-                ("B", s => s.B),
                 ("불량", s => s.Ng),
                 ("재분류", s => s.Resort),
                 ("A 비율", s => s.ARatio));
@@ -291,7 +290,6 @@ public sealed class RunSummary
         End = rows.Max(r => r.FinishedAt);
         Count = rows.Count;
         A = rows.Count(r => r.Grade == "A");
-        B = rows.Count(r => r.Grade == "B");
         Ng = rows.Count(r => DepalAdmin.Core.Grades.IsNg(r.Grade));
         Resort = rows.Count(r => r.Grade == "RESORT");
     }
@@ -301,7 +299,6 @@ public sealed class RunSummary
     public DateTime? End { get; }
     public int Count { get; }
     public int A { get; }
-    public int B { get; }
     public int Ng { get; }
     public int Resort { get; }
 
