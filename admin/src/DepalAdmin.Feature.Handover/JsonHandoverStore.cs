@@ -8,8 +8,7 @@ namespace DepalAdmin.Feature.Handover;
 
 /// <summary>
 /// 인수인계 메모를 data/handover.json 한 파일에 저장한다.
-/// TODO(유동호 + DB 담당): 여러 PC에서 같은 메모를 보려면 MySQL 구현을 만들고
-///                        HandoverModule의 등록 한 줄만 바꾸면 된다 (IHandoverStore는 그대로).
+/// 설정 UseFakeDb = true일 때 사용한다. 실제 DB 연결 시에는 MySqlHandoverStore를 쓴다 (HandoverModule에서 선택).
 /// </summary>
 public sealed class JsonHandoverStore : IHandoverStore
 {

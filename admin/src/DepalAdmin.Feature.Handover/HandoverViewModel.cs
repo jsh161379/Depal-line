@@ -98,7 +98,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
     [NotifyPropertyChangedFor(nameof(DisplayCountsText))]
     private string _liveCountsText = "실시간 분류 — A: 0개  B: 0개  외관불량: 0개  전압불량: 0개  재분류: 0개";
 
-    [ObservableProperty] private string _liveAgvText = "AGV 적재: 0 / 8개 (분류 위치)";
+    [ObservableProperty] private string _liveAgvText = "AGV 적재: 0 / 6개 (분류 위치)";
     [ObservableProperty] private string _liveDevicesText = "장치 상태: 수신 대기";
     [ObservableProperty] private bool _liveDevicesHasIssue;
     [ObservableProperty] private string _liveEnvText = "환경 센서(Uno): 수신 대기";
@@ -232,7 +232,7 @@ public partial class HandoverViewModel : ObservableObject, IHasBadge {
             : $"실시간 분류 — A: {a}개  B: {b}개  외관불량: {ngVisual}개  전압불량: {ngVoltage}개  재분류: {resort}개";
 
         var agvLoaded = line?.Agv?.Loaded ?? 0;
-        var agvBatch = line?.Agv?.Batch is > 0 ? line.Agv.Batch : 8;
+        var agvBatch = line?.Agv?.Batch is > 0 ? line.Agv.Batch : 6;
         var agvState = Labels.AgvState(line?.Agv?.State ?? "home");
         LiveAgvText = $"AGV 적재: {agvLoaded} / {agvBatch}개 ({agvState})";
     }
