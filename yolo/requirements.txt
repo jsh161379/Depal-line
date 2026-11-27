@@ -4,3 +4,4 @@ aiomqtt>=2,<3
 pydantic>=2,<3
 opencv-python>=4.9
 ultralytics>=8.3
+cv2_enumerate_cameras>=1.4

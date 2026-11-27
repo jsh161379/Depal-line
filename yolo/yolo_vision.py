@@ -36,9 +36,21 @@ vision/result를 퍽 하나당 1건 보낸다. 서버 PC에서 돈다. client_id
   python yolo_vision.py --show            기준 카메라 화면에 기준선·박스를 띄움 (기준선 위치 맞출 때)
   python yolo_vision.py --check           카메라·모델만 열어 보고 종료 (MQTT 없이)
   가짜 판정 확률 조절: --defect 0.15 --plus-up 0.1 --fail 0.0 --seed 1
+
+SC-200 모드 (SC200_FRONT_SIDE를 "left"/"right"로 지정)
+  - 같은 폴더의 sc200_fixed_settings.py로 카메라마다 DSHOW 프리셋(포커스 278/450/465 등)을 넣은 뒤 MSMF로 촬영한다.
+  - 카메라 번호: SC200_USB_LOCATIONS(USB 위치 → 역할)가 채워져 있으면 cam_identify.py의 방법으로
+    DSHOW 번호와 MSMF 번호를 각각 찾는다. 같은 카메라라도 두 방식의 번호가 다를 수 있기 때문이다.
+    못 찾으면(패키지 없음, 위치 미설정, 한 대라도 못 찾음, 번호 겹침) 세 대 모두 SC200_SOURCES 번호를 쓴다.
+  - USB 위치 확인: python cam_identify.py  (python -m pip install cv2_enumerate_cameras)
 """
 
 import os
+
+# MSMF 카메라가 하드웨어 변환을 쓰면 여는 데 10초 넘게 걸린다 (11/26 노트북 시험).
+# cv2를 처음 불러오기 전에 넣어야 하므로 맨 위에 둔다. cmd에서 직접 값을 정하면 그 값이 우선이다.
+os.environ.setdefault("OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS", "0")
+
 import sys
 from pathlib import Path
 
@@ -61,6 +73,11 @@ CAMERAS = {
 # SC-200 시험 PC에서 앞 카메라가 물리적으로 "left"/"right" 중 어느 쪽인지 정한다.
 # None이면 위 CAMERAS를 사용한다. USB를 다시 꽂은 날은 번호를 먼저 확인한다.
 SC200_FRONT_SIDE: str | None = None
+# 역할 → USB 위치 (cam_identify.py 표의 "USB 위치" 열, 예: "0007.0000.0003.001.002.000.000.000.000").
+# 서버 PC에서 확인해 넣는다. USB 자리를 옮기면 다시 확인한다. 셋 다 채워야 사용한다.
+SC200_USB_LOCATIONS: dict[str, str | None] = {"top": None, "left": None, "right": None}
+SC200_VID = 0x32E6               # SC-200 (VID_32E6&PID_9251)
+# USB 위치로 못 찾을 때 쓰는 번호 (DSHOW·MSMF 공통). 시험 PC 값: 상단 1 / 오른쪽 2 / 왼쪽 3
 SC200_SOURCES = {"top": 1, "right": 2, "left": 3}
 FRAME_WIDTH, FRAME_HEIGHT = 640, 480
 CAMERA_CONTROL_PROPERTIES = {
@@ -94,6 +111,7 @@ DEFECT_MIN_FRAMES = 2            # 앞·뒤 합산. 같은 프레임의 박스�
 TRIGGER_CONF = 0.40              # 기준선 통과를 볼 때 쓰는 최소 신뢰도
 IMGSZ = 640                      # 학습 때 이미지 크기와 같게
 CAM_TIMEOUT_SEC = 1.0            # 이 시간 넘게 새 화면이 없으면 카메라 오류
+CHECK_WAIT_MAX_SEC = 10.0        # --check: 카메라마다 첫 화면이 올 때까지 기다리는 최대 시간
 
 # 클래스 이름 (규약 3-2. 라벨링을 시작한 뒤에는 순서·이름을 바꾸지 않는다)
 POLARITY_CLASSES = {"minus_up", "plus_up"}
@@ -143,6 +161,77 @@ def class_name(name) -> str:
 
 # ---------------------------------------------------------------- 카메라
 
+SC200_ROLES = ("top", "left", "right")
+
+
+def _strip_backend_offset(index: int, api: int) -> int:
+    """cv2_enumerate_cameras 버전에 따라 번호에 백엔드 값(MSMF 1400, DSHOW 700)이 더해져 나온다 → 빼서 OpenCV 번호로"""
+    return index - api if index >= api else index
+
+
+def find_sc200_by_usb(locations, dshow_list, msmf_list, loc_of):
+    """USB 위치로 역할별 (DSHOW 번호, MSMF 번호)를 찾는다.
+    dshow_list·msmf_list: [(번호, 장치 경로, vid)], loc_of(장치 경로) → USB 위치 문자열 또는 "".
+    다 찾으면 ({역할: (dshow, msmf)}, None), 하나라도 문제가 있으면 (None, 이유)."""
+    if any(not locations.get(r) for r in SC200_ROLES):
+        return None, "SC200_USB_LOCATIONS가 비어 있음"
+    want = {str(locations[r]).strip().upper(): r for r in SC200_ROLES}
+    if len(want) != 3:
+        return None, "SC200_USB_LOCATIONS에 같은 USB 위치가 두 번 들어 있음"
+    found = {"dshow": {}, "msmf": {}}
+    for kind, items in (("dshow", dshow_list), ("msmf", msmf_list)):
+        for index, path, vid in items:
+            if vid is not None and vid != SC200_VID:
+                continue
+            role = want.get((loc_of(path) or "").strip().upper())
+            if role is None:
+                continue
+            if role in found[kind]:
+                return None, f"{kind.upper()}에서 {role} 위치의 카메라가 두 대로 보임"
+            found[kind][role] = index
+    missing = [f"{kind.upper()} {r}" for kind in ("dshow", "msmf") for r in SC200_ROLES if r not in found[kind]]
+    if missing:
+        return None, "못 찾음: " + ", ".join(missing)
+    for kind in ("dshow", "msmf"):
+        if len(set(found[kind].values())) != 3:
+            return None, f"{kind.upper()} 번호가 겹침 {found[kind]}"
+    return {r: (found["dshow"][r], found["msmf"][r]) for r in SC200_ROLES}, None
+
+
+def _list_cameras(api):
+    """[(OpenCV 번호, 장치 경로, vid)]"""
+    from cv2_enumerate_cameras import enumerate_cameras
+    return [(_strip_backend_offset(c.index, api), getattr(c, "path", "") or "", getattr(c, "vid", None))
+            for c in enumerate_cameras(api)]
+
+
+def resolve_sc200_numbers():
+    """역할 → (DSHOW 번호, MSMF 번호). USB 위치로 못 찾으면 SC200_SOURCES를 둘 다에 쓴다."""
+    fallback = {r: (SC200_SOURCES[r], SC200_SOURCES[r]) for r in SC200_ROLES}
+    reason = None
+    if all(SC200_USB_LOCATIONS.get(r) for r in SC200_ROLES):
+        try:
+            import cv2
+            from cam_identify import instance_id_from_path, location_map
+            locs = location_map()
+            loc_of = lambda path: locs.get(instance_id_from_path(path) or "", "")
+            numbers, reason = find_sc200_by_usb(SC200_USB_LOCATIONS, _list_cameras(cv2.CAP_DSHOW),
+                                                _list_cameras(cv2.CAP_MSMF), loc_of)
+            if numbers:
+                log("[yolo] SC-200 번호 (USB 위치로 찾음): " + ", ".join(
+                    f"{r} DSHOW {d} / MSMF {m}" for r, (d, m) in numbers.items()))
+                return numbers
+        except ModuleNotFoundError as exc:
+            reason = f"{exc.name} 없음 (python -m pip install cv2_enumerate_cameras, cam_identify.py는 이 폴더에)"
+        except Exception as exc:  # noqa: BLE001 - 찾기 실패는 대체 번호로 계속한다
+            reason = f"찾기 오류: {exc!r}"
+    else:
+        reason = "SC200_USB_LOCATIONS 미설정"
+    log(f"[yolo] SC-200 번호: SC200_SOURCES 사용 {SC200_SOURCES} ({reason}). "
+        f"USB를 다시 꽂았다면 번호를 먼저 확인하세요.")
+    return fallback
+
+
 def sc200_configs(front_side):
     if front_side not in ("left", "right"):
         raise SystemExit("[yolo] SC200_FRONT_SIDE는 left, right 또는 None이어야 합니다.")
@@ -152,9 +241,11 @@ def sc200_configs(front_side):
             or len(set(SC200_SOURCES.values())) != 3):
         raise SystemExit("[yolo] SC200_SOURCES에 서로 다른 카메라 번호 3개를 넣으세요.")
     back_side = "right" if front_side == "left" else "left"
+    numbers = resolve_sc200_numbers()
     configs = {}
     for name, preset in (("top", "top"), ("front", front_side), ("back", back_side)):
-        cfg = dict(CAMERAS[name], source=SC200_SOURCES[preset], backend="msmf",
+        dshow_no, msmf_no = numbers[preset]
+        cfg = dict(CAMERAS[name], source=msmf_no, preset_source=dshow_no, backend="msmf",
                    flip_horizontal=preset == "left", controls={}, preset=preset)
         if name == "top" and cfg["model"] == "fake":
             cfg["model"] = r"models\top_best.pt"
@@ -170,13 +261,20 @@ def apply_sc200_presets(configs):
             raise
         raise SystemExit("[yolo] 이 파일과 같은 폴더에 sc200_fixed_settings.py를 넣으세요.") from exc
     for name, cfg in configs.items():
-        index, preset = cfg["source"], cfg["preset"]
-        cap = open_camera(index)
+        index, preset = cfg.get("preset_source", cfg["source"]), cfg["preset"]
+        try:
+            cap = open_camera(index)
+        except RuntimeError as exc:
+            raise SystemExit(f"[yolo] {name} ({preset}, DSHOW 번호 {index}): 프리셋을 넣으려고 열지 못함 → "
+                             f"cam_identify.py로 번호를 확인하세요") from exc
         try:
             if cap is None or not cap.isOpened():
-                raise SystemExit(f"[yolo] {name} ({preset}, 번호 {index}): DSHOW 프리셋 초기화 실패")
-            apply_settings(cap, PRESETS[preset])
-            log(f"[cam {name}] DSHOW 프리셋 요청 완료: {preset}, 번호 {index}")
+                raise SystemExit(f"[yolo] {name} ({preset}, DSHOW 번호 {index}): DSHOW 프리셋 초기화 실패")
+            if apply_settings(cap, PRESETS[preset]):
+                log(f"[cam {name}] DSHOW 프리셋 적용 확인: {preset}, DSHOW 번호 {index} → MSMF 번호 {cfg['source']}")
+            else:
+                log(f"[cam {name}] ⚠ DSHOW 프리셋 일부 미적용: {preset}, DSHOW 번호 {index} "
+                    f"(바로 위 목록 확인. 포커스가 다르면 다른 카메라에 들어갔거나 번호가 바뀐 것)")
         finally:
             if cap is not None:
                 cap.release()
@@ -305,6 +403,13 @@ class Model:
         if unknown:
             log(f"[yolo] ⚠ {p.name}: 약속에 없는 클래스 {unknown}. "
                 f"학습 설정(train\\*.yaml)과 클래스 이름을 확인하세요.")
+
+    def warmup(self):
+        """빈 화면으로 한 번 돌려 둔다 (첫 판정만 1초 넘게 걸리는 것 방지). 걸린 시간(ms)을 돌려준다"""
+        import numpy as np
+        t0 = time.monotonic()
+        self.detect(np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8), 0.25)
+        return (time.monotonic() - t0) * 1000
 
     def detect(self, frame, conf):
         """[(클래스 이름, 신뢰도, (x1, y1, x2, y2)), ...]"""
@@ -565,6 +670,7 @@ class Vision:
                 self.cams[name].start()
             elif self.models[name] is not None:
                 raise SystemExit(f"[yolo] {name}: 모델은 있는데 카메라(source)가 없음 → CAMERAS 확인")
+        self.warmup_models()
         if self.a.check:
             return
         self.trigger = next((c for c in (TRIGGER_CAM, TRIGGER_FALLBACK)
@@ -581,6 +687,13 @@ class Vision:
         fakes = [n for n in CAM_NAMES if self.models[n] is None]
         if fakes:
             log(f"[yolo] 가짜 판정 카메라: {fakes} (모델이 생기면 CAMERAS에 경로를 넣으세요)")
+
+    def warmup_models(self):
+        """불러온 모델을 빈 화면으로 한 번씩 돌린다 (앞·뒤는 같은 파일이라도 객체가 따로라 각각)"""
+        for name, model in self.models.items():
+            if model is not None:
+                ms = model.warmup()
+                log(f"[yolo] {name} 모델 미리 실행 {ms:.0f}ms ({model.path.name})")
 
     def cam_state(self):
         if self.a.fake:
@@ -745,19 +858,25 @@ class Vision:
 def check(v: Vision):
     """--check: 카메라·모델 확인 후 종료"""
     v.setup()
-    warmup_sec = 10
-    time.sleep(warmup_sec)
+    t0 = time.monotonic()
+    while v.cams and time.monotonic() - t0 < CHECK_WAIT_MAX_SEC:
+        if all(c.count > 0 for c in v.cams.values()):
+            time.sleep(1.0)          # 첫 화면 뒤 1초 더 받아 초당 장수를 볼 수 있게
+            break
+        time.sleep(0.1)
+    waited = time.monotonic() - t0
+    print(f"  (카메라 대기 {waited:.1f}초, 최대 {CHECK_WAIT_MAX_SEC:.0f}초)")
     for n in CAM_NAMES:
         if n in v.cams:
             c = v.cams[n]
             f, _ = c.latest()
             size = f"{f.shape[1]}x{f.shape[0]}" if f is not None else "-"
-            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, {warmup_sec}초 동안 {c.count}장)"
+            print(f"  {n:5s}: 카메라 {'OK' if c.ok() else '화면 없음'} ({size}, {waited:.1f}초 동안 {c.count}장)"
                   f", 모델 {v.models[n].path.name if v.models[n] else 'fake'}")
             if f is not None and v.models[n]:
-                t0 = time.monotonic()
+                t1 = time.monotonic()
                 d = v.models[n].detect(f, 0.25)
-                print(f"         추론 {(time.monotonic() - t0) * 1000:.0f}ms (첫 실행은 느림), 찾은 것 {[(x[0], round(x[1], 2)) for x in d]}")
+                print(f"         추론 {(time.monotonic() - t1) * 1000:.0f}ms (미리 실행한 뒤), 찾은 것 {[(x[0], round(x[1], 2)) for x in d]}")
         else:
             print(f"  {n:5s}: 카메라 미설정")
     for camera in v.cams.values():
