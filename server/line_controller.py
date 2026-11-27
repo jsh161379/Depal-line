@@ -597,7 +597,10 @@ class LineController:
                     self.resume_event.set()
                 await self.event("INFO", "회차 종료 요청")
         elif a == "estop":
-            await self.emergency_stop("WPF", None, "비상정지 (작업자 화면)")
+            who = cmd.get("by")                      # 로그인 아이디 (규약 v1.5.4, 로그인 전이면 없음)
+            who = who.strip()[:32] if isinstance(who, str) and who.strip() else None
+            await self.emergency_stop("WPF", None,
+                                      f"비상정지 (작업자 화면{', ' + who if who else ''})")
         elif a == "reset":
             await self.reset_estop()
 
