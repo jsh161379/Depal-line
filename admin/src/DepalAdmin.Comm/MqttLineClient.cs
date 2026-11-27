@@ -96,7 +96,12 @@ public sealed class MqttLineClient : LineClientBase
         if (!_client.IsConnected)
             throw new InvalidOperationException("브로커에 연결되어 있지 않아 명령을 보내지 못했습니다.");
 
-        var json = JsonSerializer.Serialize(new UiCommand { Action = action, Ts = Json.Now() }, Json.Options);
+        var json = JsonSerializer.Serialize(new UiCommand
+        {
+            Action = action,
+            Ts = Json.Now(),
+            By = _session?.User?.Id,
+        }, Json.Options);
         await PublishAsync(Topics.UiCmd, json, retain: false, ct).ConfigureAwait(false);
     }
 
